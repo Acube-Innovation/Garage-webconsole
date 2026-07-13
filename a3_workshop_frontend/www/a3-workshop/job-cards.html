@@ -2,14 +2,6 @@
 {% from "templates/macros/workshop.html" import badge, qr %}
 
 {% block page_content %}
-{#- Each row now carries its assignee (emp), estimated hours (est) and whether it is done. -#}
-{%- set rows = [
-  {"in":"D","name":"DAAT LOGISTICS L.L.C","owner":"DAAT LOGISTICS L.L.C-C355","no":"JC-2026-06-18-0011","svc":"General Service","date":"18 Jun 2026","amt":"AED 1538.46","st":"QC Pending","sv":"badge--pending","emp":"Rahul Menon","est":3},
-  {"in":"A","name":"AABER FACILITIES MANAGEMENT LLC","owner":"AABER FACILITIES MANAGEMENT LLC-C129","no":"JC-2026-06-18-0010","svc":"Body Shop","date":"18 Jun 2026","amt":"AED 3024.00","st":"Parts Issued","sv":"badge--progress","emp":"Suresh Kumar","est":5},
-  {"in":"A","name":"AAS SHIPPING LLC","owner":"AAS SHIPPING LLC-C23","no":"JC-2026-06-18-0009","svc":"Mechanical","date":"18 Jun 2026","amt":"AED 483.00","st":"New","sv":"badge--new","emp":"Rahul Menon","est":2},
-  {"in":"A","name":"AAS SHIPPING LLC","owner":"AAS SHIPPING LLC-C23","no":"JC-2026-06-18-0008","svc":"Inspection","date":"18 Jun 2026","amt":"AED 0.00","st":"New","sv":"badge--new","emp":"Anil Joseph","est":1},
-  {"in":"A","name":"AABER FACILITIES MANAGEMENT LLC","owner":"AABER FACILITIES MANAGEMENT LLC-C129","no":"JC-2026-06-18-0007","svc":"Repeat Service","date":"18 Jun 2026","amt":"AED 24150.00","st":"Completed","sv":"badge--success","emp":"Suresh Kumar","est":4}
-] -%}
 
 <div class="toolbar">
 	<a class="btn btn--primary" href="/a3-workshop/job-card/new"><i class="fa-solid fa-plus"></i> Create Job Card</a>
@@ -30,31 +22,40 @@
 	<!-- LEFT (70%) — job cards list -->
 	<div class="list-rows" id="jc-list">
 		{%- for r in rows %}
-		<div class="list-row" data-no="{{ r.no }}" data-emp="{{ r.emp }}" data-est="{{ r.est }}" data-done="{{ 1 if r.st == 'Completed' else 0 }}">
+		<div class="list-row" data-no="{{ r.no }}" data-emp="{{ r.advisor }}" data-est="{{ r.est }}" data-done="{{ 1 if r.status == 'Completed' else 0 }}">
+			<!-- Col 1: customer photo if available, else first letter -->
 			<div class="list-row__party">
-				<div class="list-row__avatar">{{ r.in }}</div>
+				<div class="list-row__avatar">
+					{%- if r.image %}<img src="{{ r.image }}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">
+					{%- else %}{{ r.initial }}{%- endif %}
+				</div>
+				<!-- Col 2: customer name, job card id (accent + bold), phone or email -->
 				<div>
-					<div class="list-row__title">{{ r.name }}</div>
-					<div class="list-row__meta">Job Owner: {{ r.owner }}<br>{{ r.no }}<br>ad@gmail.com</div>
+					<div class="list-row__title">{{ r.customer }}</div>
+					<div class="list-row__meta">
+						<span style="color:var(--red);font-weight:700">{{ r.no }}</span>
+						{%- if r.contact %}<br>{{ r.contact }}{%- endif %}
+					</div>
 				</div>
 			</div>
 			<div class="list-row__col">
 				<div class="k" style="font-weight:600;color:var(--text)">{{ r.svc }}</div>
 				<div class="muted" style="margin:5px 0"><i class="fa-regular fa-calendar"></i> {{ r.date }}</div>
-				<div class="jc-assignee muted" style="margin-bottom:6px"><i class="fa-regular fa-user"></i> {{ r.emp }} · {{ r.est }}h</div>
-				<span class="jc-status">{{ badge(r.st, r.sv) }}</span>
+				<div class="jc-assignee muted" style="margin-bottom:6px"><i class="fa-regular fa-user"></i> {{ r.advisor or "Unassigned" }}{% if r.est %} · {{ r.est }}h{% endif %}</div>
+				<span class="jc-status">{{ badge(r.status, r.sv) }}</span>
 			</div>
-			{{ qr(loop.index) }}
+			<!-- Col 3: QR left blank -->
+			<div class="qr-blank"></div>
 			<div>
-				<div class="list-row__amount">{{ r.amt }}</div>
+				<div class="list-row__amount">AED 0.00</div>
 				<div class="list-row__col" style="text-align:right;margin-top:4px"><span class="k">#Inv: 0000</span><br><span class="k">Credit: 0</span></div>
 			</div>
 			<div class="list-row__actions">
 				<div class="row" style="justify-content:flex-end">
-					<button type="button" class="btn btn--icon js-complete {{ 'btn--outline' if r.st == 'Completed' else 'btn--purple' }}" title="{{ 'Reopen' if r.st == 'Completed' else 'Mark Done' }}">
-						<i class="fa-solid {{ 'fa-rotate-left' if r.st == 'Completed' else 'fa-check' }}"></i>
+					<button type="button" class="btn btn--icon js-complete {{ 'btn--outline' if r.status == 'Completed' else 'btn--purple' }}" title="{{ 'Reopen' if r.status == 'Completed' else 'Mark Done' }}">
+						<i class="fa-solid {{ 'fa-rotate-left' if r.status == 'Completed' else 'fa-check' }}"></i>
 					</button>
-					<a class="btn btn--outline btn--icon" href="/a3-workshop/job-card/{{ r.no }}" title="View Card"><i class="fa-solid fa-eye"></i></a>
+					<a class="btn btn--outline btn--icon" href="/a3-workshop/job-card/detail?id={{ r.no }}" title="View Card"><i class="fa-solid fa-eye"></i></a>
 				</div>
 				<div class="row" style="justify-content:flex-end">
 					<a class="btn btn--outline btn--icon" href="#" title="Edit"><i class="fa-solid fa-pen"></i></a>
@@ -62,6 +63,8 @@
 				</div>
 			</div>
 		</div>
+		{%- else %}
+		<div class="empty" style="padding:24px">No job cards yet. <a href="/a3-workshop/job-card/new">Create one</a>.</div>
 		{%- endfor %}
 	</div>
 
@@ -109,6 +112,8 @@
 .emp-card .bar { flex: 1; }
 .emp-card .bar > span { background: var(--green); transition: width .35s ease; }
 .emp-empty { color: var(--muted); font-size: 13px; padding: 6px 2px; }
+/* QR intentionally left blank — keep the column's footprint so the row layout holds */
+.qr-blank { width: 64px; height: 64px; }
 </style>
 
 {% raw %}

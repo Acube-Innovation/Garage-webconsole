@@ -2,20 +2,71 @@
 {% from "templates/macros/workshop.html" import badge %}
 
 {% block page_content %}
-{%- set jc = job_card_id or "JC-2026-06-18-0011" -%}
+{%- set jc = (card.name if card else job_card_id) or "JC-2026-06-18-0011" -%}
 <div class="card">
 	<div class="card__body row-between">
 		<div>
 			<div class="muted">Job Card</div>
 			<h2>{{ jc }}</h2>
-			<div class="muted" style="margin-top:4px">DAAT LOGISTICS L.L.C · Toyota Fortuner · A-12345</div>
+			<div class="muted" style="margin-top:4px">
+				{%- if card %}{{ card.customer }} · {{ card.vehicle }}{%- else %}DAAT LOGISTICS L.L.C · Toyota Fortuner · A-12345{%- endif %}</div>
 		</div>
 		<div class="stack" style="align-items:flex-end;gap:8px">
-			{{ badge("QC Pending","badge--pending") }}
+			{%- if card %}{{ badge(card.status, card.status_badge) }}{%- else %}{{ badge("QC Pending","badge--pending") }}{%- endif %}
 			<div class="row"><a class="btn btn--purple btn--sm">Update QC</a><a class="btn btn--primary btn--sm">Mark Ready</a></div>
 		</div>
 	</div>
 </div>
+
+{%- if card %}
+<!-- Readings & Body Condition — regenerated from the saved job card -->
+<div class="card" style="margin-top:18px">
+	<div class="card__head"><h3>Vehicle Readings &amp; Body Condition</h3><span class="muted">Inspection</span></div>
+	<div class="card__body">
+		{%- set r = card.readings %}
+		<div class="readings-grid">
+			<div class="kv-row"><span class="k">Odometer</span><b>{{ r.odometer or "—" }} {{ "km" if r.odometer else "" }}</b></div>
+			<div class="kv-row"><span class="k">Next Service</span><b>{{ r.next_km or "—" }} {{ "km" if r.next_km else "" }}</b></div>
+			<div class="kv-row"><span class="k">Fuel Level</span><b>{{ r.fuel }}%</b></div>
+			<div class="kv-row"><span class="k">Oil Level</span><b>{{ r.oil }}%</b></div>
+			<div class="kv-row"><span class="k">Coolant</span><b>{{ r.coolant or "—" }}</b></div>
+			<div class="kv-row"><span class="k">Battery</span><b>{{ r.battery or "—" }} {{ "V" if r.battery else "" }}</b></div>
+			<div class="kv-row"><span class="k">Tyre Condition</span><b>{{ r.tyre or "—" }}</b></div>
+			<div class="kv-row"><span class="k">Spare Tyre</span><b>{{ "Present" if r.spare else "—" }}</b></div>
+		</div>
+
+		{%- if card.body_condition %}
+		<div class="fieldset-title">Body Condition — scratches / dents</div>
+		<div class="car-wrap" style="position:relative">
+			<svg viewBox="0 0 600 260" xmlns="http://www.w3.org/2000/svg" aria-label="Car top view">
+				<rect x="70" y="40" width="460" height="180" rx="60" fill="#ffffff" stroke="#9aa3b2" stroke-width="2"/>
+				<rect x="200" y="70" width="200" height="120" rx="28" fill="#eef0f3" stroke="#9aa3b2" stroke-width="2"/>
+				<path d="M400 82 L468 112 L468 148 L400 178 Z" fill="#dfe3ea" stroke="#9aa3b2"/>
+				<path d="M200 82 L132 112 L132 148 L200 178 Z" fill="#dfe3ea" stroke="#9aa3b2"/>
+				<rect x="150" y="22" width="70" height="22" rx="8" fill="#2b3344"/>
+				<rect x="380" y="22" width="70" height="22" rx="8" fill="#2b3344"/>
+				<rect x="150" y="216" width="70" height="22" rx="8" fill="#2b3344"/>
+				<rect x="380" y="216" width="70" height="22" rx="8" fill="#2b3344"/>
+				<text x="300" y="135" text-anchor="middle" fill="#c2c9d4" font-size="14">FRONT &rarr;</text>
+			</svg>
+			<img src="{{ card.body_condition }}" alt="Body condition markup"
+				style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:none">
+		</div>
+		{%- endif %}
+
+		{%- if card.photos %}
+		<div class="fieldset-title">Vehicle Photos</div>
+		<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:12px">
+			{%- for p in card.photos %}
+			<a href="{{ p.image }}" target="_blank" title="{{ p.caption }}">
+				<img src="{{ p.image }}" alt="{{ p.caption }}" style="width:100%;height:90px;object-fit:cover;border-radius:8px;border:1px solid var(--border)">
+			</a>
+			{%- endfor %}
+		</div>
+		{%- endif %}
+	</div>
+</div>
+{%- endif %}
 
 <div class="page-grid-2" style="margin-top:18px">
 	<div class="stack">

@@ -99,13 +99,13 @@
 			{{ field("Odometer (KM)","km",type="number",placeholder="0") }}
 			{{ field("Next Service (KM)","next_km",type="number",placeholder="0") }}
 			<div class="field"><label>Fuel Level — <span class="range-val" id="fuel-out">50%</span></label>
-				<input type="range" min="0" max="100" value="50" data-out="#fuel-out"></div>
+				<input type="range" name="fuel" min="0" max="100" value="50" data-out="#fuel-out"></div>
 			<div class="field"><label>Oil Level — <span class="range-val" id="oil-out">50%</span></label>
-				<input type="range" min="0" max="100" value="50" data-out="#oil-out"></div>
+				<input type="range" name="oil" min="0" max="100" value="50" data-out="#oil-out"></div>
 			{{ field("Coolant Level","coolant",type="select",options=["Low","Normal","Full"]) }}
 			{{ field("Battery (V)","battery",type="number",placeholder="12.6") }}
 			{{ field("Tyre Condition","tyre",type="select",options=["Good","Worn","Replace"]) }}
-			<div class="field"><label>Spare Tyre</label><label class="check"><input type="checkbox"> Present</label></div>
+			<div class="field"><label>Spare Tyre</label><label class="check"><input type="checkbox" name="spare"> Present</label></div>
 		</div></div>
 	</div>
 
@@ -131,6 +131,16 @@
 				<span class="muted"><i class="fa-solid fa-pen"></i> Draw on the car to mark scratches / dents.</span>
 				<button type="button" class="btn btn--outline btn--sm" id="car-clear" style="margin-left:auto"><i class="fa-solid fa-eraser"></i> Clear</button>
 			</div>
+		</div>
+	</div>
+
+	<!-- Vehicle Photos -->
+	<div class="card" style="margin-top:18px"><div class="card__head"><h3>Vehicle Photos</h3>
+		<label class="btn btn--primary btn--sm" style="cursor:pointer"><i class="fa-solid fa-camera"></i> Add Photos
+			<input type="file" id="photo-input" accept="image/*" multiple hidden></label></div>
+		<div class="card__body">
+			<div id="photo-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:12px"></div>
+			<div class="empty" id="photo-empty">No photos added yet.</div>
 		</div>
 	</div>
 </section>
@@ -330,7 +340,10 @@
 			booking_channel: val("channel"),
 			project_booking: document.querySelector('[name="project_booking"]').checked ? 1 : 0,
 			services: gatherServices(),
-			complaints: gatherComplaints()
+			complaints: gatherComplaints(),
+			readings: gatherReadings(),
+			body_condition: canvasDrawn ? canvas.toDataURL("image/png") : null,
+			photos: photos
 		}).then(function (res) {
 			jobCardName = res.name;
 			setVal("job_no", res.name); // Job Number appears once saved as draft
@@ -478,6 +491,7 @@
 	var canvas = document.getElementById('car-canvas');
 	var ctx = canvas.getContext('2d');
 	var drawing = false;
+	var canvasDrawn = false; // only persist the body-condition drawing once touched
 	function sizeCanvas() {
 		var r = canvas.getBoundingClientRect();
 		if (!r.width) return;
@@ -488,12 +502,62 @@
 	}
 	function pos(e) { var r = canvas.getBoundingClientRect(); var t = e.touches ? e.touches[0] : e; return { x: t.clientX - r.left, y: t.clientY - r.top }; }
 	function start(e) { drawing = true; var p = pos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); e.preventDefault(); }
-	function move(e) { if (!drawing) return; var p = pos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); e.preventDefault(); }
+	function move(e) { if (!drawing) return; canvasDrawn = true; var p = pos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); e.preventDefault(); }
 	function end() { drawing = false; }
 	canvas.addEventListener('mousedown', start); canvas.addEventListener('mousemove', move); window.addEventListener('mouseup', end);
 	canvas.addEventListener('touchstart', start, { passive: false }); canvas.addEventListener('touchmove', move, { passive: false }); canvas.addEventListener('touchend', end);
-	document.getElementById('car-clear').addEventListener('click', function () { ctx.clearRect(0, 0, canvas.width, canvas.height); });
+	document.getElementById('car-clear').addEventListener('click', function () { ctx.clearRect(0, 0, canvas.width, canvas.height); canvasDrawn = true; });
 	window.addEventListener('resize', function () { if (cur === 4) sizeCanvas(); });
+
+	// ---- Vehicle photos: upload via Frappe, collect URLs for save ----
+	var photoInput = document.getElementById('photo-input');
+	var photoGrid = document.getElementById('photo-grid');
+	var photoEmpty = document.getElementById('photo-empty');
+	var photos = [];
+	function renderPhotos() {
+		photoEmpty.style.display = photos.length ? 'none' : 'block';
+		photoGrid.innerHTML = photos.map(function (p, i) {
+			return '<div style="position:relative;border:1px solid var(--border);border-radius:8px;overflow:hidden">' +
+				'<img src="' + p.image + '" style="width:100%;height:90px;object-fit:cover;display:block">' +
+				'<button type="button" class="photo-del" data-i="' + i + '" title="Remove" style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,.55);color:#fff;border:none;border-radius:50%;width:22px;height:22px;line-height:1;cursor:pointer">&times;</button>' +
+				'</div>';
+		}).join('');
+	}
+	function uploadFile(file) {
+		var fd = new FormData();
+		fd.append('file', file, file.name);
+		fd.append('is_private', '0');
+		fd.append('folder', 'Home');
+		return fetch('/api/method/upload_file', {
+			method: 'POST',
+			headers: { 'X-Frappe-CSRF-Token': window.csrf_token || '', 'Accept': 'application/json' },
+			body: fd
+		}).then(function (r) { return r.json(); }).then(function (d) {
+			if (!d || !d.message || !d.message.file_url) throw new Error('upload failed');
+			return d.message.file_url;
+		});
+	}
+	if (photoInput) photoInput.addEventListener('change', function () {
+		var files = Array.prototype.slice.call(this.files || []);
+		this.value = '';
+		files.forEach(function (f) {
+			uploadFile(f).then(function (url) { photos.push({ image: url, caption: f.name }); renderPhotos(); })
+				.catch(function () { alert('Could not upload ' + f.name); });
+		});
+	});
+	if (photoGrid) photoGrid.addEventListener('click', function (e) {
+		var b = e.target.closest('.photo-del'); if (!b) return;
+		photos.splice(+b.dataset.i, 1); renderPhotos();
+	});
+
+	function gatherReadings() {
+		return {
+			odometer: val('km'), next_km: val('next_km'),
+			fuel_level: val('fuel'), oil_level: val('oil'),
+			coolant: val('coolant'), battery: val('battery'), tyre: val('tyre'),
+			spare: (document.querySelector('[name="spare"]') || {}).checked ? 1 : 0
+		};
+	}
 
 	// ---- Estimate cart
 	var cart = {};
