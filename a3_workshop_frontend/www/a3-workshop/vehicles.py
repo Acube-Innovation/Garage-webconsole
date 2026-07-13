@@ -4,23 +4,6 @@ from a3_workshop_frontend.website_utils import require_login
 no_cache = 1
 
 
-def _customer_location(customer):
-	"""Short location (city) from the customer's primary/linked Address."""
-	addr_name = frappe.db.get_value("Customer", customer, "customer_primary_address")
-	if not addr_name:
-		link = frappe.get_all(
-			"Dynamic Link",
-			filters={"parenttype": "Address", "link_doctype": "Customer", "link_name": customer},
-			fields=["parent"],
-			limit=1,
-		)
-		addr_name = link[0].parent if link else None
-	if not addr_name:
-		return ""
-	city = frappe.db.get_value("Address", addr_name, "city")
-	return "" if (not city or city == "Not Specified") else city
-
-
 def get_context(context):
 	require_login(context)
 	context.title = "Vehicles"
@@ -35,8 +18,9 @@ def get_context(context):
 		or_filters = [
 			["custom_plate", "like", like],
 			["license_plate", "like", like],
-			["make", "like", like],
+			["custom_model", "like", like],
 			["model", "like", like],
+			["chassis_no", "like", like],
 			["custom_vin", "like", like],
 		]
 
@@ -44,12 +28,11 @@ def get_context(context):
 		"Vehicle",
 		fields=[
 			"name",
-			"make",
 			"model",
-			"custom_make",
 			"custom_model",
 			"custom_plate",
 			"license_plate",
+			"chassis_no",
 			"custom_vin",
 			"last_odometer",
 			"custom_odometer",
@@ -62,40 +45,40 @@ def get_context(context):
 		limit_page_length=200,
 	)
 
-	# Batch-load the owning customers' phone + location for the Customer column.
+	# Batch-load the owning customers' phone + email for the Customer column.
 	customer_ids = list({r.custom_customer for r in rows if r.custom_customer})
 	cust_info = {}
 	if customer_ids:
 		for c in frappe.get_all(
 			"Customer",
 			filters={"name": ["in", customer_ids]},
-			fields=["name", "customer_name", "mobile_no"],
+			fields=["name", "customer_name", "mobile_no", "email_id"],
 		):
-			cust_info[c.name] = {"name": c.customer_name, "phone": c.mobile_no or "", "location": ""}
-		for cid in customer_ids:
-			cust_info.setdefault(cid, {"name": cid, "phone": "", "location": ""})
-			cust_info[cid]["location"] = _customer_location(cid)
+			cust_info[c.name] = {
+				"name": c.customer_name or c.name,
+				"phone": c.mobile_no or "",
+				"email": c.email_id or "",
+			}
 
 	vehicles = []
 	for r in rows:
-		make = r.custom_make or r.make or ""
-		title = f"{make} {r.model or ''}".strip() or r.name
-		odo = r.last_odometer or r.custom_odometer or 0
+		model = r.custom_model or r.model or r.name
+		odo = r.custom_odometer or r.last_odometer or 0
 		info = cust_info.get(r.custom_customer, {})
+		# Column 2 shows the phone if we have one, otherwise fall back to the email.
+		phone = info.get("phone") or ""
+		email = info.get("email") or ""
 		vehicles.append(
 			{
 				"name": r.name,
-				"title": title,
+				"model": model,
 				"plate": r.custom_plate or r.license_plate or "—",
-				"chassis": r.custom_vin or "—",
+				"chassis": r.chassis_no or r.custom_vin or "—",
+				"customer": info.get("name") or r.custom_customer_name or "—",
+				"customer_contact": phone or email or "—",
+				"customer_contact_is_email": bool(not phone and email),
 				"odometer": f"{odo:,.0f} km" if odo else "—",
 				"fuel": r.fuel_type or "—",
-				"customer": info.get("name") or r.custom_customer_name or "—",
-				"customer_phone": info.get("phone") or "—",
-				"customer_location": info.get("location") or "—",
-				# Status is fixed to "Delivered" for now (no workshop-status field yet).
-				"status": "Delivered",
-				"status_variant": "badge--success",
 			}
 		)
 

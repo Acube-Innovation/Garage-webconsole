@@ -4,27 +4,236 @@
 {% block page_content %}
 <div class="card">
 	<div class="card__head"><h3>Vehicle Details</h3></div>
-	<div class="card__body"><form class="form-grid">
+	<div class="card__body"><form class="form-grid" id="vehicle-form">
+		<input type="hidden" name="customer_id">
 		{{ field("Plate Number","plate",required=True) }}
 		{{ field("Make / Model","model",required=True,placeholder="e.g. Toyota Fortuner") }}
 		{{ field("Chassis Number","chassis") }}
 		{{ field("Engine Number","engine") }}
-		{{ field("Odometer Reading","odo") }}
+		{{ field("Odometer Reading","odo",type="number",placeholder="0") }}
 		{{ field("Fuel Type","fuel",type="select",options=["Petrol","Diesel","Electric","Hybrid"]) }}
 		{{ field("Transmission","trans",type="select",options=["Automatic","Manual"]) }}
-		{{ field("Customer","customer",placeholder="Link to customer") }}
+		{{ field("Customer","customer",placeholder="Search customer by name / mobile") }}
 	</form></div>
 </div>
 
 <div class="card" style="margin-top:18px">
 	<div class="card__head"><h3>External Damages / Photos</h3></div>
 	<div class="card__body">
-		<div class="empty" style="border:2px dashed var(--border);border-radius:var(--radius)">
+		<div class="empty" id="file-dropzone" style="border:2px dashed var(--border);border-radius:var(--radius)">
 			<i class="fa-solid fa-cloud-arrow-up" style="font-size:28px;color:var(--muted)"></i>
 			<div style="margin-top:10px">Upload photos of vehicle condition</div>
-			<button class="btn btn--outline btn--sm" style="margin-top:12px"><i class="fa-solid fa-image"></i> Choose Files</button>
+			<input type="file" id="file-input" multiple accept="image/*,.pdf" style="display:none">
+			<button type="button" class="btn btn--outline btn--sm" id="choose-files" style="margin-top:12px"><i class="fa-solid fa-image"></i> Choose Files</button>
 		</div>
+		<div id="file-list" style="margin-top:14px;display:none"></div>
 	</div>
 </div>
-<div class="form-actions"><span></span><a class="btn btn--primary" href="/a3-workshop/job-card/type-selection">Save &amp; Create Job Card <i class="fa-solid fa-arrow-right"></i></a></div>
+
+<div class="form-actions">
+	<span></span>
+	<div class="row" style="display:flex;gap:10px">
+		<button type="button" class="btn btn--outline" id="save-vehicle"><i class="fa-solid fa-floppy-disk"></i> Save</button>
+		<a class="btn btn--primary" href="/a3-workshop/job-card/type-selection">Save &amp; Create Job Card <i class="fa-solid fa-arrow-right"></i></a>
+	</div>
+</div>
+
+<style>
+	.jc-ac { position:absolute; left:0; right:0; top:100%; z-index:60; margin-top:2px; background:var(--surface,#fff);
+		border:1px solid var(--border,#d8dde6); border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.12);
+		max-height:240px; overflow:auto; }
+	.jc-ac-item { padding:8px 12px; cursor:pointer; }
+	.jc-ac-item:hover, .jc-ac-item.is-active { background:var(--bg,#f1f4f8); }
+	.jc-ac-label { font-weight:600; font-size:13px; }
+	.jc-ac-sub { font-size:12px; color:var(--muted,#7a8598); }
+	.jc-ac-empty { padding:8px 12px; font-size:12px; color:var(--muted,#7a8598); }
+	.file-chip { display:flex; align-items:center; gap:10px; padding:8px 12px; border:1px solid var(--border);
+		border-radius:var(--radius-sm,8px); background:var(--surface); margin-bottom:8px; font-size:13px; }
+	.file-chip i.type { color:var(--muted); }
+	.file-chip .name { font-weight:600; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+	.file-chip .size { color:var(--muted); font-size:12px; }
+	.file-chip .rm { background:none; border:none; color:var(--muted); cursor:pointer; font-size:14px; }
+	.file-chip .rm:hover { color:var(--red); }
+</style>
+
+<script>window.csrf_token = "{{ frappe.session.csrf_token }}";</script>
+{% raw %}
+<script>
+(function () {
+	// POST a JSON body to a whitelisted method and return its `message` payload.
+	function callMethod(method, args) {
+		return fetch("/api/method/" + method, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"X-Frappe-CSRF-Token": window.csrf_token || "",
+				"Accept": "application/json"
+			},
+			body: JSON.stringify(args || {})
+		}).then(function (r) {
+			return r.json().then(function (data) {
+				if (!r.ok) {
+					var msg = (data && data._server_messages) || (data && data.exc) || r.statusText;
+					throw new Error(cleanError(msg));
+				}
+				return data.message;
+			});
+		});
+	}
+	// _server_messages is a JSON-encoded list of JSON strings; pull the human text out.
+	function cleanError(msg) {
+		try {
+			var arr = JSON.parse(msg);
+			if (Array.isArray(arr) && arr.length) {
+				return arr.map(function (m) { try { return JSON.parse(m).message; } catch (e) { return m; } }).join(" ");
+			}
+		} catch (e) {}
+		return String(msg).replace(/<[^>]+>/g, "");
+	}
+	function val(name) { var el = document.querySelector('[name="' + name + '"]'); return el ? el.value.trim() : ""; }
+	function setVal(name, v) { var el = document.querySelector('[name="' + name + '"]'); if (el) el.value = v || ""; }
+
+	// ---- Customer autocomplete (resolves the free-text field to a Customer id) ---
+	function attachAutocomplete(input, source, onSelect) {
+		if (!input) return;
+		var wrap = input.parentNode;
+		wrap.style.position = "relative";
+		var list = document.createElement("div");
+		list.className = "jc-ac"; list.style.display = "none";
+		wrap.appendChild(list);
+		var items = [], active = -1, timer = null;
+		function hide() { list.style.display = "none"; active = -1; }
+		function render(rows) {
+			items = rows || [];
+			if (!items.length) { list.innerHTML = '<div class="jc-ac-empty">No matches</div>'; list.style.display = "block"; return; }
+			list.innerHTML = items.map(function (it, i) {
+				return '<div class="jc-ac-item" data-i="' + i + '"><div class="jc-ac-label">' + it.label + '</div>' +
+					(it.sub ? '<div class="jc-ac-sub">' + it.sub + '</div>' : '') + '</div>';
+			}).join("");
+			active = -1; list.style.display = "block";
+		}
+		function run() { Promise.resolve(source(input.value.trim())).then(render).catch(hide); }
+		input.addEventListener("input", function () { setVal("customer_id", ""); clearTimeout(timer); timer = setTimeout(run, 180); });
+		input.addEventListener("focus", run);
+		input.addEventListener("blur", function () { setTimeout(hide, 150); });
+		list.addEventListener("mousedown", function (e) {
+			var el = e.target.closest("[data-i]"); if (!el) return;
+			e.preventDefault();
+			var it = items[+el.dataset.i];
+			input.value = it.label; hide();
+			if (onSelect) onSelect(it);
+		});
+		input.addEventListener("keydown", function (e) {
+			if (list.style.display === "none" || !items.length) return;
+			if (e.key === "ArrowDown") active = Math.min(items.length - 1, active + 1);
+			else if (e.key === "ArrowUp") active = Math.max(0, active - 1);
+			else if (e.key === "Enter" && active >= 0) { e.preventDefault(); var it = items[active]; input.value = it.label; hide(); if (onSelect) onSelect(it); return; }
+			else if (e.key === "Escape") { hide(); return; }
+			else return;
+			e.preventDefault();
+			Array.prototype.forEach.call(list.children, function (c, i) { c.classList.toggle("is-active", i === active); });
+		});
+	}
+	attachAutocomplete(document.querySelector('[name="customer"]'), function (q) {
+		return callMethod("garagedesk.api.front_office.list_customers", { search: q, limit: 10 }).then(function (rows) {
+			return (rows || []).map(function (c) { return { label: c.customer_name || c.name, sub: c.mobile_no || "", value: c.name }; });
+		});
+	}, function (it) { setVal("customer_id", it.value); });
+
+	// ---- File selection (staged in-browser; uploaded after the Vehicle is created) ---
+	var files = [];
+	var input = document.getElementById("file-input");
+	var listEl = document.getElementById("file-list");
+	document.getElementById("choose-files").addEventListener("click", function () { input.click(); });
+	document.getElementById("file-dropzone").addEventListener("dragover", function (e) { e.preventDefault(); });
+	document.getElementById("file-dropzone").addEventListener("drop", function (e) {
+		e.preventDefault(); addFiles(e.dataTransfer.files);
+	});
+	input.addEventListener("change", function () { addFiles(input.files); input.value = ""; });
+	function addFiles(fl) { Array.prototype.forEach.call(fl, function (f) { files.push(f); }); renderFiles(); }
+	function humanSize(n) {
+		if (n < 1024) return n + " B";
+		if (n < 1048576) return (n / 1024).toFixed(1) + " KB";
+		return (n / 1048576).toFixed(1) + " MB";
+	}
+	function renderFiles() {
+		listEl.style.display = files.length ? "block" : "none";
+		listEl.innerHTML = files.map(function (f, i) {
+			var icon = /^image\//.test(f.type) ? "fa-image" : "fa-file";
+			return '<div class="file-chip"><i class="fa-solid ' + icon + ' type"></i>' +
+				'<span class="name">' + f.name + '</span><span class="size">' + humanSize(f.size) + '</span>' +
+				'<button type="button" class="rm" data-i="' + i + '" title="Remove"><i class="fa-solid fa-xmark"></i></button></div>';
+		}).join("");
+	}
+	listEl.addEventListener("click", function (e) {
+		var b = e.target.closest("[data-i]"); if (!b) return;
+		files.splice(+b.dataset.i, 1); renderFiles();
+	});
+	// Attach one staged file to the freshly-created Vehicle via Frappe's uploader.
+	function uploadFile(f, vehicleName) {
+		var fd = new FormData();
+		fd.append("file", f, f.name);
+		fd.append("is_private", 1);
+		fd.append("folder", "Home/Attachments");
+		fd.append("doctype", "Vehicle");
+		fd.append("docname", vehicleName);
+		return fetch("/api/method/upload_file", {
+			method: "POST",
+			headers: { "X-Frappe-CSRF-Token": window.csrf_token || "", "Accept": "application/json" },
+			body: fd
+		}).then(function (r) {
+			return r.json().then(function (data) {
+				if (!r.ok) { throw new Error(cleanError((data && data._server_messages) || (data && data.exc) || r.statusText)); }
+				return data.message;
+			});
+		});
+	}
+
+	// ---- Save ----------------------------------------------------------------
+	var saveBtn = document.getElementById("save-vehicle");
+	function markInvalid(name, on) {
+		var el = document.querySelector('[name="' + name + '"]');
+		if (el) el.style.borderColor = on ? "var(--red)" : "";
+	}
+	saveBtn.addEventListener("click", function () {
+		markInvalid("plate", false); markInvalid("model", false);
+		var plate = val("plate"), model = val("model");
+		if (!plate || !model) {
+			if (!plate) markInvalid("plate", true);
+			if (!model) markInvalid("model", true);
+			alert("Please fill the required fields: Plate Number and Make / Model.");
+			return;
+		}
+		var original = saveBtn.innerHTML;
+		saveBtn.disabled = true;
+		saveBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving…';
+
+		callMethod("garagedesk.api.vehicle.create_vehicle", {
+			plate: plate,
+			model: model,
+			chassis: val("chassis"),
+			engine: val("engine"),
+			odometer: val("odo"),
+			fuel_type: val("fuel"),
+			transmission: val("trans"),
+			customer: val("customer_id")
+		}).then(function (res) {
+			var name = res.name;
+			if (!files.length) return name;
+			saveBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Uploading files…';
+			// Upload sequentially so a mid-way failure is easy to report.
+			return files.reduce(function (chain, f) {
+				return chain.then(function () { return uploadFile(f, name); });
+			}, Promise.resolve()).then(function () { return name; });
+		}).then(function () {
+			window.location.href = "/a3-workshop/vehicles";
+		}).catch(function (err) {
+			saveBtn.disabled = false;
+			saveBtn.innerHTML = original;
+			alert("Could not save vehicle: " + (err && err.message ? err.message : err));
+		});
+	});
+})();
+</script>
+{% endraw %}
 {% endblock %}
