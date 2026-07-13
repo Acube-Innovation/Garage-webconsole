@@ -22,6 +22,8 @@
 				<button type="button" class="tc-chip is-active" data-filter="all">All</button>
 				<button type="button" class="tc-chip" data-filter="overdue">Overdue</button>
 				<button type="button" class="tc-chip" data-filter="high">High Priority</button>
+				<button type="button" class="tc-tool" id="tc-date-filter" title="Filter by date range"><i class="fa-regular fa-calendar-days"></i></button>
+				<button type="button" class="tc-tool" id="tc-assignees" title="Calls by assigned employee"><i class="fa-solid fa-user-group"></i></button>
 			</div>
 		</div>
 		<div class="card__body">
@@ -83,41 +85,98 @@
 	</div>
 </div>
 
+<!-- Date-range filter popup -->
+<div class="modal-overlay" id="date-modal" role="dialog" aria-modal="true">
+	<div class="modal" style="max-width:440px">
+		<div class="modal__head">
+			<div><h3>Filter by Date</h3><div class="sub">Show calls whose due date falls between two dates</div></div>
+			<button type="button" class="modal__close" data-dclose><i class="fa-solid fa-xmark"></i></button>
+		</div>
+		<div class="modal__body">
+			<div class="form-grid">
+				{{ field("From Date","df_from",type="date") }}
+				{{ field("To Date","df_to",type="date") }}
+			</div>
+		</div>
+		<div class="modal__foot">
+			<button type="button" class="btn btn--outline" id="df-clear">Clear</button>
+			<button type="button" class="btn btn--primary" id="df-apply"><i class="fa-solid fa-filter"></i> Apply</button>
+		</div>
+	</div>
+</div>
+
+<!-- Calls-by-assigned-employee popup (multi-select filter) -->
+<div class="modal-overlay" id="assignee-modal" role="dialog" aria-modal="true">
+	<div class="modal" style="max-width:460px">
+		<div class="modal__head">
+			<div><h3>Calls by Assigned Employee</h3><div class="sub">Tick one or more to list only their calls</div></div>
+			<button type="button" class="modal__close" data-aclose><i class="fa-solid fa-xmark"></i></button>
+		</div>
+		<div class="modal__body" id="assignee-body"></div>
+		<div class="modal__foot">
+			<button type="button" class="btn btn--outline" id="asg-clear">Clear</button>
+			<button type="button" class="btn btn--primary" id="asg-apply"><i class="fa-solid fa-filter"></i> Show Selected</button>
+		</div>
+	</div>
+</div>
+
+<style>
+	.tc-tool { display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; margin-left:4px;
+		border:1px solid var(--border,#d8dde6); background:#fff; color:var(--muted,#7a8598); border-radius:8px; cursor:pointer; }
+	.tc-tool:hover { background:#f1f4f8; color:var(--text,#2b3344); }
+	.tc-tool.is-active { background:var(--red,#ec2e5d); border-color:var(--red,#ec2e5d); color:#fff; }
+	.asg-row { display:flex; align-items:center; gap:10px; padding:9px 2px; border-bottom:1px solid var(--border,#eef0f3); }
+	.asg-row:last-child { border-bottom:none; }
+	.asg-row .nm { font-weight:600; flex:1; min-width:0; }
+	.asg-names { font-size:12px; color:var(--muted,#7a8598); }
+</style>
+
+<script>window.csrf_token = "{{ frappe.session.csrf_token }}";</script>
 {% raw %}
 <script>
 (function () {
-	var queue = [
-		{ id: "Q1", in: "M", name: "Mohammed Ali", mobile: "+971 50 221 8890", email: "mohammed@aaber.ae",
-			vehNo: "A-12345", model: "Toyota Fortuner", purpose: "Estimate approval — Body Shop",
-			due: "Today 09:30", overdue: true, pr: "High", pv: "badge--danger", st: "Pending", sv: "badge--pending",
-			ctx: { lastService: "12 May 2026", lastVisit: "12 May 2026 · General Service", jobStatus: "Estimate pending approval (JC-0010)", outstanding: "AED 1,615.38", nextDue: "12 Nov 2026 · 90,000 km" },
-			history: [{ ch: "whatsapp", t: "Yesterday 04:12 PM", note: "Estimate PDF sent" }, { ch: "call", t: "Yesterday 04:10 PM", note: "Discussed bodywork estimate, will confirm" }] },
-		{ id: "Q2", in: "R", name: "Rajesh Kumar", mobile: "+971 55 100 2003", email: "rajesh@daat.ae",
-			vehNo: "D-77820", model: "Toyota Hilux", purpose: "Booking confirmation — General Service",
-			due: "Today 11:00", overdue: false, pr: "High", pv: "badge--danger", st: "Scheduled", sv: "badge--navy",
-			ctx: { lastService: "02 Jan 2026", lastVisit: "02 Jan 2026 · Periodic maintenance", jobStatus: "—", outstanding: "AED 0.00", nextDue: "Booked: 25 Jun 2026 · 10:00 AM" },
-			history: [{ ch: "sms", t: "Today 08:00 AM", note: "Booking reminder sent" }] },
-		{ id: "Q3", in: "S", name: "Sujatha Menon", mobile: "+971 52 664 7781", email: "sujatha@gmail.com",
-			vehNo: "B-23110", model: "Honda Civic", purpose: "Service reminder — Periodic maintenance",
-			due: "Today 02:30", overdue: false, pr: "Medium", pv: "badge--pending", st: "Pending", sv: "badge--pending",
-			ctx: { lastService: "20 Dec 2025", lastVisit: "20 Dec 2025 · General Service", jobStatus: "—", outstanding: "AED 0.00", nextDue: "20 Jun 2026 · 40,000 km (due)" },
-			history: [] },
-		{ id: "Q4", in: "G", name: "Gulf Cargo LLC", mobile: "+971 6 552 9043", email: "ops@gulfcargo.ae",
-			vehNo: "C-90011", model: "Mitsubishi Canter", purpose: "Complaint follow-up — AC not cooling",
-			due: "Yesterday 05:00", overdue: true, pr: "High", pv: "badge--danger", st: "Escalated", sv: "badge--danger",
-			ctx: { lastService: "16 Jun 2026", lastVisit: "16 Jun 2026 · AC Service", jobStatus: "Complaint open (CMP-0042)", outstanding: "AED 483.00", nextDue: "—" },
-			history: [{ ch: "call", t: "Yesterday 03:00 PM", note: "Customer reported AC still not cooling; escalated to CCM" }] },
-		{ id: "Q5", in: "A", name: "Anjali Nair", mobile: "+971 50 882 4471", email: "anjali@aas.ae",
-			vehNo: "B-55421", model: "Nissan Patrol", purpose: "Feedback — Body Shop (JC-0007)",
-			due: "Today 04:00", overdue: false, pr: "Low", pv: "badge--soft", st: "Connected", sv: "badge--progress",
-			ctx: { lastService: "12 May 2026", lastVisit: "12 May 2026 · Body Shop", jobStatus: "Completed (JC-0007)", outstanding: "AED 0.00", nextDue: "12 Nov 2026" },
-			history: [{ ch: "call", t: "Today 10:15 AM", note: "Feedback collected — rated 5/5, happy with service" }] },
-		{ id: "Q6", in: "P", name: "Priya Raj", mobile: "+971 55 778 1020", email: "priya@gmail.com",
-			vehNo: "A-66200", model: "Kia Seltos", purpose: "Estimate approval — Mechanical",
-			due: "Today 12:30", overdue: false, pr: "Medium", pv: "badge--pending", st: "Pending", sv: "badge--pending",
-			ctx: { lastService: "—", lastVisit: "New customer", jobStatus: "Quotation sent (QTN-0033)", outstanding: "AED 0.00", nextDue: "—" },
-			history: [{ ch: "email", t: "Today 09:40 AM", note: "Quotation emailed" }] }
-	];
+	// --- Backend bridge: POST a whitelisted method, unwrap {message} (same as Front Office) ---
+	function callMethod(method, args) {
+		return fetch("/api/method/" + method, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"X-Frappe-CSRF-Token": window.csrf_token || "",
+				"Accept": "application/json"
+			},
+			body: JSON.stringify(args || {})
+		}).then(function (r) {
+			return r.json().then(function (data) {
+				if (!r.ok) { throw new Error((data && data._server_messages) || (data && data.exc) || r.statusText); }
+				return data.message;
+			});
+		});
+	}
+
+	// Queue is loaded live from garagedesk.api.telecalling (see loadQueue below).
+	var queue = [];
+
+	// Map a server queue row -> the shape the existing render functions use.
+	function badgeForPriority(p) { return p === "High" ? "badge--danger" : (p === "Medium" ? "badge--pending" : "badge--soft"); }
+	function badgeForStatus(s) {
+		if (s === "Overdue" || s === "Escalated") return "badge--danger";
+		if (s === "Scheduled") return "badge--navy";
+		if (s === "Due Soon" || s === "Pending" || s === "New Lead") return "badge--pending";
+		return "badge--progress";
+	}
+	function toUiRow(r) {
+		return {
+			id: r.id, source: r.source, ref_doctype: r.ref_doctype, ref_name: r.ref_name,
+			customer: r.customer, lead: r.lead, vehicle: r.vehicle,
+			in: r.initials, name: r.customer_name, mobile: r.mobile, email: r.email,
+			vehNo: r.veh_no, model: r.model, purpose: r.purpose,
+			due: r.due, due_ts: r.due_ts, overdue: r.overdue,
+			pr: r.priority, pv: badgeForPriority(r.priority),
+			st: r.status, sv: badgeForStatus(r.status),
+			assigneeName: r.assignee_name || "Unassigned",
+			ctx: null, history: []
+		};
+	}
 
 	var CH = { call: { c: "var(--navy)", i: "fa-phone" }, whatsapp: { c: "#25d366", i: "fa-whatsapp", brand: true }, sms: { c: "var(--purple)", i: "fa-comment-sms" }, email: { c: "var(--red)", i: "fa-envelope" } };
 
@@ -137,10 +196,17 @@
 			'</div>';
 	}
 
+	var dateFrom = "", dateTo = "", selectedAssignees = [];
 	function renderQueue() {
 		var rows = queue.filter(function (q) {
 			if (filter === "overdue" && !q.overdue) return false;
 			if (filter === "high" && q.pr !== "High") return false;
+			if (selectedAssignees.length && selectedAssignees.indexOf(q.assigneeName) < 0) return false;
+			if (dateFrom || dateTo) {
+				if (!q.due_ts) return false;               // no due date -> excluded when a range is set
+				if (dateFrom && q.due_ts < dateFrom) return false;
+				if (dateTo && q.due_ts > dateTo) return false;
+			}
 			if (search) {
 				var hay = (q.name + " " + q.mobile + " " + q.vehNo + " " + q.model).toLowerCase();
 				if (hay.indexOf(search) < 0) return false;
@@ -158,8 +224,6 @@
 				'<div class="row-between">' +
 					'<span class="tc-due' + (q.overdue ? ' is-late' : '') + '"><i class="fa-regular fa-clock"></i> ' + (q.overdue ? 'Overdue · ' : 'Due ') + q.due + '</span>' +
 					'<div class="row" style="gap:6px">' +
-						'<a class="act-btn" title="Call" href="tel:' + digits(q.mobile) + '" onclick="event.stopPropagation()"><i class="fa-solid fa-phone"></i></a>' +
-						'<a class="act-btn" title="WhatsApp" target="_blank" href="https://wa.me/' + digits(q.mobile) + '" onclick="event.stopPropagation()"><i class="fa-brands fa-whatsapp"></i></a>' +
 						'<button class="btn btn--primary btn--sm" data-log="' + q.id + '">Log Call</button>' +
 					'</div>' +
 				'</div></div>';
@@ -188,8 +252,46 @@
 			'<button class="btn btn--primary" style="width:100%;justify-content:center;margin-top:14px" data-log="' + q.id + '"><i class="fa-solid fa-phone-volume"></i> Log Call Outcome</button>';
 	}
 
-	function select(id) { current = id; renderQueue(); renderContext(byId(id)); }
+	function select(id) {
+		current = id;
+		renderQueue();
+		var q = byId(id);
+		if (!q) return;
+		ctxTitle.textContent = q.name;
+		ctxEl.innerHTML = '<div class="empty">Loading…</div>';
+		Promise.all([
+			callMethod("garagedesk.api.telecalling.get_customer_context", { customer: q.customer || null, vehicle: q.vehicle || null }),
+			callMethod("garagedesk.api.telecalling.get_communication_history", { customer: q.customer || null, limit: 20 })
+		]).then(function (res) {
+			var c = res[0] || {}, h = res[1] || [];
+			q.ctx = { lastService: c.last_service_date || "—", lastVisit: c.last_visit || "—", jobStatus: c.job_status || "—", outstanding: c.outstanding || "—", nextDue: c.next_due || "—" };
+			q.history = (h || []).map(function (x) { return { ch: x.kind, t: x.ts_display, note: x.note }; });
+			if (current === id) renderContext(q);
+		}).catch(function () {
+			q.ctx = { lastService: "—", lastVisit: "—", jobStatus: "—", outstanding: "—", nextDue: "—" };
+			q.history = [];
+			if (current === id) renderContext(q);
+		});
+	}
 	function byId(id) { return queue.filter(function (q) { return q.id === id; })[0]; }
+
+	// ---- Live loaders --------------------------------------------------
+	function loadQueue() {
+		return callMethod("garagedesk.api.telecalling.get_call_queue", { filter: "all", limit: 200 }).then(function (rows) {
+			queue = (rows || []).map(toUiRow);
+			renderQueue();
+		}).catch(function (err) {
+			listEl.innerHTML = '<div class="empty">Could not load calls' + (err && err.message ? ": " + err.message : "") + '.</div>';
+		});
+	}
+	function setTile(id, val) { var el = document.getElementById(id); if (el) el.textContent = (val === null || val === undefined) ? "—" : val; }
+	function loadProductivity() {
+		return callMethod("garagedesk.api.telecalling.get_productivity", {}).then(function (p) {
+			p = p || {};
+			setTile("s-assigned", p.assigned); setTile("s-completed", p.completed); setTile("s-pending", p.pending);
+			setTile("s-connected", p.connected); setTile("s-followups", p.followups); setTile("s-conversions", p.conversions); setTile("s-bookings", p.bookings);
+		}).catch(function () {});
+	}
 
 	listEl.addEventListener("click", function (e) {
 		var log = e.target.closest("[data-log]");
@@ -206,6 +308,78 @@
 		});
 	});
 	document.getElementById("tc-search").addEventListener("input", function () { search = this.value.toLowerCase(); renderQueue(); });
+
+	// ---- Date-range filter popup (icon 1) ----
+	var dateModal = document.getElementById("date-modal");
+	var dateBtn = document.getElementById("tc-date-filter");
+	function dfField(n) { return document.querySelector('[name=' + n + ']'); }
+	function openDate() {
+		if (dfField("df_from")) dfField("df_from").value = dateFrom;
+		if (dfField("df_to")) dfField("df_to").value = dateTo;
+		dateModal.classList.add("is-open"); document.body.style.overflow = "hidden";
+	}
+	function closeDate() { dateModal.classList.remove("is-open"); document.body.style.overflow = ""; }
+	dateBtn.addEventListener("click", openDate);
+	dateModal.querySelectorAll("[data-dclose]").forEach(function (b) { b.addEventListener("click", closeDate); });
+	dateModal.addEventListener("click", function (e) { if (e.target === dateModal) closeDate(); });
+	document.getElementById("df-apply").addEventListener("click", function () {
+		dateFrom = dfField("df_from") ? dfField("df_from").value : "";
+		dateTo = dfField("df_to") ? dfField("df_to").value : "";
+		dateBtn.classList.toggle("is-active", !!(dateFrom || dateTo));
+		closeDate(); renderQueue();
+	});
+	document.getElementById("df-clear").addEventListener("click", function () {
+		dateFrom = ""; dateTo = "";
+		if (dfField("df_from")) dfField("df_from").value = "";
+		if (dfField("df_to")) dfField("df_to").value = "";
+		dateBtn.classList.remove("is-active");
+		closeDate(); renderQueue();
+	});
+
+	// ---- Calls-by-assigned-employee popup (icon 2): multi-select filter ----
+	var asgModal = document.getElementById("assignee-modal");
+	var asgBtn = document.getElementById("tc-assignees");
+	function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;"); }
+	function openAssignees() {
+		var groups = {};
+		queue.forEach(function (q) {
+			var k = q.assigneeName || "Unassigned";
+			(groups[k] = groups[k] || []).push(q.name);
+		});
+		var keys = Object.keys(groups).sort(function (a, b) {
+			if (a === "Unassigned") return 1;
+			if (b === "Unassigned") return -1;
+			return groups[b].length - groups[a].length;
+		});
+		var body = document.getElementById("assignee-body");
+		body.innerHTML = keys.length ? keys.map(function (k) {
+			var names = groups[k];
+			var uniq = names.filter(function (n, i) { return names.indexOf(n) === i; });
+			var checked = selectedAssignees.indexOf(k) >= 0 ? " checked" : "";
+			return '<label class="asg-row" style="cursor:pointer">' +
+				'<input type="checkbox" class="asg-pick" value="' + esc(k) + '"' + checked + '>' +
+				'<div class="list-row__avatar" style="background:var(--navy)">' + (k[0] || "?").toUpperCase() + '</div>' +
+				'<div style="flex:1;min-width:0"><div class="nm">' + k + '</div><div class="asg-names">' + uniq.slice(0, 4).join(", ") + (uniq.length > 4 ? " +" + (uniq.length - 4) : "") + '</div></div>' +
+				'<span class="badge badge--navy">' + names.length + '</span></label>';
+		}).join("") : '<div class="empty">No calls in the queue.</div>';
+		asgModal.classList.add("is-open"); document.body.style.overflow = "hidden";
+	}
+	function closeAssignees() { asgModal.classList.remove("is-open"); document.body.style.overflow = ""; }
+	asgBtn.addEventListener("click", openAssignees);
+	asgModal.querySelectorAll("[data-aclose]").forEach(function (b) { b.addEventListener("click", closeAssignees); });
+	asgModal.addEventListener("click", function (e) { if (e.target === asgModal) closeAssignees(); });
+	document.getElementById("asg-apply").addEventListener("click", function () {
+		selectedAssignees = Array.prototype.slice.call(asgModal.querySelectorAll(".asg-pick:checked")).map(function (c) { return c.value; });
+		asgBtn.classList.toggle("is-active", selectedAssignees.length > 0);
+		closeAssignees(); renderQueue();
+	});
+	document.getElementById("asg-clear").addEventListener("click", function () {
+		selectedAssignees = [];
+		asgModal.querySelectorAll(".asg-pick").forEach(function (c) { c.checked = false; });
+		asgBtn.classList.remove("is-active");
+		closeAssignees(); renderQueue();
+	});
+	document.addEventListener("keydown", function (e) { if (e.key === "Escape") { closeDate(); closeAssignees(); } });
 
 	// ---- Log Call modal
 	var modal = document.getElementById("call-modal");
@@ -239,33 +413,43 @@
 		});
 	});
 
-	function bump(id, by) { var el = document.getElementById(id); el.textContent = (parseInt(el.textContent) || 0) + by; }
-
-	document.getElementById("cm-save").addEventListener("click", function () {
-		var sel = modal.querySelector(".chip.is-active");
-		var outcome = sel ? sel.dataset.val : "Connected";
-		var notes = (document.querySelector('[name=call_notes]').value || outcome);
+	// ---- Save call outcome -> create a real Call Log via the backend ----
+	var saveBtn = document.getElementById("cm-save");
+	saveBtn.addEventListener("click", function () {
 		var q = byId(modalFor);
-		// map outcome -> follow-up status badge
-		var map = {
-			"Converted": ["Converted", "badge--success"], "Interested": ["Follow-up set", "badge--navy"],
-			"Call Back Later": ["Call back", "badge--navy"], "Connected": ["Connected", "badge--progress"],
-			"Not Answered": ["No answer", "badge--pending"], "Busy": ["No answer", "badge--pending"],
-			"Switched Off": ["No answer", "badge--pending"], "Wrong Number": ["Wrong number", "badge--soft"],
-			"Not Interested": ["Closed", "badge--soft"]
-		};
-		var m = map[outcome] || ["Connected", "badge--progress"];
-		q.st = m[0]; q.sv = m[1];
-		q.history.unshift({ ch: "call", t: "Just now", note: outcome + " — " + notes });
-		// productivity
-		bump("s-completed", 1); bump("s-pending", -1);
-		if (["Connected", "Interested", "Converted", "Call Back Later"].indexOf(outcome) >= 0) bump("s-connected", 1);
-		if (outcome === "Converted") { bump("s-conversions", 1); bump("s-bookings", 1); }
-		if (document.querySelector('[name=fu_date]').value) bump("s-followups", 1);
-		closeModal(); renderQueue(); renderContext(q);
+		if (!q) { closeModal(); return; }
+		var groups = modal.querySelectorAll("[data-outcome]");
+		var pick = function (g) { var c = g && g.querySelector(".chip.is-active"); return c ? c.dataset.val : ""; };
+		var outcome = pick(groups[0]);      // Connection group
+		var disposition = pick(groups[1]);  // Disposition group
+		if (!outcome) { alert("Please select a connection outcome."); return; }
+		var fval = function (name) { var el = document.querySelector('[name=' + name + ']'); return el ? el.value.trim() : ""; };
+		saveBtn.disabled = true;
+		callMethod("garagedesk.api.telecalling.log_call", {
+			source: q.source, ref_doctype: q.ref_doctype, ref_name: q.ref_name,
+			customer: q.customer || null, lead: q.lead || null, vehicle: q.vehicle || null,
+			mobile_no: q.mobile || "",
+			outcome: outcome, disposition: disposition,
+			call_notes: fval("call_notes"),
+			follow_up_date: fval("fu_date"), follow_up_time: fval("fu_time"),
+			follow_up_reason: fval("fu_reason"), follow_up_priority: fval("fu_priority"),
+			internal_remarks: fval("remarks")
+		}).then(function () {
+			closeModal();
+			loadProductivity();
+			return loadQueue();
+		}).then(function () {
+			if (current && byId(current)) select(current);
+		}).catch(function (err) {
+			alert("Could not save call: " + (err && err.message ? err.message : err));
+		}).then(function () {
+			saveBtn.disabled = false;
+		});
 	});
 
-	renderQueue();
+	// ---- Initial load --------------------------------------------------
+	loadQueue();
+	loadProductivity();
 })();
 </script>
 {% endraw %}
