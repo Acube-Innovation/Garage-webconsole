@@ -10,4 +10,10 @@ def get_context(context):
 	context.page_icon = "fa-calendar-day"
 	context.subtitle = "Daily operations & quick actions"
 	context.breadcrumb = "Daily Planner"
+
+	# Section 1 — Today's Tasks & To-Do (real ERPNext Tasks, grouped by priority).
+	from garagedesk.api.daily_planner import get_assignee_options, get_today_task_groups
+
+	context.task_groups = get_today_task_groups()
+	context.assignees = get_assignee_options()
 	return context

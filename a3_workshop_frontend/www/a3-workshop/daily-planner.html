@@ -2,11 +2,6 @@
 {% from "templates/macros/workshop.html" import badge, field %}
 
 {% block page_content %}
-{%- set task_groups = [
-  {"label":"Critical","dot":"dot--crit","rows":["Vehicle delivery due today","Pending customer approvals","Overdue service jobs"]},
-  {"label":"High","dot":"dot--high","rows":["Parts procurement pending","QC inspections","Customer follow-ups"]},
-  {"label":"Normal","dot":"dot--normal","rows":["Internal workshop tasks","Documentation updates"]}
-] -%}
 {%- set pipeline = [
   {"stage":"Reception","n":4,"sub":["Vehicle arrived","Awaiting inspection"]},
   {"stage":"Estimation","n":8,"sub":["Estimate pending approval","Waiting customer confirmation"]},
@@ -35,11 +30,6 @@
   {"name":"Technician A — Arun Kumar","jobs":["JC-0011 · Brake pads","JC-0007 · Oil change"],"hours":"6.5","prod":86},
   {"name":"Technician B — Rajesh Nair","jobs":["JC-0010 · Bodywork","JC-0009 · AC service"],"hours":"5.0","prod":72},
   {"name":"Technician C — Suresh Babu","jobs":["JC-0008 · Inspection"],"hours":"3.5","prod":64}
-] -%}
-{%- set assignees = [
-  "Arun Kumar — Technician","Rajesh Nair — Technician","Suresh Babu — Technician",
-  "Priya Menon — Service Advisor","Karthik R — QC Inspector","Deepa S — Front Office",
-  "Manoj Pillai — Telecaller","Vikram Singh — Workshop Manager"
 ] -%}
 {%- set advances = [
   {"type":"Customer Advances","sub":"Awaiting service completion","count":7,"amt":"₹1,20,000"},
@@ -71,21 +61,27 @@
 
 		<!-- 1. Tasks & To-Do -->
 		<div class="card"><div class="card__head"><h3>Today's Tasks &amp; To-Do</h3><span class="muted">Operations &amp; Action Center</span></div>
-			<div class="card__body">
-				{%- for g in task_groups %}
-				<div class="group-head"><span class="dot {{ g.dot }}"></span>{{ g.label }}<span class="count">{{ g.rows|length }}</span></div>
-				{%- for it in g.rows %}
-				<div class="task-row">
-					<span class="txt">{{ it }}</span>
+			<div class="card__body" id="task-planner">
+				{%- for g in task_groups if g.count %}
+				<div class="group-head">
+					<span class="dot" style="background:{{ g.color }}"></span>{{ g.priority }}
+					<span class="count" style="background:{{ g.color }};color:#fff;border-radius:999px;padding:1px 9px;min-width:20px;text-align:center;font-weight:600">{{ g.count }}</span>
+				</div>
+				{%- for t in g.tasks %}
+				<div class="task-row" data-task="{{ t.name }}">
+					<span class="txt">{{ t.subject }}</span>
 					<div class="act-btns">
-						<button class="act-btn" data-complete title="Complete"><i class="fa-solid fa-check"></i></button>
-						<button class="act-btn" data-assign data-task="{{ it }}" title="Assign"><i class="fa-solid fa-user-plus"></i></button>
-						<button class="act-btn" data-reschedule data-task="{{ it }}" title="Reschedule"><i class="fa-solid fa-calendar-day"></i></button>
-						<button class="act-btn" data-note data-task="{{ it }}" title="Add Note"><i class="fa-solid fa-note-sticky"></i></button>
+						<button class="act-btn" data-complete title="Mark Completed"><i class="fa-solid fa-check"></i></button>
+						<button class="act-btn" data-assign title="Assign"><i class="fa-solid fa-user-plus"></i></button>
+						<button class="act-btn" data-reschedule title="Reschedule"><i class="fa-solid fa-calendar-day"></i></button>
+						<button class="act-btn" data-note title="Add Note"><i class="fa-solid fa-note-sticky"></i></button>
 					</div>
 				</div>
 				{%- endfor %}
 				{%- endfor %}
+				{%- if not task_groups|selectattr("count")|list %}
+				<div class="empty" style="padding:14px 0">No open tasks for today.</div>
+				{%- endif %}
 			</div>
 		</div>
 
@@ -220,7 +216,13 @@
 		</div>
 		<div class="modal__body">
 			<form class="form-grid form-grid--1" id="assign-form">
-				{{ field("Assign To", "assignee", type="select", required=True, placeholder="Select employee", options=assignees, full=True) }}
+				<div class="field field--full">
+					<label>Assign To <span class="req">*</span></label>
+					<select name="assignee">
+						<option value="">Select employee</option>
+						{%- for a in assignees %}<option value="{{ a.value }}">{{ a.label }}</option>{%- endfor %}
+					</select>
+				</div>
 				{{ field("Complete By", "assign_due", type="date", full=True) }}
 				{{ field("Comment", "assign_comment", type="textarea", placeholder="Instructions for the assignee") }}
 			</form>
@@ -305,6 +307,7 @@
 	</div>
 </div>
 
+<script>window.csrf_token = "{{ frappe.session.csrf_token }}";</script>
 {% raw %}
 <script>
 (function () {
@@ -319,20 +322,38 @@
 	});
 	document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeAll(); });
 
+	// ---- Backend wiring -------------------------------------------------
+	function callMethod(method, args) {
+		return fetch("/api/method/" + method, {
+			method: "POST",
+			headers: { "Content-Type": "application/json", "X-Frappe-CSRF-Token": window.csrf_token || "", "Accept": "application/json" },
+			body: JSON.stringify(args || {})
+		}).then(function (r) {
+			return r.json().then(function (data) {
+				if (!r.ok) throw new Error((data && data._server_messages) || (data && data.exc) || r.statusText);
+				return data.message;
+			});
+		});
+	}
+	function taskOf(btn) { var row = btn.closest(".task-row"); return row ? row.getAttribute("data-task") : ""; }
+	var activeTask = null; // the task a modal is acting on
+
 	// Add Task
 	document.querySelectorAll("[data-open-task]").forEach(function (b) {
 		b.addEventListener("click", function () { open(document.getElementById("task-modal")); });
 	});
 
-	// per-task action buttons → open the matching modal, carrying the task as context
+	// per-task action buttons → open the matching modal, remembering the task
 	function wireAction(attr, modalId) {
 		var modal = document.getElementById(modalId);
 		if (!modal) return;
 		document.querySelectorAll(".act-btn[" + attr + "]").forEach(function (b) {
 			b.addEventListener("click", function () {
-				var task = b.getAttribute("data-task") || "";
+				activeTask = taskOf(b);
+				var row = b.closest(".task-row");
+				var subject = row ? row.querySelector(".txt").textContent : activeTask;
 				var ctx = modal.querySelector("[data-ctx]");
-				if (ctx && task) ctx.textContent = "Task · " + task;
+				if (ctx) ctx.textContent = "Task · " + subject;
 				var form = modal.querySelector("form"); if (form) form.reset();
 				open(modal);
 			});
@@ -342,15 +363,62 @@
 	wireAction("data-reschedule", "reschedule-modal");
 	wireAction("data-note", "note-modal");
 
-	// submit handlers (demo: validate then close)
-	["task-form", "assign-form", "reschedule-form", "note-form"].forEach(function (id) {
-		var f = document.getElementById(id);
-		if (f) f.addEventListener("submit", function (e) { e.preventDefault(); closeAll(); });
+	function val(name) { var el = document.querySelector('[name="' + name + '"]'); return el ? el.value.trim() : ""; }
+	function submitting(form, on) { var b = document.querySelector('[form="' + form.id + '"][type="submit"]'); if (b) b.disabled = on; }
+	function fail(err) { alert(err && err.message ? err.message : err); }
+
+	// Assign → creates a ToDo
+	document.getElementById("assign-form").addEventListener("submit", function (e) {
+		e.preventDefault();
+		var assignee = val("assignee");
+		if (!assignee) { alert("Please select who to assign to."); return; }
+		submitting(this, true);
+		callMethod("garagedesk.api.daily_planner.assign_task", {
+			task: activeTask, assign_to: assignee, complete_by: val("assign_due"), comment: val("assign_comment")
+		}).then(function () { closeAll(); }).catch(fail).then(function () { submitting(document.getElementById("assign-form"), false); });
 	});
 
-	// mark task complete
+	// Reschedule → updates Task.exp_start_date + writes a reschedule log
+	document.getElementById("reschedule-form").addEventListener("submit", function (e) {
+		e.preventDefault();
+		var newDate = val("new_date");
+		if (!newDate) { alert("Please pick a new date."); return; }
+		submitting(this, true);
+		callMethod("garagedesk.api.daily_planner.reschedule_task", {
+			task: activeTask, new_date: newDate, new_time: val("new_time"), reason: val("reschedule_reason")
+		}).then(function () { closeAll(); }).catch(fail).then(function () { submitting(document.getElementById("reschedule-form"), false); });
+	});
+
+	// Add Note → adds a comment on the Task
+	document.getElementById("note-form").addEventListener("submit", function (e) {
+		e.preventDefault();
+		var note = val("task_note");
+		if (!note) { alert("Note cannot be empty."); return; }
+		submitting(this, true);
+		callMethod("garagedesk.api.daily_planner.add_task_note", { task: activeTask, note: note })
+			.then(function () { closeAll(); }).catch(fail).then(function () { submitting(document.getElementById("note-form"), false); });
+	});
+
+	// Add Task modal (demo create — not wired to backend yet)
+	document.getElementById("task-form").addEventListener("submit", function (e) { e.preventDefault(); closeAll(); });
+
+	// Mark Completed → status=Completed, then remove the row (irreversible in UI)
 	document.querySelectorAll(".act-btn[data-complete]").forEach(function (b) {
-		b.addEventListener("click", function () { b.classList.toggle("is-on"); b.closest(".task-row").classList.toggle("is-done"); });
+		b.addEventListener("click", function () {
+			var task = taskOf(b), row = b.closest(".task-row");
+			if (!task || b.disabled) return;
+			if (!confirm("Mark this task as Completed? This can't be undone here.")) return;
+			b.disabled = true; b.classList.add("is-on");
+			callMethod("garagedesk.api.daily_planner.complete_task", { task: task })
+				.then(function () {
+					row.classList.add("is-done");
+					var acts = row.querySelector(".act-btns"); if (acts) acts.remove();
+					var badge = document.createElement("span");
+					badge.className = "badge badge--success"; badge.textContent = "Completed";
+					row.appendChild(badge);
+				})
+				.catch(function (err) { b.disabled = false; b.classList.remove("is-on"); fail(err); });
+		});
 	});
 })();
 </script>
