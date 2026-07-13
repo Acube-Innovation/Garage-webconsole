@@ -1,0 +1,69 @@
+{% extends "templates/workshop_base.html" %}
+{% from "templates/macros/workshop.html" import badge %}
+
+{% block page_content %}
+{%- set jc = job_card_id or "JC-2026-06-18-0011" -%}
+<div class="card">
+	<div class="card__body row-between">
+		<div>
+			<div class="muted">Job Card</div>
+			<h2>{{ jc }}</h2>
+			<div class="muted" style="margin-top:4px">DAAT LOGISTICS L.L.C · Toyota Fortuner · A-12345</div>
+		</div>
+		<div class="stack" style="align-items:flex-end;gap:8px">
+			{{ badge("QC Pending","badge--pending") }}
+			<div class="row"><a class="btn btn--purple btn--sm">Update QC</a><a class="btn btn--primary btn--sm">Mark Ready</a></div>
+		</div>
+	</div>
+</div>
+
+<div class="page-grid-2" style="margin-top:18px">
+	<div class="stack">
+		<div class="card">
+			<div class="card__head"><h3>Service Items / Tasks</h3></div>
+			<div class="card__body" style="padding:0">
+				<table class="table">
+					<thead><tr><th>Task</th><th>Technician</th><th>Status</th></tr></thead>
+					<tbody>
+						<tr><td>Engine Oil Change</td><td>Arun Kumar</td><td>{{ badge("Done","badge--success") }}</td></tr>
+						<tr><td>Brake Pad Replacement</td><td>Rajesh Nair</td><td>{{ badge("In Progress","badge--progress") }}</td></tr>
+						<tr><td>Wheel Alignment</td><td>—</td><td>{{ badge("Pending","badge--pending") }}</td></tr>
+					</tbody>
+				</table>
+			</div>
+		</div>
+		<div class="card">
+			<div class="card__head"><h3>Quality Check</h3></div>
+			<div class="card__body stack">
+				<label><input type="checkbox" checked> All Parts Fitted</label>
+				<label><input type="checkbox"> Road Test</label>
+				<label><input type="checkbox"> Cleanliness</label>
+			</div>
+		</div>
+	</div>
+	<div class="stack">
+		<div class="card">
+			<div class="card__head"><h3>Technician Assignment</h3></div>
+			<div class="card__body stack">
+				<div class="row-between"><span class="muted">Primary</span><b>Arun Kumar</b></div>
+				<div class="row-between"><span class="muted">Assistant</span><b>Rajesh Nair</b></div>
+			</div>
+		</div>
+		<div class="card">
+			<div class="card__head"><h3>Cost &amp; Estimate Summary</h3></div>
+			<div class="card__body stack">
+				<div class="row-between"><span class="muted">Estimated Labor</span><span>AED 600.00</span></div>
+				<div class="row-between"><span class="muted">Estimated Parts</span><span>AED 938.46</span></div>
+				<div class="row-between" style="font-weight:800"><span>Total</span><span style="color:var(--red)">AED 1538.46</span></div>
+			</div>
+		</div>
+		<div class="card">
+			<div class="card__head"><h3>Delivery</h3></div>
+			<div class="card__body stack">
+				<div class="row-between"><span class="muted">Promised</span><b>20 Jun 2026 · 5:00 PM</b></div>
+				{{ badge("Ready for Billing","badge--navy") }}
+			</div>
+		</div>
+	</div>
+</div>
+{% endblock %}

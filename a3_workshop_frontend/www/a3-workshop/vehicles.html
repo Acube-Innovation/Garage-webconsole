@@ -1,0 +1,27 @@
+{% extends "templates/workshop_base.html" %}
+{% from "templates/macros/workshop.html" import badge %}
+
+{% block page_content %}
+<div class="toolbar">
+	<form method="get" style="margin:0;max-width:340px;flex:1">
+		<div class="field"><input name="q" value="{{ search or '' }}" placeholder="Search vehicles..."></div>
+	</form>
+	<a class="btn btn--primary" href="/a3-workshop/vehicle-entry"><i class="fa-solid fa-plus"></i> Register Vehicle</a>
+</div>
+<div class="list-rows">
+	{%- for v in vehicles %}
+	<div class="list-row" style="grid-template-columns:2fr 1.4fr 1.4fr 1fr auto">
+		<div class="list-row__party">
+			<div class="list-row__avatar" style="background:var(--navy)"><i class="fa-solid fa-car"></i></div>
+			<div><div class="list-row__title">{{ v.title }}</div><div class="list-row__meta">Plate: {{ v.plate }}<br>Chassis: {{ v.chassis }}</div></div>
+		</div>
+		<div class="list-row__col"><div class="k">Customer</div><div style="font-weight:600">{{ v.customer }}</div><div class="muted">{{ v.customer_phone }}</div><div class="muted">{{ v.customer_location }}</div></div>
+		<div class="list-row__col"><div class="k">Odometer</div><div style="font-weight:600">{{ v.odometer }}</div><div class="muted">{{ v.fuel }}</div></div>
+		<div>{{ badge(v.status, v.status_variant) }}</div>
+		<a class="btn btn--primary btn--sm" href="/app/vehicle/{{ v.name }}">View Details</a>
+	</div>
+	{%- else %}
+	<div class="empty">{% if search %}No vehicles match "{{ search }}".{% else %}No vehicles yet. Register one, or add a vehicle while creating a customer in Front Office.{% endif %}</div>
+	{%- endfor %}
+</div>
+{% endblock %}

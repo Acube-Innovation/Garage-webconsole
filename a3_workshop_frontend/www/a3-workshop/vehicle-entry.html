@@ -1,0 +1,30 @@
+{% extends "templates/workshop_base.html" %}
+{% from "templates/macros/workshop.html" import field %}
+
+{% block page_content %}
+<div class="card">
+	<div class="card__head"><h3>Vehicle Details</h3></div>
+	<div class="card__body"><form class="form-grid">
+		{{ field("Plate Number","plate",required=True) }}
+		{{ field("Make / Model","model",required=True,placeholder="e.g. Toyota Fortuner") }}
+		{{ field("Chassis Number","chassis") }}
+		{{ field("Engine Number","engine") }}
+		{{ field("Odometer Reading","odo") }}
+		{{ field("Fuel Type","fuel",type="select",options=["Petrol","Diesel","Electric","Hybrid"]) }}
+		{{ field("Transmission","trans",type="select",options=["Automatic","Manual"]) }}
+		{{ field("Customer","customer",placeholder="Link to customer") }}
+	</form></div>
+</div>
+
+<div class="card" style="margin-top:18px">
+	<div class="card__head"><h3>External Damages / Photos</h3></div>
+	<div class="card__body">
+		<div class="empty" style="border:2px dashed var(--border);border-radius:var(--radius)">
+			<i class="fa-solid fa-cloud-arrow-up" style="font-size:28px;color:var(--muted)"></i>
+			<div style="margin-top:10px">Upload photos of vehicle condition</div>
+			<button class="btn btn--outline btn--sm" style="margin-top:12px"><i class="fa-solid fa-image"></i> Choose Files</button>
+		</div>
+	</div>
+</div>
+<div class="form-actions"><span></span><a class="btn btn--primary" href="/a3-workshop/job-card/type-selection">Save &amp; Create Job Card <i class="fa-solid fa-arrow-right"></i></a></div>
+{% endblock %}

@@ -1,0 +1,202 @@
+{% extends "templates/workshop_base.html" %}
+{% from "templates/macros/workshop.html" import badge, qr %}
+
+{% block page_content %}
+{#- Each row now carries its assignee (emp), estimated hours (est) and whether it is done. -#}
+{%- set rows = [
+  {"in":"D","name":"DAAT LOGISTICS L.L.C","owner":"DAAT LOGISTICS L.L.C-C355","no":"JC-2026-06-18-0011","svc":"General Service","date":"18 Jun 2026","amt":"AED 1538.46","st":"QC Pending","sv":"badge--pending","emp":"Rahul Menon","est":3},
+  {"in":"A","name":"AABER FACILITIES MANAGEMENT LLC","owner":"AABER FACILITIES MANAGEMENT LLC-C129","no":"JC-2026-06-18-0010","svc":"Body Shop","date":"18 Jun 2026","amt":"AED 3024.00","st":"Parts Issued","sv":"badge--progress","emp":"Suresh Kumar","est":5},
+  {"in":"A","name":"AAS SHIPPING LLC","owner":"AAS SHIPPING LLC-C23","no":"JC-2026-06-18-0009","svc":"Mechanical","date":"18 Jun 2026","amt":"AED 483.00","st":"New","sv":"badge--new","emp":"Rahul Menon","est":2},
+  {"in":"A","name":"AAS SHIPPING LLC","owner":"AAS SHIPPING LLC-C23","no":"JC-2026-06-18-0008","svc":"Inspection","date":"18 Jun 2026","amt":"AED 0.00","st":"New","sv":"badge--new","emp":"Anil Joseph","est":1},
+  {"in":"A","name":"AABER FACILITIES MANAGEMENT LLC","owner":"AABER FACILITIES MANAGEMENT LLC-C129","no":"JC-2026-06-18-0007","svc":"Repeat Service","date":"18 Jun 2026","amt":"AED 24150.00","st":"Completed","sv":"badge--success","emp":"Suresh Kumar","est":4}
+] -%}
+
+<div class="toolbar">
+	<a class="btn btn--primary" href="/a3-workshop/job-card/new"><i class="fa-solid fa-plus"></i> Create Job Card</a>
+	<div class="toolbar__right">
+		<button class="btn btn--outline"><i class="fa-solid fa-filter"></i> Filter</button>
+		<button class="btn btn--purple"><i class="fa-solid fa-chart-column"></i> Report</button>
+		<div class="pager">
+			<span class="page">Prev</span>
+			<span class="page is-active">1</span><span class="page">2</span><span class="page">3</span>
+			<span class="page">4</span><span class="page">5</span><span class="page">…</span>
+			<span class="page">Next</span>
+		</div>
+	</div>
+</div>
+
+<div class="jc-grid">
+
+	<!-- LEFT (70%) — job cards list -->
+	<div class="list-rows" id="jc-list">
+		{%- for r in rows %}
+		<div class="list-row" data-no="{{ r.no }}" data-emp="{{ r.emp }}" data-est="{{ r.est }}" data-done="{{ 1 if r.st == 'Completed' else 0 }}">
+			<div class="list-row__party">
+				<div class="list-row__avatar">{{ r.in }}</div>
+				<div>
+					<div class="list-row__title">{{ r.name }}</div>
+					<div class="list-row__meta">Job Owner: {{ r.owner }}<br>{{ r.no }}<br>ad@gmail.com</div>
+				</div>
+			</div>
+			<div class="list-row__col">
+				<div class="k" style="font-weight:600;color:var(--text)">{{ r.svc }}</div>
+				<div class="muted" style="margin:5px 0"><i class="fa-regular fa-calendar"></i> {{ r.date }}</div>
+				<div class="jc-assignee muted" style="margin-bottom:6px"><i class="fa-regular fa-user"></i> {{ r.emp }} · {{ r.est }}h</div>
+				<span class="jc-status">{{ badge(r.st, r.sv) }}</span>
+			</div>
+			{{ qr(loop.index) }}
+			<div>
+				<div class="list-row__amount">{{ r.amt }}</div>
+				<div class="list-row__col" style="text-align:right;margin-top:4px"><span class="k">#Inv: 0000</span><br><span class="k">Credit: 0</span></div>
+			</div>
+			<div class="list-row__actions">
+				<div class="row" style="justify-content:flex-end">
+					<button type="button" class="btn btn--icon js-complete {{ 'btn--outline' if r.st == 'Completed' else 'btn--purple' }}" title="{{ 'Reopen' if r.st == 'Completed' else 'Mark Done' }}">
+						<i class="fa-solid {{ 'fa-rotate-left' if r.st == 'Completed' else 'fa-check' }}"></i>
+					</button>
+					<a class="btn btn--outline btn--icon" href="/a3-workshop/job-card/{{ r.no }}" title="View Card"><i class="fa-solid fa-eye"></i></a>
+				</div>
+				<div class="row" style="justify-content:flex-end">
+					<a class="btn btn--outline btn--icon" href="#" title="Edit"><i class="fa-solid fa-pen"></i></a>
+					<a class="btn btn--danger btn--icon" href="#" title="Delete"><i class="fa-solid fa-trash"></i></a>
+				</div>
+			</div>
+		</div>
+		{%- endfor %}
+	</div>
+
+	<!-- RIGHT (30%) — employee status & workload sidebar -->
+	<aside class="jc-side">
+		<div class="card">
+			<div class="card__head">
+				<h3>Team Workload</h3>
+				<span class="readonly-tag" id="emp-avail">—</span>
+			</div>
+			<div class="card__body">
+				<div class="emp-list" id="emp-list"></div>
+			</div>
+		</div>
+	</aside>
+
+</div>
+
+<style>
+.jc-grid {
+	display: grid;
+	grid-template-columns: minmax(0, 7fr) minmax(0, 3fr);
+	gap: 18px;
+	align-items: start;
+}
+@media (max-width: 1100px) {
+	.jc-grid { grid-template-columns: 1fr; }
+}
+/* keep the sidebar in view while the (potentially long) list scrolls */
+.jc-side { position: sticky; top: 18px; }
+.emp-list { display: flex; flex-direction: column; gap: 12px; max-height: calc(100vh - 220px); overflow: auto; }
+
+.emp-card {
+	border: 1px solid var(--border);
+	border-radius: var(--radius-sm);
+	padding: 12px 14px;
+	background: var(--surface);
+}
+.emp-card__top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.emp-card__name { font-weight: 700; font-size: 13px; color: var(--text); }
+.emp-card__hours { font-size: 12px; font-weight: 700; white-space: nowrap; }
+.emp-card__stats { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.emp-card__count { font-size: 12px; color: var(--muted); white-space: nowrap; min-width: 108px; }
+.emp-card__count b { color: var(--text); }
+.emp-card .bar { flex: 1; }
+.emp-card .bar > span { background: var(--green); transition: width .35s ease; }
+.emp-empty { color: var(--muted); font-size: 13px; padding: 6px 2px; }
+</style>
+
+{% raw %}
+<script>
+(function () {
+	// Per-employee shift length (hours). Anyone not listed defaults to 8h.
+	var SHIFTS = { "Rahul Menon": 8, "Suresh Kumar": 10, "Anil Joseph": 8 };
+	var DEFAULT_SHIFT = 8;
+
+	var listEl = document.getElementById("jc-list");
+	var empListEl = document.getElementById("emp-list");
+	var availEl = document.getElementById("emp-avail");
+
+	// Build the employee -> workload model straight from the rendered rows,
+	// so the left list stays the single source of truth.
+	function buildEmployees() {
+		var map = {};
+		listEl.querySelectorAll(".list-row").forEach(function (row) {
+			var name = row.dataset.emp;
+			if (!name) return;
+			var est = parseFloat(row.dataset.est) || 0;
+			var done = row.dataset.done === "1";
+			var e = map[name] || (map[name] = { name: name, total: 0, done: 0, committed: 0, shift: SHIFTS[name] || DEFAULT_SHIFT });
+			e.total += 1;
+			if (done) e.done += 1;
+			else e.committed += est; // only pending work eats into remaining capacity
+		});
+		return Object.keys(map).map(function (k) { return map[k]; })
+			.sort(function (a, b) { return (b.total - b.done) - (a.total - a.done); }); // busiest first
+	}
+
+	function hoursVariant(left, shift) {
+		if (left <= 0) return "badge--danger";          // no capacity
+		if (left <= shift * 0.25) return "badge--pending"; // nearly full
+		return "badge--success";                          // has room
+	}
+
+	function renderSidebar() {
+		var emps = buildEmployees();
+		if (!emps.length) { empListEl.innerHTML = '<div class="emp-empty">No employees assigned.</div>'; availEl.textContent = "—"; return; }
+
+		var freeCount = 0;
+		empListEl.innerHTML = emps.map(function (e) {
+			var pending = e.total - e.done;
+			var left = Math.max(0, e.shift - e.committed);
+			var pct = e.total ? Math.round((e.done / e.total) * 100) : 0;
+			if (left > 0) freeCount += 1;
+			var leftStr = (Math.round(left * 10) / 10).toString();
+			return '' +
+				'<div class="emp-card">' +
+					'<div class="emp-card__top">' +
+						'<span class="emp-card__name">' + e.name + '</span>' +
+						'<span class="emp-card__hours badge ' + hoursVariant(left, e.shift) + '">' + leftStr + ' Hrs Left</span>' +
+					'</div>' +
+					'<div class="emp-card__stats">' +
+						'<span class="emp-card__count"><b>' + pending + ' Pending</b> out of ' + e.total + '</span>' +
+						'<div class="bar"><span style="width:' + pct + '%"></span></div>' +
+					'</div>' +
+				'</div>';
+		}).join("");
+
+		availEl.textContent = freeCount + " / " + emps.length + " free";
+	}
+
+	// Mark done / reopen — flips the row, updates its badge, recomputes the sidebar live.
+	listEl.addEventListener("click", function (e) {
+		var btn = e.target.closest(".js-complete");
+		if (!btn) return;
+		var row = btn.closest(".list-row");
+		var done = row.dataset.done !== "1";
+		row.dataset.done = done ? "1" : "0";
+
+		var badgeEl = row.querySelector(".jc-status .badge");
+		if (badgeEl) {
+			badgeEl.className = "badge " + (done ? "badge--success" : "badge--new");
+			badgeEl.textContent = done ? "Completed" : "New";
+		}
+		btn.classList.toggle("btn--purple", !done);
+		btn.classList.toggle("btn--outline", done);
+		btn.title = done ? "Reopen" : "Mark Done";
+		btn.querySelector("i").className = "fa-solid " + (done ? "fa-rotate-left" : "fa-check");
+
+		// TODO: persist here, e.g. frappe.call({ method: "...set_status", args: { name: row.dataset.no, done: done } })
+		renderSidebar();
+	});
+
+	renderSidebar();
+})();
+</script>
+{% endraw %}
+{% endblock %}

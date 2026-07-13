@@ -1,0 +1,26 @@
+{% extends "templates/workshop_base.html" %}
+{% from "templates/macros/workshop.html" import badge %}
+
+{% block page_content %}
+<div class="toolbar"><span></span><a class="btn btn--primary"><i class="fa-solid fa-plus"></i> Add Structured Complaint</a></div>
+{%- set cs = [
+  {"n":"AAS Shipping LLC","t":"AC still not cooling properly after service","st":"Escalated","sv":"badge--danger","p":"Critical"},
+  {"n":"District Cooling Company","t":"Billing discrepancy - overcharged for parts","st":"Pending","sv":"badge--pending","p":"High"},
+  {"n":"Aaber Facilities Management","t":"Delay in promised delivery - vehicle not ready","st":"Pending","sv":"badge--pending","p":"Medium"},
+  {"n":"Daat Logistics L.L.C","t":"Wrong part installed - needs replacement","st":"Resolved","sv":"badge--success","p":"High"}
+] -%}
+<div class="stack">
+	{%- for c in cs %}
+	<div class="card"><div class="card__body row-between">
+		<div>
+			<div style="font-weight:700">{{ c.n }}</div>
+			<div class="muted" style="margin-top:4px">{{ c.t }}</div>
+		</div>
+		<div class="stack" style="align-items:flex-end;gap:8px">
+			<div class="row" style="gap:8px">{{ badge(c.p,"badge--soft") }}{{ badge(c.st, c.sv) }}</div>
+			<div class="row" style="gap:8px"><a class="btn btn--outline btn--sm">Escalate</a><a class="btn btn--primary btn--sm">Resolve</a></div>
+		</div>
+	</div></div>
+	{%- endfor %}
+</div>
+{% endblock %}

@@ -1,0 +1,272 @@
+{% extends "templates/workshop_base.html" %}
+{% from "templates/macros/workshop.html" import statcard, field %}
+
+{% block page_content %}
+
+<!-- 6. Daily Productivity -->
+<div class="tc-stats">
+	<div class="stat-card stat-card--sm"><div class="label">Assigned Calls</div><div class="value" id="s-assigned">32</div></div>
+	<div class="stat-card stat-card--sm stat-card--navy"><div class="label">Completed</div><div class="value" id="s-completed">18</div></div>
+	<div class="stat-card stat-card--sm stat-card--purple"><div class="label">Pending</div><div class="value" id="s-pending">14</div></div>
+	<div class="stat-card stat-card--sm"><div class="label">Connected</div><div class="value" id="s-connected">12</div></div>
+	<div class="stat-card stat-card--sm stat-card--navy"><div class="label">Follow-ups</div><div class="value" id="s-followups">9</div></div>
+	<div class="stat-card stat-card--sm stat-card--purple"><div class="label">Conversions</div><div class="value" id="s-conversions">5</div></div>
+	<div class="stat-card stat-card--sm"><div class="label">Bookings</div><div class="value" id="s-bookings">3</div></div>
+</div>
+
+<div class="tc-grid">
+	<!-- 1. Today's Call Queue -->
+	<div class="card"><div class="card__head">
+			<h3>Today's Call Queue</h3>
+			<div class="tc-filters">
+				<button type="button" class="tc-chip is-active" data-filter="all">All</button>
+				<button type="button" class="tc-chip" data-filter="overdue">Overdue</button>
+				<button type="button" class="tc-chip" data-filter="high">High Priority</button>
+			</div>
+		</div>
+		<div class="card__body">
+			<div class="field" style="margin-bottom:12px"><input id="tc-search" placeholder="Search name / mobile / vehicle…"></div>
+			<div class="tc-list" id="tc-list"></div>
+		</div>
+	</div>
+
+	<!-- 2 + 5. Customer Context + Communication -->
+	<div class="card"><div class="card__head"><h3 id="ctx-title">Customer Information</h3><span class="readonly-tag">context</span></div>
+		<div class="card__body" id="tc-context">
+			<div class="empty">Select a call from the queue to view customer details and history.</div>
+		</div>
+	</div>
+</div>
+
+<!-- 3 + 4. Log Call modal -->
+<div class="modal-overlay" id="call-modal" role="dialog" aria-modal="true">
+	<div class="modal">
+		<div class="modal__head">
+			<div><h3>Log Call Outcome</h3><div class="sub" id="cm-sub">Record the result of the call</div></div>
+			<button type="button" class="modal__close" data-close><i class="fa-solid fa-xmark"></i></button>
+		</div>
+		<div class="modal__body">
+			<div class="fieldset-title" style="margin-top:0">Connection</div>
+			<div class="chip-group" data-outcome>
+				{%- for o in ["Connected","Not Answered","Busy","Switched Off","Wrong Number","Call Back Later"] %}
+				<button type="button" class="chip" data-val="{{ o }}">{{ o }}</button>
+				{%- endfor %}
+			</div>
+			<div class="fieldset-title">Disposition</div>
+			<div class="chip-group" data-outcome>
+				{%- for o in ["Interested","Not Interested","Converted"] %}
+				<button type="button" class="chip" data-val="{{ o }}">{{ o }}</button>
+				{%- endfor %}
+			</div>
+
+			<div style="margin-top:14px">{{ field("Call Notes","call_notes",type="textarea",placeholder="What was discussed…") }}</div>
+
+			<div class="fieldset-title">Schedule Follow-up</div>
+			<div class="qbtns" style="margin-bottom:12px">
+				<button type="button" class="btn btn--outline btn--sm" data-quick="1">Tomorrow</button>
+				<button type="button" class="btn btn--outline btn--sm" data-quick="3">After 3 Days</button>
+				<button type="button" class="btn btn--outline btn--sm" data-quick="7">Next Week</button>
+				<button type="button" class="btn btn--outline btn--sm" data-quick="30">Next Month</button>
+			</div>
+			<div class="form-grid">
+				{{ field("Follow-up Date","fu_date",type="date") }}
+				{{ field("Follow-up Time","fu_time",type="time") }}
+				{{ field("Reason for Follow-up","fu_reason",type="select",options=["Service reminder","Estimate approval","Booking confirmation","Complaint follow-up","Feedback","Payment reminder"]) }}
+				{{ field("Priority","fu_priority",type="select",options=["Low","Medium","High","Urgent"]) }}
+				<div class="field field--full">{{ field("Internal Remarks","remarks",type="textarea",placeholder="Notes for the team (not shared with customer)") }}</div>
+			</div>
+		</div>
+		<div class="modal__foot">
+			<button type="button" class="btn btn--outline" data-close>Cancel</button>
+			<button type="button" class="btn btn--primary" id="cm-save"><i class="fa-solid fa-check"></i> Save Outcome</button>
+		</div>
+	</div>
+</div>
+
+{% raw %}
+<script>
+(function () {
+	var queue = [
+		{ id: "Q1", in: "M", name: "Mohammed Ali", mobile: "+971 50 221 8890", email: "mohammed@aaber.ae",
+			vehNo: "A-12345", model: "Toyota Fortuner", purpose: "Estimate approval — Body Shop",
+			due: "Today 09:30", overdue: true, pr: "High", pv: "badge--danger", st: "Pending", sv: "badge--pending",
+			ctx: { lastService: "12 May 2026", lastVisit: "12 May 2026 · General Service", jobStatus: "Estimate pending approval (JC-0010)", outstanding: "AED 1,615.38", nextDue: "12 Nov 2026 · 90,000 km" },
+			history: [{ ch: "whatsapp", t: "Yesterday 04:12 PM", note: "Estimate PDF sent" }, { ch: "call", t: "Yesterday 04:10 PM", note: "Discussed bodywork estimate, will confirm" }] },
+		{ id: "Q2", in: "R", name: "Rajesh Kumar", mobile: "+971 55 100 2003", email: "rajesh@daat.ae",
+			vehNo: "D-77820", model: "Toyota Hilux", purpose: "Booking confirmation — General Service",
+			due: "Today 11:00", overdue: false, pr: "High", pv: "badge--danger", st: "Scheduled", sv: "badge--navy",
+			ctx: { lastService: "02 Jan 2026", lastVisit: "02 Jan 2026 · Periodic maintenance", jobStatus: "—", outstanding: "AED 0.00", nextDue: "Booked: 25 Jun 2026 · 10:00 AM" },
+			history: [{ ch: "sms", t: "Today 08:00 AM", note: "Booking reminder sent" }] },
+		{ id: "Q3", in: "S", name: "Sujatha Menon", mobile: "+971 52 664 7781", email: "sujatha@gmail.com",
+			vehNo: "B-23110", model: "Honda Civic", purpose: "Service reminder — Periodic maintenance",
+			due: "Today 02:30", overdue: false, pr: "Medium", pv: "badge--pending", st: "Pending", sv: "badge--pending",
+			ctx: { lastService: "20 Dec 2025", lastVisit: "20 Dec 2025 · General Service", jobStatus: "—", outstanding: "AED 0.00", nextDue: "20 Jun 2026 · 40,000 km (due)" },
+			history: [] },
+		{ id: "Q4", in: "G", name: "Gulf Cargo LLC", mobile: "+971 6 552 9043", email: "ops@gulfcargo.ae",
+			vehNo: "C-90011", model: "Mitsubishi Canter", purpose: "Complaint follow-up — AC not cooling",
+			due: "Yesterday 05:00", overdue: true, pr: "High", pv: "badge--danger", st: "Escalated", sv: "badge--danger",
+			ctx: { lastService: "16 Jun 2026", lastVisit: "16 Jun 2026 · AC Service", jobStatus: "Complaint open (CMP-0042)", outstanding: "AED 483.00", nextDue: "—" },
+			history: [{ ch: "call", t: "Yesterday 03:00 PM", note: "Customer reported AC still not cooling; escalated to CCM" }] },
+		{ id: "Q5", in: "A", name: "Anjali Nair", mobile: "+971 50 882 4471", email: "anjali@aas.ae",
+			vehNo: "B-55421", model: "Nissan Patrol", purpose: "Feedback — Body Shop (JC-0007)",
+			due: "Today 04:00", overdue: false, pr: "Low", pv: "badge--soft", st: "Connected", sv: "badge--progress",
+			ctx: { lastService: "12 May 2026", lastVisit: "12 May 2026 · Body Shop", jobStatus: "Completed (JC-0007)", outstanding: "AED 0.00", nextDue: "12 Nov 2026" },
+			history: [{ ch: "call", t: "Today 10:15 AM", note: "Feedback collected — rated 5/5, happy with service" }] },
+		{ id: "Q6", in: "P", name: "Priya Raj", mobile: "+971 55 778 1020", email: "priya@gmail.com",
+			vehNo: "A-66200", model: "Kia Seltos", purpose: "Estimate approval — Mechanical",
+			due: "Today 12:30", overdue: false, pr: "Medium", pv: "badge--pending", st: "Pending", sv: "badge--pending",
+			ctx: { lastService: "—", lastVisit: "New customer", jobStatus: "Quotation sent (QTN-0033)", outstanding: "AED 0.00", nextDue: "—" },
+			history: [{ ch: "email", t: "Today 09:40 AM", note: "Quotation emailed" }] }
+	];
+
+	var CH = { call: { c: "var(--navy)", i: "fa-phone" }, whatsapp: { c: "#25d366", i: "fa-whatsapp", brand: true }, sms: { c: "var(--purple)", i: "fa-comment-sms" }, email: { c: "var(--red)", i: "fa-envelope" } };
+
+	var listEl = document.getElementById("tc-list");
+	var ctxEl = document.getElementById("tc-context");
+	var ctxTitle = document.getElementById("ctx-title");
+	var current = null, filter = "all", search = "";
+
+	function digits(s) { return (s || "").replace(/[^0-9]/g, ""); }
+
+	function commButtons(q) {
+		return '<div class="comm-actions">' +
+			'<a class="btn btn--primary btn--sm" href="tel:' + digits(q.mobile) + '"><i class="fa-solid fa-phone"></i> Call</a>' +
+			'<a class="btn btn--sm" style="background:#25d366;color:#fff" target="_blank" href="https://wa.me/' + digits(q.mobile) + '"><i class="fa-brands fa-whatsapp"></i> WhatsApp</a>' +
+			'<a class="btn btn--navy btn--sm" href="sms:' + digits(q.mobile) + '"><i class="fa-solid fa-comment-sms"></i> SMS</a>' +
+			'<a class="btn btn--outline btn--sm" href="mailto:' + q.email + '"><i class="fa-solid fa-envelope"></i> Email</a>' +
+			'</div>';
+	}
+
+	function renderQueue() {
+		var rows = queue.filter(function (q) {
+			if (filter === "overdue" && !q.overdue) return false;
+			if (filter === "high" && q.pr !== "High") return false;
+			if (search) {
+				var hay = (q.name + " " + q.mobile + " " + q.vehNo + " " + q.model).toLowerCase();
+				if (hay.indexOf(search) < 0) return false;
+			}
+			return true;
+		});
+		listEl.innerHTML = rows.length ? rows.map(function (q) {
+			return '<div class="tc-row' + (current === q.id ? ' is-active' : '') + (q.overdue ? ' is-overdue' : '') + '" data-id="' + q.id + '">' +
+				'<div class="row-between">' +
+					'<div class="list-row__party"><div class="list-row__avatar" style="background:var(--purple)">' + q.in + '</div>' +
+						'<div><div class="list-row__title">' + q.name + '</div><div class="list-row__meta">' + q.mobile + '</div></div></div>' +
+					'<div class="row" style="gap:6px"><span class="badge ' + q.pv + '">' + q.pr + '</span><span class="badge ' + q.sv + '">' + q.st + '</span></div>' +
+				'</div>' +
+				'<div class="sub"><i class="fa-solid fa-car"></i> ' + q.vehNo + ' · ' + q.model + ' &nbsp;·&nbsp; ' + q.purpose + '</div>' +
+				'<div class="row-between">' +
+					'<span class="tc-due' + (q.overdue ? ' is-late' : '') + '"><i class="fa-regular fa-clock"></i> ' + (q.overdue ? 'Overdue · ' : 'Due ') + q.due + '</span>' +
+					'<div class="row" style="gap:6px">' +
+						'<a class="act-btn" title="Call" href="tel:' + digits(q.mobile) + '" onclick="event.stopPropagation()"><i class="fa-solid fa-phone"></i></a>' +
+						'<a class="act-btn" title="WhatsApp" target="_blank" href="https://wa.me/' + digits(q.mobile) + '" onclick="event.stopPropagation()"><i class="fa-brands fa-whatsapp"></i></a>' +
+						'<button class="btn btn--primary btn--sm" data-log="' + q.id + '">Log Call</button>' +
+					'</div>' +
+				'</div></div>';
+		}).join("") : '<div class="empty">No calls match this filter.</div>';
+	}
+
+	function renderContext(q) {
+		ctxTitle.textContent = q.name;
+		var kv = [
+			["Contact Number", q.mobile], ["Vehicle", q.vehNo + " · " + q.model],
+			["Last Service Date", q.ctx.lastService], ["Last Visit", q.ctx.lastVisit],
+			["Current Job Status", q.ctx.jobStatus], ["Outstanding Amount", q.ctx.outstanding],
+			["Next Due Service", q.ctx.nextDue]
+		];
+		var hist = q.history.length ? q.history.map(function (h) {
+			var ch = CH[h.ch] || CH.call;
+			return '<div class="comm-item"><span class="comm-ico" style="background:' + ch.c + '"><i class="' + (ch.brand ? 'fa-brands' : 'fa-solid') + ' ' + ch.i + '"></i></span>' +
+				'<div><div>' + h.note + '</div><div class="t">' + h.t + '</div></div></div>';
+		}).join("") : '<div class="muted" style="font-size:12px">No prior interactions.</div>';
+
+		ctxEl.innerHTML =
+			commButtons(q) +
+			'<div class="fieldset-title">Customer Information</div>' +
+			kv.map(function (r) { return '<div class="kv-row"><span class="muted">' + r[0] + '</span><b style="text-align:right">' + r[1] + '</b></div>'; }).join("") +
+			'<div class="fieldset-title">Communication History</div>' + hist +
+			'<button class="btn btn--primary" style="width:100%;justify-content:center;margin-top:14px" data-log="' + q.id + '"><i class="fa-solid fa-phone-volume"></i> Log Call Outcome</button>';
+	}
+
+	function select(id) { current = id; renderQueue(); renderContext(byId(id)); }
+	function byId(id) { return queue.filter(function (q) { return q.id === id; })[0]; }
+
+	listEl.addEventListener("click", function (e) {
+		var log = e.target.closest("[data-log]");
+		if (log) { openModal(log.dataset.log); return; }
+		var row = e.target.closest("[data-id]"); if (row) select(row.dataset.id);
+	});
+	ctxEl.addEventListener("click", function (e) {
+		var log = e.target.closest("[data-log]"); if (log) openModal(log.dataset.log);
+	});
+	document.querySelectorAll(".tc-chip").forEach(function (c) {
+		c.addEventListener("click", function () {
+			document.querySelectorAll(".tc-chip").forEach(function (x) { x.classList.remove("is-active"); });
+			c.classList.add("is-active"); filter = c.dataset.filter; renderQueue();
+		});
+	});
+	document.getElementById("tc-search").addEventListener("input", function () { search = this.value.toLowerCase(); renderQueue(); });
+
+	// ---- Log Call modal
+	var modal = document.getElementById("call-modal");
+	var modalFor = null;
+	function openModal(id) {
+		modalFor = id; var q = byId(id);
+		document.getElementById("cm-sub").textContent = q.name + " · " + q.mobile + " · " + q.purpose;
+		modal.querySelectorAll(".chip").forEach(function (c) { c.classList.remove("is-active"); });
+		modal.querySelectorAll("input, textarea").forEach(function (el) { if (el.type !== "button") el.value = ""; });
+		modal.classList.add("is-open"); document.body.style.overflow = "hidden";
+	}
+	function closeModal() { modal.classList.remove("is-open"); document.body.style.overflow = ""; }
+	modal.querySelectorAll("[data-close]").forEach(function (b) { b.addEventListener("click", closeModal); });
+	modal.addEventListener("click", function (e) { if (e.target === modal) closeModal(); });
+	document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeModal(); });
+
+	// single-select chips per group
+	modal.querySelectorAll("[data-outcome]").forEach(function (grp) {
+		grp.addEventListener("click", function (e) {
+			var c = e.target.closest(".chip"); if (!c) return;
+			grp.querySelectorAll(".chip").forEach(function (x) { x.classList.remove("is-active"); });
+			c.classList.add("is-active");
+		});
+	});
+	// quick follow-up date
+	function fmt(d) { return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
+	modal.querySelectorAll("[data-quick]").forEach(function (b) {
+		b.addEventListener("click", function () {
+			var d = new Date(); d.setDate(d.getDate() + parseInt(b.dataset.quick));
+			document.querySelector('[name=fu_date]').value = fmt(d);
+		});
+	});
+
+	function bump(id, by) { var el = document.getElementById(id); el.textContent = (parseInt(el.textContent) || 0) + by; }
+
+	document.getElementById("cm-save").addEventListener("click", function () {
+		var sel = modal.querySelector(".chip.is-active");
+		var outcome = sel ? sel.dataset.val : "Connected";
+		var notes = (document.querySelector('[name=call_notes]').value || outcome);
+		var q = byId(modalFor);
+		// map outcome -> follow-up status badge
+		var map = {
+			"Converted": ["Converted", "badge--success"], "Interested": ["Follow-up set", "badge--navy"],
+			"Call Back Later": ["Call back", "badge--navy"], "Connected": ["Connected", "badge--progress"],
+			"Not Answered": ["No answer", "badge--pending"], "Busy": ["No answer", "badge--pending"],
+			"Switched Off": ["No answer", "badge--pending"], "Wrong Number": ["Wrong number", "badge--soft"],
+			"Not Interested": ["Closed", "badge--soft"]
+		};
+		var m = map[outcome] || ["Connected", "badge--progress"];
+		q.st = m[0]; q.sv = m[1];
+		q.history.unshift({ ch: "call", t: "Just now", note: outcome + " — " + notes });
+		// productivity
+		bump("s-completed", 1); bump("s-pending", -1);
+		if (["Connected", "Interested", "Converted", "Call Back Later"].indexOf(outcome) >= 0) bump("s-connected", 1);
+		if (outcome === "Converted") { bump("s-conversions", 1); bump("s-bookings", 1); }
+		if (document.querySelector('[name=fu_date]').value) bump("s-followups", 1);
+		closeModal(); renderQueue(); renderContext(q);
+	});
+
+	renderQueue();
+})();
+</script>
+{% endraw %}
+{% endblock %}

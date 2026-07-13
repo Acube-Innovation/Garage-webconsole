@@ -1,0 +1,24 @@
+{% extends "templates/workshop_base.html" %}
+{% from "templates/macros/workshop.html" import badge %}
+
+{% block page_content %}
+{%- set tasks = [
+  {"jc":"JC-2026-06-18-0011","v":"Toyota Fortuner","task":"Brake Pad Replacement","pr":70,"qc":"QC Pending","qv":"badge--pending"},
+  {"jc":"JC-2026-06-18-0010","v":"Nissan Patrol","task":"Accident bodywork","pr":40,"qc":"In Progress","qv":"badge--progress"},
+  {"jc":"JC-2026-06-18-0007","v":"Mitsubishi Canter","task":"Engine overhaul","pr":100,"qc":"QC Passed","qv":"badge--success"}
+] -%}
+<div class="type-grid" style="grid-template-columns:repeat(3,1fr)">
+	{%- for t in tasks %}
+	<div class="card"><div class="card__body">
+		<div class="row-between"><b>{{ t.jc }}</b>{{ badge(t.qc, t.qv) }}</div>
+		<div class="muted" style="margin:6px 0"><i class="fa-solid fa-car"></i> {{ t.v }}</div>
+		<div style="font-weight:600">{{ t.task }}</div>
+		<div style="height:8px;background:var(--bg);border-radius:6px;margin-top:12px;overflow:hidden">
+			<div style="height:100%;width:{{ t.pr }}%;background:var(--red)"></div>
+		</div>
+		<div class="muted" style="font-size:12px;margin-top:6px">{{ t.pr }}% complete</div>
+		<a class="btn btn--primary btn--sm" style="margin-top:12px;width:100%;justify-content:center">Update Progress</a>
+	</div></div>
+	{%- endfor %}
+</div>
+{% endblock %}

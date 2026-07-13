@@ -1,0 +1,74 @@
+{% extends "templates/workshop_base.html" %}
+{% from "templates/macros/workshop.html" import statcard %}
+
+{% block topbar %}{% endblock %}
+
+{% block page_content %}
+{%- set fullname = (frappe.db.get_value("User", frappe.session.user, "full_name") if frappe.session.user != "Guest" else "User") or "User" -%}
+<div class="welcome">
+	<div class="workshop-avatar workshop-avatar--lg" style="margin:0 auto">{{ fullname[0] }}</div>
+	<div class="hi">Welcome back, {{ fullname.split(" ")[0] }}</div>
+</div>
+
+<div class="stat-grid">
+	{{ statcard("Total Job Cards", "1,284") }}
+	{{ statcard("Active Vehicles", "48", "stat-card--navy") }}
+	{{ statcard("Revenue", "AED 84,320") }}
+	{{ statcard("New Customers", "156", "stat-card--purple") }}
+</div>
+
+<div class="page-grid-2" style="margin-top:18px">
+	<div class="card">
+		<div class="card__head"><h3>Service Analytics</h3><span class="muted">This week</span></div>
+		<div class="card__body">
+			<svg class="chart-svg" viewBox="0 0 560 240" role="img" aria-label="Weekly service jobs">
+				{%- set bars = [58, 34, 23, 45, 50, 38, 21] -%}
+				{%- set days = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"] -%}
+				{%- for gy in [0, 15, 30, 45, 60] %}
+				<line x1="40" y1="{{ 200 - gy * 3 }}" x2="540" y2="{{ 200 - gy * 3 }}" stroke="#eef0f3" stroke-width="1"/>
+				<text x="30" y="{{ 204 - gy * 3 }}" font-size="10" fill="#8a94a6" text-anchor="end">{{ gy }}</text>
+				{%- endfor %}
+				{%- for b in bars %}
+				{%- set x = 60 + loop.index0 * 70 %}
+				<rect x="{{ x }}" y="{{ 200 - b * 3 }}" width="40" height="{{ b * 3 }}" rx="6" fill="#ec2e5d"/>
+				<text x="{{ x + 20 }}" y="218" font-size="11" fill="#8a94a6" text-anchor="middle">{{ days[loop.index0] }}</text>
+				{%- endfor %}
+			</svg>
+		</div>
+	</div>
+
+	<div class="card">
+		<div class="card__head"><h3>Vehicle Status</h3></div>
+		<div class="card__body" style="text-align:center">
+			<svg class="chart-svg" viewBox="0 0 220 200" style="max-width:230px;margin:0 auto" role="img" aria-label="Vehicle status">
+				<circle cx="110" cy="100" r="70" fill="none" stroke="#ec2e5d" stroke-width="32"
+					stroke-dasharray="241.9 197.9" transform="rotate(-90 110 100)"/>
+				<circle cx="110" cy="100" r="70" fill="none" stroke="#f7a8bf" stroke-width="32"
+					stroke-dasharray="145.1 294.7" stroke-dashoffset="-241.9" transform="rotate(-90 110 100)"/>
+				<circle cx="110" cy="100" r="70" fill="none" stroke="#7a1230" stroke-width="32"
+					stroke-dasharray="52.8 387.0" stroke-dashoffset="-387.0" transform="rotate(-90 110 100)"/>
+			</svg>
+			<div class="legend" style="justify-content:center">
+				<span><i style="background:#ec2e5d"></i>In Duty</span>
+				<span><i style="background:#f7a8bf"></i>Available</span>
+				<span><i style="background:#7a1230"></i>Maintenance</span>
+			</div>
+		</div>
+	</div>
+</div>
+
+<div class="card" style="margin-top:18px">
+	<div class="card__head"><h3>Recent Job Cards</h3><a class="btn btn--outline btn--sm" href="/a3-workshop/job-cards">View all</a></div>
+	<div class="card__body" style="padding:0">
+		<table class="table">
+			<thead><tr><th>Job Card</th><th>Customer</th><th>Service</th><th>Date</th><th>Status</th></tr></thead>
+			<tbody>
+				<tr><td>JC-0001</td><td>District Cooling Company</td><td>General Service</td><td>12 Jan 2026</td><td><span class="status-text status-text--success">Completed</span></td></tr>
+				<tr><td>JC-0002</td><td>Aas Shipping LLC</td><td>Body Shop</td><td>14 Jan 2026</td><td><span class="status-text status-text--transit">In Progress</span></td></tr>
+				<tr><td>JC-0003</td><td>Aaber Facilities Management</td><td>Mechanical</td><td>15 Jan 2026</td><td><span class="status-text status-text--transit">QC Pending</span></td></tr>
+				<tr><td>JC-0004</td><td>Daat Logistics L.L.C</td><td>Inspection</td><td>16 Jan 2026</td><td><span class="status-text status-text--success">Ready for Billing</span></td></tr>
+			</tbody>
+		</table>
+	</div>
+</div>
+{% endblock %}

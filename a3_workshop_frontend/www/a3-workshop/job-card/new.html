@@ -1,0 +1,549 @@
+{% extends "templates/workshop_base.html" %}
+{% from "templates/macros/workshop.html" import field %}
+
+{% block page_content %}
+{%- set steps = ["Customer Details", "Service Jobs", "Complaints / Check-Up", "Readings", "Estimate"] -%}
+{%- set jobtypes = [
+  {"i":"fa-screwdriver-wrench","t":"General Service","s":"Scheduled maintenance"},
+  {"i":"fa-car-burst","t":"Body Shop","s":"Accident repair & bodywork"},
+  {"i":"fa-gears","t":"Mechanical","s":"Engine & mechanical"},
+  {"i":"fa-magnifying-glass","t":"Inspection","s":"General check"},
+  {"i":"fa-rotate","t":"Repeat Service","s":"Follow-up job"},
+  {"i":"fa-snowflake","t":"AC Service","s":"Cooling & AC"},
+  {"i":"fa-car-battery","t":"Electrical","s":"Battery & electrical"}
+] -%}
+{%- set catalog = [
+  {"n":"Engine Oil Change","p":150},{"n":"Oil Filter","p":45},{"n":"Air Filter","p":60},
+  {"n":"Brake Pad Set","p":280},{"n":"Wheel Alignment","p":120},{"n":"AC Gas Refill","p":200},
+  {"n":"Battery Replacement","p":350},{"n":"Coolant Top-up","p":40},{"n":"Labor (per hour)","p":100},
+  {"n":"Car Wash","p":50}
+] -%}
+
+<style>
+	.jc-ac { position:absolute; left:0; right:0; top:100%; z-index:60; margin-top:2px; background:#fff;
+		border:1px solid var(--border,#d8dde6); border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.12);
+		max-height:240px; overflow:auto; }
+	.jc-ac-item { padding:8px 12px; cursor:pointer; }
+	.jc-ac-item:hover, .jc-ac-item.is-active { background:#f1f4f8; }
+	.jc-ac-label { font-weight:600; font-size:13px; }
+	.jc-ac-sub { font-size:12px; color:var(--muted,#7a8598); }
+	.jc-ac-empty { padding:8px 12px; font-size:12px; color:var(--muted,#7a8598); }
+</style>
+
+<!-- progress tabs -->
+<div class="card"><div class="stepper" id="wizard-stepper">
+	{%- for s in steps %}{%- set n = loop.index %}
+	<div class="step {{ 'is-active' if n == 1 else '' }}" data-goto="{{ n }}">
+		<div class="step__dot">{{ n }}</div><div class="step__label">{{ s }}</div>
+	</div>
+	{%- if not loop.last %}<div class="step__line" data-line="{{ n }}"></div>{% endif %}
+	{%- endfor %}
+</div></div>
+
+<!-- TAB 1 — Customer Details -->
+<section class="wizard-tab is-active" data-tab="1" style="margin-top:18px">
+	<div class="card"><div class="card__head"><h3>Customer Details</h3></div>
+	<div class="card__body"><form class="form-grid">
+		<input type="hidden" name="customer_id">
+		<input type="hidden" name="vehicle_id">
+		{{ field("Customer Name","customer",required=True,placeholder="Search or enter customer") }}
+		<div class="field--inline">
+			<div class="field"><label>Vehicle <span class="req">*</span></label><input name="vehicle" placeholder="Plate / chassis"></div>
+			<button type="button" class="btn btn--navy btn--icon" title="New vehicle"><i class="fa-solid fa-plus"></i></button>
+		</div>
+		{{ field("Mobile Number","mobile",placeholder="+971 ...") }}
+		{{ field("Job Number","job_no",placeholder="Auto (on save)") }}
+		{{ field("Booking Date","booking_date",type="date",required=True) }}
+		{{ field("Promised Delivery","delivery",type="date") }}
+		{{ field("Service Advisor","advisor",type="select") }}
+		{{ field("Booking Channel","channel",type="select",options=["Walk-in","Phone","WhatsApp","Website","Corporate"]) }}
+		<div class="field"><label>Options</label><label class="check"><input type="checkbox" name="project_booking"> Project Booking</label></div>
+	</form></div></div>
+</section>
+
+<!-- TAB 2 — Service Jobs (LHS job types, RHS detail child table) -->
+<section class="wizard-tab" data-tab="2" style="margin-top:18px">
+	<div class="split">
+		<div class="card"><div class="card__head"><h3>Job Type</h3><span class="muted">Select one or more</span></div>
+			<div class="card__body"><div class="jobtype-list" id="jobtype-list"></div></div>
+		</div>
+		<div class="card"><div class="card__head"><h3>Job Details</h3>
+			<button type="button" class="btn btn--primary btn--sm" id="add-job-detail"><i class="fa-solid fa-plus"></i> Add</button></div>
+			<div class="card__body" style="padding:0">
+				<table class="table editable"><thead><tr>
+					<th style="width:24%">Job Type</th><th>Service / Task</th><th>Description</th><th>Technician</th><th style="width:60px">Hrs</th><th style="width:40px"></th>
+				</tr></thead><tbody id="job-detail-body"></tbody></table>
+				<div class="empty" id="job-detail-empty">Select a job type on the left, then click “Add”.</div>
+			</div>
+		</div>
+	</div>
+</section>
+
+<!-- TAB 3 — Complaints / Check-Up -->
+<section class="wizard-tab" data-tab="3" style="margin-top:18px">
+	<div class="card"><div class="card__head"><h3>Complaints / Check-Up</h3>
+		<button type="button" class="btn btn--primary btn--sm" id="add-complaint"><i class="fa-solid fa-plus"></i> Add Complaint</button></div>
+		<div class="card__body" style="padding:0">
+			<table class="table editable"><thead><tr>
+				<th style="width:40px">#</th><th>Complaint</th><th>Reported By</th><th style="width:130px">Severity</th><th>Notes</th><th>Technician</th><th style="width:40px"></th>
+			</tr></thead><tbody id="complaint-body"></tbody></table>
+			<div class="empty" id="complaint-empty">No complaints added yet.</div>
+		</div>
+	</div>
+</section>
+
+<!-- TAB 4 — Readings + body condition drawing -->
+<section class="wizard-tab" data-tab="4" style="margin-top:18px">
+	<div class="card"><div class="card__head"><h3>Readings</h3></div>
+		<div class="card__body"><div class="readings-grid">
+			{{ field("Odometer (KM)","km",type="number",placeholder="0") }}
+			{{ field("Next Service (KM)","next_km",type="number",placeholder="0") }}
+			<div class="field"><label>Fuel Level — <span class="range-val" id="fuel-out">50%</span></label>
+				<input type="range" min="0" max="100" value="50" data-out="#fuel-out"></div>
+			<div class="field"><label>Oil Level — <span class="range-val" id="oil-out">50%</span></label>
+				<input type="range" min="0" max="100" value="50" data-out="#oil-out"></div>
+			{{ field("Coolant Level","coolant",type="select",options=["Low","Normal","Full"]) }}
+			{{ field("Battery (V)","battery",type="number",placeholder="12.6") }}
+			{{ field("Tyre Condition","tyre",type="select",options=["Good","Worn","Replace"]) }}
+			<div class="field"><label>Spare Tyre</label><label class="check"><input type="checkbox"> Present</label></div>
+		</div></div>
+	</div>
+
+	<div class="card" style="margin-top:18px"><div class="card__head"><h3>Body Condition — mark scratches / dents</h3></div>
+		<div class="card__body">
+			<div class="car-wrap" id="car-wrap">
+				<svg viewBox="0 0 600 260" xmlns="http://www.w3.org/2000/svg" aria-label="Car top view">
+					<rect x="70" y="40" width="460" height="180" rx="60" fill="#ffffff" stroke="#9aa3b2" stroke-width="2"/>
+					<rect x="200" y="70" width="200" height="120" rx="28" fill="#eef0f3" stroke="#9aa3b2" stroke-width="2"/>
+					<path d="M400 82 L468 112 L468 148 L400 178 Z" fill="#dfe3ea" stroke="#9aa3b2"/>
+					<path d="M200 82 L132 112 L132 148 L200 178 Z" fill="#dfe3ea" stroke="#9aa3b2"/>
+					<rect x="150" y="22" width="70" height="22" rx="8" fill="#2b3344"/>
+					<rect x="380" y="22" width="70" height="22" rx="8" fill="#2b3344"/>
+					<rect x="150" y="216" width="70" height="22" rx="8" fill="#2b3344"/>
+					<rect x="380" y="216" width="70" height="22" rx="8" fill="#2b3344"/>
+					<rect x="392" y="58" width="16" height="10" rx="3" fill="#9aa3b2"/>
+					<rect x="392" y="192" width="16" height="10" rx="3" fill="#9aa3b2"/>
+					<text x="300" y="135" text-anchor="middle" fill="#c2c9d4" font-size="14">FRONT →</text>
+				</svg>
+				<canvas id="car-canvas"></canvas>
+			</div>
+			<div class="car-tools">
+				<span class="muted"><i class="fa-solid fa-pen"></i> Draw on the car to mark scratches / dents.</span>
+				<button type="button" class="btn btn--outline btn--sm" id="car-clear" style="margin-left:auto"><i class="fa-solid fa-eraser"></i> Clear</button>
+			</div>
+		</div>
+	</div>
+</section>
+
+<!-- TAB 5 — Estimate (LHS items, RHS cart, totals) -->
+<section class="wizard-tab" data-tab="5" style="margin-top:18px">
+	<div class="split">
+		<div class="card"><div class="card__head"><h3>Items</h3>
+			<input id="item-search" placeholder="Search items..." style="border:1px solid var(--border);border-radius:8px;padding:7px 10px;font:inherit"></div>
+			<div class="card__body" style="padding:6px 18px"><div id="catalog">
+				{%- for it in catalog %}
+				<div class="cart-item" data-name="{{ it.n }}" data-price="{{ it.p }}" style="cursor:pointer">
+					<div><div class="name">{{ it.n }}</div><div class="unit">AED {{ "%.2f"|format(it.p) }}</div></div>
+					<span></span><span></span>
+					<button type="button" class="btn btn--primary btn--icon" title="Add"><i class="fa-solid fa-plus"></i></button>
+				</div>
+				{%- endfor %}
+			</div></div>
+		</div>
+		<div class="card"><div class="card__head"><h3>Cart</h3><span class="muted">Adjust quantities</span></div>
+			<div class="card__body">
+				<div id="cart"></div>
+				<div class="empty" id="cart-empty">Cart is empty — add items from the left.</div>
+				<div class="totals">
+					<div class="row-between"><span class="muted">Subtotal</span><span id="t-sub">AED 0.00</span></div>
+					<div class="row-between"><span class="muted">VAT (5%)</span><span id="t-vat">AED 0.00</span></div>
+					<div class="row-between grand"><span>Total Amount</span><span id="t-grand">AED 0.00</span></div>
+				</div>
+			</div>
+		</div>
+	</div>
+</section>
+
+<!-- nav -->
+<div class="form-actions" style="margin-top:18px">
+	<button type="button" class="btn btn--outline" id="wiz-prev" style="visibility:hidden"><i class="fa-solid fa-arrow-left"></i> Previous</button>
+	<div class="row" style="gap:10px">
+		<button type="button" class="btn btn--ghost" id="wiz-save">Save Draft</button>
+		<button type="button" class="btn btn--primary" id="wiz-next">Next <i class="fa-solid fa-arrow-right"></i></button>
+	</div>
+</div>
+
+<script>window.csrf_token = "{{ frappe.session.csrf_token }}";</script>
+{% raw %}
+<script>
+(function () {
+	var TOTAL = 5, cur = 1;
+	var steps = document.querySelectorAll('#wizard-stepper .step');
+	var lines = document.querySelectorAll('#wizard-stepper .step__line');
+	var tabs = document.querySelectorAll('.wizard-tab');
+	var prevBtn = document.getElementById('wiz-prev');
+	var nextBtn = document.getElementById('wiz-next');
+
+	function render() {
+		tabs.forEach(function (t) { t.classList.toggle('is-active', +t.dataset.tab === cur); });
+		steps.forEach(function (s) {
+			var n = +s.dataset.goto;
+			s.classList.toggle('is-active', n === cur);
+			s.classList.toggle('is-done', n < cur);
+		});
+		lines.forEach(function (l) { l.classList.toggle('is-done', +l.dataset.line < cur); });
+		prevBtn.style.visibility = cur === 1 ? 'hidden' : 'visible';
+		nextBtn.innerHTML = cur === TOTAL
+			? '<i class="fa-solid fa-check"></i> Create Job Card'
+			: 'Next <i class="fa-solid fa-arrow-right"></i>';
+		if (cur === 4) sizeCanvas();
+	}
+	function goTo(n) { cur = Math.max(1, Math.min(TOTAL, n)); render(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+	steps.forEach(function (s) { s.addEventListener('click', function () { goTo(+s.dataset.goto); }); });
+	prevBtn.addEventListener('click', function () { goTo(cur - 1); });
+
+	// ---- Backend wiring: options, prefill, save-as-draft ----------------
+	function callMethod(method, args) {
+		return fetch("/api/method/" + method, {
+			method: "POST",
+			headers: { "Content-Type": "application/json", "X-Frappe-CSRF-Token": window.csrf_token || "", "Accept": "application/json" },
+			body: JSON.stringify(args || {})
+		}).then(function (r) {
+			return r.json().then(function (data) {
+				if (!r.ok) { throw new Error((data && data._server_messages) || (data && data.exc) || r.statusText); }
+				return data.message;
+			});
+		});
+	}
+	function val(name) { var el = document.querySelector('[name="' + name + '"]'); return el ? el.value.trim() : ""; }
+	function setVal(name, v) { var el = document.querySelector('[name="' + name + '"]'); if (el) el.value = v || ""; }
+	function qparam(k) { return new URLSearchParams(window.location.search).get(k) || ""; }
+
+	var jobCardName = null; // set after the first save; this is the Job Number
+	var jobNoInput = document.querySelector('[name="job_no"]');
+	if (jobNoInput) jobNoInput.readOnly = true;
+
+	function loadJobCardOptions() {
+		return callMethod("garagedesk.api.front_office.get_job_card_options", {}).then(function (o) {
+			o = o || {};
+			JOBCARD_TYPES = o.jobcard_types || [];
+			JOB_SERVICES = o.job_type_services || [];
+			EMPLOYEES = o.service_advisors || [];
+			var sel = document.querySelector('select[name="advisor"]');
+			if (sel) {
+				sel.innerHTML = '<option value="">Select advisor</option>' +
+					EMPLOYEES.map(function (e) {
+						return '<option value="' + e.name + '">' + (e.employee_name || e.name) + '</option>';
+					}).join("");
+			}
+			renderJobTypeList();
+		}).catch(function () {});
+	}
+	// Prefill Customer / Vehicle / Mobile when arriving from a lead's "Save & Job Card".
+	function prefillFromUrl() {
+		if (qparam("customer")) { setVal("customer_id", qparam("customer")); loadCustomerVehicles(qparam("customer")); }
+		if (qparam("customer_name")) setVal("customer", qparam("customer_name"));
+		if (qparam("vehicle")) setVal("vehicle_id", qparam("vehicle"));
+		if (qparam("vehicle_label")) setVal("vehicle", qparam("vehicle_label"));
+		if (qparam("mobile")) setVal("mobile", qparam("mobile"));
+	}
+
+	// ---- Customer + Vehicle autocomplete (Customer Details tab) ---------
+	var customerVehicles = []; // vehicles of the currently selected customer
+	function loadCustomerVehicles(customerId) {
+		customerVehicles = [];
+		if (!customerId) return Promise.resolve();
+		return callMethod("garagedesk.api.front_office.get_customer_vehicles", { customer: customerId })
+			.then(function (rows) { customerVehicles = rows || []; })
+			.catch(function () {});
+	}
+	function attachAutocomplete(input, source, onSelect) {
+		if (!input) return;
+		var wrap = input.parentNode;
+		wrap.style.position = "relative";
+		var list = document.createElement("div");
+		list.className = "jc-ac"; list.style.display = "none";
+		wrap.appendChild(list);
+		var items = [], active = -1, timer = null;
+		function hide() { list.style.display = "none"; active = -1; }
+		function render(rows) {
+			items = rows || [];
+			if (!items.length) { list.innerHTML = '<div class="jc-ac-empty">No matches</div>'; list.style.display = "block"; return; }
+			list.innerHTML = items.map(function (it, i) {
+				return '<div class="jc-ac-item" data-i="' + i + '"><div class="jc-ac-label">' + it.label + '</div>' +
+					(it.sub ? '<div class="jc-ac-sub">' + it.sub + '</div>' : '') + '</div>';
+			}).join("");
+			active = -1; list.style.display = "block";
+		}
+		function run() { Promise.resolve(source(input.value.trim())).then(render).catch(hide); }
+		input.addEventListener("input", function () { clearTimeout(timer); timer = setTimeout(run, 180); });
+		input.addEventListener("focus", run);
+		input.addEventListener("blur", function () { setTimeout(hide, 150); });
+		list.addEventListener("mousedown", function (e) {
+			var el = e.target.closest("[data-i]"); if (!el) return;
+			e.preventDefault();
+			var it = items[+el.dataset.i];
+			input.value = it.label; hide();
+			if (onSelect) onSelect(it);
+		});
+		input.addEventListener("keydown", function (e) {
+			if (list.style.display === "none" || !items.length) return;
+			if (e.key === "ArrowDown") active = Math.min(items.length - 1, active + 1);
+			else if (e.key === "ArrowUp") active = Math.max(0, active - 1);
+			else if (e.key === "Enter" && active >= 0) { e.preventDefault(); var it = items[active]; input.value = it.label; hide(); if (onSelect) onSelect(it); return; }
+			else if (e.key === "Escape") { hide(); return; }
+			else return;
+			e.preventDefault();
+			Array.prototype.forEach.call(list.children, function (c, i) { c.classList.toggle("is-active", i === active); });
+		});
+	}
+	// Customer Name: suggest from Customers; on pick, capture id + load their vehicles.
+	attachAutocomplete(document.querySelector('[name="customer"]'), function (q) {
+		return callMethod("garagedesk.api.front_office.list_customers", { search: q, limit: 10 }).then(function (rows) {
+			return (rows || []).map(function (c) { return { label: c.customer_name || c.name, sub: c.mobile_no || "", value: c.name }; });
+		});
+	}, function (it) {
+		setVal("customer_id", it.value);
+		if (it.sub) setVal("mobile", it.sub);
+		setVal("vehicle", ""); setVal("vehicle_id", "");
+		loadCustomerVehicles(it.value);
+	});
+	// Vehicle: suggest from the selected customer's vehicles only.
+	attachAutocomplete(document.querySelector('[name="vehicle"]'), function (q) {
+		q = (q || "").toLowerCase();
+		var rows = customerVehicles.filter(function (v) {
+			return !q || (v.title || "").toLowerCase().indexOf(q) >= 0 || (v.plate || "").toLowerCase().indexOf(q) >= 0;
+		});
+		return rows.map(function (v) { return { label: v.title || v.name, sub: v.plate ? ("Plate: " + v.plate) : "", value: v.name }; });
+	}, function (it) {
+		setVal("vehicle_id", it.value);
+	});
+	function saveJobCard(advance) {
+		return callMethod("garagedesk.api.front_office.save_job_card", {
+			job_card: jobCardName,
+			customer: val("customer_id"),
+			vehicle: val("vehicle_id"),
+			mobile_no: val("mobile"),
+			booking_date: val("booking_date"),
+			promised_delivery: val("delivery"),
+			service_advisor: val("advisor"),
+			booking_channel: val("channel"),
+			project_booking: document.querySelector('[name="project_booking"]').checked ? 1 : 0,
+			services: gatherServices(),
+			complaints: gatherComplaints()
+		}).then(function (res) {
+			jobCardName = res.name;
+			setVal("job_no", res.name); // Job Number appears once saved as draft
+			if (advance && cur < TOTAL) goTo(cur + 1);
+			return res;
+		}).catch(function (err) {
+			alert("Could not save job card: " + (err && err.message ? err.message : err));
+			throw err;
+		});
+	}
+	// Both buttons save a draft; Next also advances to the next page.
+	nextBtn.addEventListener('click', function () { saveJobCard(true); });
+	document.getElementById('wiz-save').addEventListener('click', function () { saveJobCard(false); });
+
+	loadJobCardOptions();
+	prefillFromUrl();
+
+	function toggleEmpty(body, el) { el.style.display = body.children.length ? 'none' : 'block'; }
+
+	// ---- Service Jobs: LHS = Jobcard Type, RHS = service rows -----------
+	var JOBCARD_TYPES = [], JOB_SERVICES = [], EMPLOYEES = [];
+	var selected = []; // selected Jobcard Type names
+	var jdBody = document.getElementById('job-detail-body');
+	var jdEmpty = document.getElementById('job-detail-empty');
+	var jtList = document.getElementById('jobtype-list');
+
+	function renderJobTypeList() {
+		jtList.innerHTML = JOBCARD_TYPES.map(function (t) {
+			var on = selected.indexOf(t.name) >= 0;
+			return '<div class="jobtype-box' + (on ? ' is-active' : '') + '" data-jobtype="' + t.name + '">' +
+				'<i class="fa-solid ' + (t.icon || 'fa-wrench') + '"></i>' +
+				'<div><div class="t">' + (t.type_name || t.name) + '</div><div class="s">' + (t.description || '') + '</div></div>' +
+				'<i class="fa-solid fa-check tick"></i></div>';
+		}).join('') || '<div class="empty">No job card types configured.</div>';
+	}
+	jtList.addEventListener('click', function (e) {
+		var box = e.target.closest('.jobtype-box'); if (!box) return;
+		var name = box.dataset.jobtype, i = selected.indexOf(name);
+		if (i >= 0) selected.splice(i, 1); else selected.push(name);
+		box.classList.toggle('is-active');
+		refreshRowJobTypes();
+	});
+
+	function jobTypeOptions(val) {
+		return '<option value="">— select —</option>' + selected.map(function (t) {
+			return '<option' + (t === val ? ' selected' : '') + '>' + t + '</option>';
+		}).join('');
+	}
+	function serviceOptions(jobtype, val) {
+		var list = JOB_SERVICES.filter(function (s) { return s.jobcard_type === jobtype; });
+		if (!list.length) return '<option value="">— pick job type —</option>';
+		return '<option value="">— select —</option>' + list.map(function (s) {
+			return '<option value="' + s.name + '"' + (s.name === val ? ' selected' : '') + '>' + s.service_name + '</option>';
+		}).join('');
+	}
+	function technicianOptions(val) {
+		return '<option value="">— technician —</option>' + EMPLOYEES.map(function (e) {
+			return '<option value="' + e.name + '"' + (e.name === val ? ' selected' : '') + '>' + (e.employee_name || e.name) + '</option>';
+		}).join('');
+	}
+	// Keep row Job Type dropdowns in sync with the LHS selection.
+	function refreshRowJobTypes() {
+		document.querySelectorAll('#job-detail-body tr').forEach(function (tr) {
+			var jt = tr.querySelector('select.jt'); if (!jt) return;
+			var v = jt.value; jt.innerHTML = jobTypeOptions(v);
+			if (v && selected.indexOf(v) < 0) {
+				var sv = tr.querySelector('select.svc'); if (sv) sv.innerHTML = serviceOptions('', '');
+			}
+		});
+	}
+	// A row's Service dropdown depends on its Job Type (task 9 cascade).
+	jdBody.addEventListener('change', function (e) {
+		if (!e.target.matches('select.jt')) return;
+		var sv = e.target.closest('tr').querySelector('select.svc');
+		if (sv) sv.innerHTML = serviceOptions(e.target.value, '');
+	});
+	document.getElementById('add-job-detail').addEventListener('click', function () {
+		if (!selected.length) { jdEmpty.textContent = 'Select at least one job type on the left first.'; return; }
+		var jt0 = selected[0];
+		var tr = document.createElement('tr');
+		tr.innerHTML =
+			'<td><select class="jt">' + jobTypeOptions(jt0) + '</select></td>' +
+			'<td><select class="svc">' + serviceOptions(jt0, '') + '</select></td>' +
+			'<td><input class="desc" placeholder="Description"></td>' +
+			'<td><select class="tech">' + technicianOptions('') + '</select></td>' +
+			'<td><input class="hrs" type="number" min="0" step="0.5" value="1"></td>' +
+			'<td><button type="button" class="icon-del"><i class="fa-solid fa-trash"></i></button></td>';
+		tr.querySelector('.icon-del').addEventListener('click', function () { tr.remove(); toggleEmpty(jdBody, jdEmpty); });
+		jdBody.appendChild(tr); toggleEmpty(jdBody, jdEmpty);
+	});
+	function gatherServices() {
+		var rows = [];
+		document.querySelectorAll('#job-detail-body tr').forEach(function (tr) {
+			var jt = tr.querySelector('.jt'), sv = tr.querySelector('.svc');
+			rows.push({
+				jobtype: jt ? jt.value : '',
+				service: sv ? sv.value : '',
+				description: (tr.querySelector('.desc') || {}).value || '',
+				technician: (tr.querySelector('.tech') || {}).value || '',
+				hours: (tr.querySelector('.hrs') || {}).value || 0
+			});
+		});
+		return rows.filter(function (r) { return r.jobtype || r.service; });
+	}
+
+	// ---- Complaints
+	var cBody = document.getElementById('complaint-body');
+	var cEmpty = document.getElementById('complaint-empty');
+	function renumber(body) { Array.prototype.forEach.call(body.children, function (tr, i) { tr.firstElementChild.textContent = i + 1; }); }
+	document.getElementById('add-complaint').addEventListener('click', function () {
+		var tr = document.createElement('tr');
+		tr.innerHTML =
+			'<td>' + (cBody.children.length + 1) + '</td>' +
+			'<td><input class="cmp" placeholder="Complaint"></td>' +
+			'<td><input class="rby" placeholder="Reported by"></td>' +
+			'<td><select class="sev"><option value="">—</option><option>Low</option><option>Medium</option><option>High</option><option>Critical</option></select></td>' +
+			'<td><input class="nts" placeholder="Notes"></td>' +
+			'<td><select class="ctech">' + technicianOptions('') + '</select></td>' +
+			'<td><button type="button" class="icon-del"><i class="fa-solid fa-trash"></i></button></td>';
+		tr.querySelector('.icon-del').addEventListener('click', function () { tr.remove(); renumber(cBody); toggleEmpty(cBody, cEmpty); });
+		cBody.appendChild(tr); toggleEmpty(cBody, cEmpty);
+	});
+	function gatherComplaints() {
+		var rows = [];
+		document.querySelectorAll('#complaint-body tr').forEach(function (tr) {
+			rows.push({
+				complaint: (tr.querySelector('.cmp') || {}).value || '',
+				reported_by: (tr.querySelector('.rby') || {}).value || '',
+				severity: (tr.querySelector('.sev') || {}).value || '',
+				notes: (tr.querySelector('.nts') || {}).value || '',
+				technician: (tr.querySelector('.ctech') || {}).value || ''
+			});
+		});
+		return rows.filter(function (r) { return r.complaint || r.notes; });
+	}
+
+	// ---- Readings ranges
+	document.querySelectorAll('input[type=range][data-out]').forEach(function (r) {
+		var out = document.querySelector(r.dataset.out);
+		function upd() { out.textContent = r.value + '%'; }
+		r.addEventListener('input', upd); upd();
+	});
+
+	// ---- Car drawing
+	var canvas = document.getElementById('car-canvas');
+	var ctx = canvas.getContext('2d');
+	var drawing = false;
+	function sizeCanvas() {
+		var r = canvas.getBoundingClientRect();
+		if (!r.width) return;
+		if (canvas.width !== Math.round(r.width) || canvas.height !== Math.round(r.height)) {
+			canvas.width = Math.round(r.width); canvas.height = Math.round(r.height);
+		}
+		ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.lineWidth = 3; ctx.strokeStyle = '#ec2e5d';
+	}
+	function pos(e) { var r = canvas.getBoundingClientRect(); var t = e.touches ? e.touches[0] : e; return { x: t.clientX - r.left, y: t.clientY - r.top }; }
+	function start(e) { drawing = true; var p = pos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); e.preventDefault(); }
+	function move(e) { if (!drawing) return; var p = pos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); e.preventDefault(); }
+	function end() { drawing = false; }
+	canvas.addEventListener('mousedown', start); canvas.addEventListener('mousemove', move); window.addEventListener('mouseup', end);
+	canvas.addEventListener('touchstart', start, { passive: false }); canvas.addEventListener('touchmove', move, { passive: false }); canvas.addEventListener('touchend', end);
+	document.getElementById('car-clear').addEventListener('click', function () { ctx.clearRect(0, 0, canvas.width, canvas.height); });
+	window.addEventListener('resize', function () { if (cur === 4) sizeCanvas(); });
+
+	// ---- Estimate cart
+	var cart = {};
+	var cartEl = document.getElementById('cart');
+	var cartEmpty = document.getElementById('cart-empty');
+	function money(v) { return 'AED ' + v.toFixed(2); }
+	document.getElementById('catalog').addEventListener('click', function (e) {
+		var row = e.target.closest('[data-name]'); if (!row) return;
+		var n = row.dataset.name, p = parseFloat(row.dataset.price);
+		if (cart[n]) cart[n].qty++; else cart[n] = { price: p, qty: 1 };
+		renderCart();
+	});
+	function renderCart() {
+		var names = Object.keys(cart);
+		cartEmpty.style.display = names.length ? 'none' : 'block';
+		cartEl.innerHTML = names.map(function (n) {
+			var it = cart[n];
+			return '<div class="cart-item" data-cn="' + n + '">' +
+				'<div><div class="name">' + n + '</div><div class="unit">' + money(it.price) + '</div></div>' +
+				'<div class="qty"><button type="button" data-dec>−</button><input data-q value="' + it.qty + '"><button type="button" data-inc>+</button></div>' +
+				'<div class="line">' + money(it.price * it.qty) + '</div>' +
+				'<button type="button" class="icon-del" data-rm><i class="fa-solid fa-trash"></i></button></div>';
+		}).join('');
+		var sub = names.reduce(function (s, n) { return s + cart[n].price * cart[n].qty; }, 0);
+		document.getElementById('t-sub').textContent = money(sub);
+		document.getElementById('t-vat').textContent = money(sub * 0.05);
+		document.getElementById('t-grand').textContent = money(sub * 1.05);
+	}
+	cartEl.addEventListener('click', function (e) {
+		var item = e.target.closest('[data-cn]'); if (!item) return; var n = item.dataset.cn;
+		if (e.target.closest('[data-inc]')) cart[n].qty++;
+		else if (e.target.closest('[data-dec]')) cart[n].qty = Math.max(1, cart[n].qty - 1);
+		else if (e.target.closest('[data-rm]')) delete cart[n];
+		else return;
+		renderCart();
+	});
+	cartEl.addEventListener('change', function (e) {
+		if (!e.target.matches('[data-q]')) return;
+		var item = e.target.closest('[data-cn]'); cart[item.dataset.cn].qty = Math.max(1, parseInt(e.target.value) || 1); renderCart();
+	});
+	var search = document.getElementById('item-search');
+	search.addEventListener('input', function () {
+		var q = this.value.toLowerCase();
+		document.querySelectorAll('#catalog [data-name]').forEach(function (r) {
+			r.style.display = r.dataset.name.toLowerCase().indexOf(q) >= 0 ? '' : 'none';
+		});
+	});
+
+	render();
+})();
+</script>
+{% endraw %}
+{% endblock %}

@@ -1,0 +1,358 @@
+{% extends "templates/workshop_base.html" %}
+{% from "templates/macros/workshop.html" import badge, field %}
+
+{% block page_content %}
+{%- set task_groups = [
+  {"label":"Critical","dot":"dot--crit","rows":["Vehicle delivery due today","Pending customer approvals","Overdue service jobs"]},
+  {"label":"High","dot":"dot--high","rows":["Parts procurement pending","QC inspections","Customer follow-ups"]},
+  {"label":"Normal","dot":"dot--normal","rows":["Internal workshop tasks","Documentation updates"]}
+] -%}
+{%- set pipeline = [
+  {"stage":"Reception","n":4,"sub":["Vehicle arrived","Awaiting inspection"]},
+  {"stage":"Estimation","n":8,"sub":["Estimate pending approval","Waiting customer confirmation"]},
+  {"stage":"Workshop","n":21,"sub":["Repair in progress","Parts replacement"]},
+  {"stage":"QC","n":5,"sub":["Final inspection","Road test"]},
+  {"stage":"Ready Delivery","n":3,"sub":["Ready for delivery","Customer informed"]}
+] -%}
+{%- set booking_slots = [
+  {"slot":"Morning","rows":[
+    {"t":"09:00 AM","c":"AAS Shipping — Nissan Patrol"},
+    {"t":"09:30 AM","c":"Walk-in — Toyota Corolla"},
+    {"t":"10:00 AM","c":"Aaber Facilities — Fortuner"}]},
+  {"slot":"Afternoon","rows":[
+    {"t":"01:00 PM","c":"District Cooling — Canter"},
+    {"t":"02:30 PM","c":"Gulf Cargo — Ford Transit"}]},
+  {"slot":"Evening","rows":[
+    {"t":"05:00 PM","c":"Daat Logistics — Hilux"}]}
+] -%}
+{%- set followups = [
+  {"icon":"fa-file-circle-check","reason":"Pending Approval","sub":"Estimate approval","n":6},
+  {"icon":"fa-car-side","reason":"Vehicle Ready","sub":"Delivery reminder","n":3},
+  {"icon":"fa-rotate","reason":"Service Reminder","sub":"Periodic maintenance","n":12},
+  {"icon":"fa-triangle-exclamation","reason":"Complaint Follow-Up","sub":"Open complaints","n":4}
+] -%}
+{%- set techs = [
+  {"name":"Technician A — Arun Kumar","jobs":["JC-0011 · Brake pads","JC-0007 · Oil change"],"hours":"6.5","prod":86},
+  {"name":"Technician B — Rajesh Nair","jobs":["JC-0010 · Bodywork","JC-0009 · AC service"],"hours":"5.0","prod":72},
+  {"name":"Technician C — Suresh Babu","jobs":["JC-0008 · Inspection"],"hours":"3.5","prod":64}
+] -%}
+{%- set assignees = [
+  "Arun Kumar — Technician","Rajesh Nair — Technician","Suresh Babu — Technician",
+  "Priya Menon — Service Advisor","Karthik R — QC Inspector","Deepa S — Front Office",
+  "Manoj Pillai — Telecaller","Vikram Singh — Workshop Manager"
+] -%}
+{%- set advances = [
+  {"type":"Customer Advances","sub":"Awaiting service completion","count":7,"amt":"₹1,20,000"},
+  {"type":"Supplier Advances","sub":"Pending material delivery","count":3,"amt":"₹45,000"},
+  {"type":"Employee Advances","sub":"Pending settlement","count":5,"amt":"₹18,500"}
+] -%}
+{%- set receivables = [
+  {"label":"Overdue","amt":"₹2,40,000","light":"light--r"},
+  {"label":"Due Today","amt":"₹65,000","light":"light--y"},
+  {"label":"Due This Week","amt":"₹1,10,000","light":"light--g"}
+] -%}
+{%- set payables = [
+  {"label":"Due Today","amt":"₹30,000","light":"light--y"},
+  {"label":"Due This Week","amt":"₹85,000","light":"light--g"}
+] -%}
+{%- set purchase = [
+  {"label":"Critical Stock","rows":["Brake Pads","Engine Oil"],"badge":"badge--danger"},
+  {"label":"Reorder Level Reached","rows":["Air Filters","Spark Plugs"],"badge":"badge--pending"}
+] -%}
+
+<div class="toolbar">
+	<div class="section-title" style="margin:0">Today &middot; {{ frappe.utils.formatdate(frappe.utils.nowdate(), "dd MMM yyyy") }}</div>
+	<button type="button" class="btn btn--primary" data-open-task><i class="fa-solid fa-plus"></i> Add Task</button>
+</div>
+
+<div class="dp-grid">
+	<!-- ============ LEFT — Operations & Action Center ============ -->
+	<div class="dp-col">
+
+		<!-- 1. Tasks & To-Do -->
+		<div class="card"><div class="card__head"><h3>Today's Tasks &amp; To-Do</h3><span class="muted">Operations &amp; Action Center</span></div>
+			<div class="card__body">
+				{%- for g in task_groups %}
+				<div class="group-head"><span class="dot {{ g.dot }}"></span>{{ g.label }}<span class="count">{{ g.rows|length }}</span></div>
+				{%- for it in g.rows %}
+				<div class="task-row">
+					<span class="txt">{{ it }}</span>
+					<div class="act-btns">
+						<button class="act-btn" data-complete title="Complete"><i class="fa-solid fa-check"></i></button>
+						<button class="act-btn" data-assign data-task="{{ it }}" title="Assign"><i class="fa-solid fa-user-plus"></i></button>
+						<button class="act-btn" data-reschedule data-task="{{ it }}" title="Reschedule"><i class="fa-solid fa-calendar-day"></i></button>
+						<button class="act-btn" data-note data-task="{{ it }}" title="Add Note"><i class="fa-solid fa-note-sticky"></i></button>
+					</div>
+				</div>
+				{%- endfor %}
+				{%- endfor %}
+			</div>
+		</div>
+
+		<!-- 2. Job Cards In Progress -->
+		<div class="card"><div class="card__head"><h3>Job Cards In Progress</h3><span class="muted">By status</span></div>
+			<div class="card__body">
+				<div class="pipeline">
+					{%- for p in pipeline %}
+					<div class="pl-card">
+						<div class="stage">{{ p.stage }}</div>
+						<div class="n">{{ p.n }}</div>
+						<div class="sub">{% for s in p.sub %}{{ s }}{% if not loop.last %}<br>{% endif %}{% endfor %}</div>
+					</div>
+					{%- endfor %}
+				</div>
+			</div>
+		</div>
+
+		<!-- 3. Today's Bookings -->
+		<div class="card"><div class="card__head"><h3>Today's Bookings</h3><span class="muted">By time slot</span></div>
+			<div class="card__body">
+				{%- for s in booking_slots %}
+				<div class="group-head"><i class="fa-regular fa-clock" style="color:var(--navy)"></i>{{ s.slot }}<span class="count">{{ s.rows|length }}</span></div>
+				{%- for b in s.rows %}
+				<div class="slot-row">
+					<span class="time-chip">{{ b.t }}</span>
+					<span class="txt" style="flex:1">{{ b.c }}</span>
+					<div class="act-btns">
+						<button class="act-btn" title="Check-in"><i class="fa-solid fa-right-to-bracket"></i></button>
+						<button class="act-btn" title="Reschedule"><i class="fa-solid fa-calendar-day"></i></button>
+						<button class="act-btn" title="Cancel"><i class="fa-solid fa-xmark"></i></button>
+					</div>
+				</div>
+				{%- endfor %}
+				{%- endfor %}
+			</div>
+		</div>
+
+		<!-- 4. Customer Follow-Up Queue -->
+		<div class="card"><div class="card__head"><h3>Customer Follow-Up Queue</h3><span class="muted">By reason</span></div>
+			<div class="card__body">
+				{%- for f in followups %}
+				<div class="kv-row">
+					<span class="k"><i class="fa-solid {{ f.icon }}" style="color:var(--red);width:18px"></i>
+						<span><div style="font-weight:600">{{ f.reason }}</div><div class="muted" style="font-size:12px">{{ f.sub }}</div></span></span>
+					<span class="row" style="gap:10px">{{ badge(f.n ~ " open", "badge--soft") }}<a class="btn btn--outline btn--sm">Follow up</a></span>
+				</div>
+				{%- endfor %}
+			</div>
+		</div>
+
+		<!-- 5. Technician Activity Board -->
+		<div class="card"><div class="card__head"><h3>Technician Activity Board</h3><span class="muted">By technician</span></div>
+			<div class="card__body stack">
+				{%- for t in techs %}
+				<div class="tech-card">
+					<div class="row-between"><b>{{ t.name }}</b><span class="muted" style="font-size:12px">{{ t.jobs|length }} jobs · {{ t.hours }} hrs</span></div>
+					<div class="muted" style="font-size:12px;margin:6px 0">{% for j in t.jobs %}{{ j }}{% if not loop.last %} &nbsp;·&nbsp; {% endif %}{% endfor %}</div>
+					<div class="row-between" style="font-size:12px;margin-bottom:4px"><span class="muted">Productivity</span><b>{{ t.prod }}%</b></div>
+					<div class="bar"><span style="width:{{ t.prod }}%"></span></div>
+				</div>
+				{%- endfor %}
+			</div>
+		</div>
+	</div>
+
+	<!-- ============ RIGHT — Business Control Center ============ -->
+	<div class="dp-col">
+
+		<!-- 6. Cash & Bills Summary -->
+		<div class="card"><div class="card__head"><h3>Cash &amp; Bills Summary</h3><span class="muted">Today</span></div>
+			<div class="card__body">
+				<div class="kv-row"><span class="k"><i class="fa-solid fa-arrow-down" style="color:var(--green)"></i> Cash In</span><b>₹25,000</b></div>
+				<div class="kv-row"><span class="k"><i class="fa-solid fa-arrow-up" style="color:var(--red)"></i> Cash Out</span><b>₹8,500</b></div>
+				<div class="kv-row"><span class="k"><i class="fa-solid fa-wallet" style="color:var(--navy)"></i> Balance</span><b style="color:var(--red)">₹16,500</b></div>
+				<div class="qbtns">
+					<button class="btn btn--primary btn--sm"><i class="fa-solid fa-receipt"></i> New Receipt</button>
+					<button class="btn btn--navy btn--sm"><i class="fa-solid fa-money-bill"></i> New Payment</button>
+					<button class="btn btn--outline btn--sm"><i class="fa-solid fa-file-invoice"></i> Expense Entry</button>
+				</div>
+			</div>
+		</div>
+
+		<!-- 7. Pending Advances -->
+		<div class="card"><div class="card__head"><h3>Pending Advances</h3><span class="muted">By type</span></div>
+			<div class="card__body">
+				{%- for a in advances %}
+				<div class="kv-row">
+					<span class="k"><span><div style="font-weight:600">{{ a.type }}</div><div class="muted" style="font-size:12px">{{ a.sub }}</div></span></span>
+					<span style="text-align:right"><b>{{ a.amt }}</b><div class="muted" style="font-size:12px">{{ a.count }} entries</div></span>
+				</div>
+				{%- endfor %}
+			</div>
+		</div>
+
+		<!-- 8. Pending Bills & Collections -->
+		<div class="card"><div class="card__head"><h3>Pending Bills &amp; Collections</h3></div>
+			<div class="card__body">
+				<div class="fieldset-title" style="margin-top:0">Customer Receivables</div>
+				{%- for r in receivables %}
+				<div class="kv-row"><span class="k"><span class="light {{ r.light }}"></span>{{ r.label }}</span><b>{{ r.amt }}</b></div>
+				{%- endfor %}
+				<div class="fieldset-title">Supplier Payables</div>
+				{%- for p in payables %}
+				<div class="kv-row"><span class="k"><span class="light {{ p.light }}"></span>{{ p.label }}</span><b>{{ p.amt }}</b></div>
+				{%- endfor %}
+				<div class="muted" style="font-size:12px;margin-top:10px"><span class="light light--g"></span> Good &nbsp; <span class="light light--y"></span> Attention &nbsp; <span class="light light--r"></span> Urgent</div>
+			</div>
+		</div>
+
+		<!-- 9. Purchase Requirements -->
+		<div class="card"><div class="card__head"><h3>Purchase Requirements</h3><span class="muted">Auto-generated</span></div>
+			<div class="card__body">
+				{%- for grp in purchase %}
+				<div class="group-head" style="margin-top:{{ '0' if loop.first else '16px' }}">{{ badge(grp.label, grp.badge) }}</div>
+				{%- for it in grp.rows %}
+				<div class="kv-row"><span class="k"><i class="fa-solid fa-box" style="color:var(--muted)"></i>{{ it }}</span><a class="btn btn--outline btn--sm">Add</a></div>
+				{%- endfor %}
+				{%- endfor %}
+				<button class="btn btn--primary" style="width:100%;justify-content:center;margin-top:14px"><i class="fa-solid fa-cart-plus"></i> Create Purchase Request</button>
+			</div>
+		</div>
+	</div>
+</div>
+
+<!-- Assign modal — assign the task to an employee -->
+<div class="modal-overlay" id="assign-modal" role="dialog" aria-modal="true" aria-labelledby="assign-modal-title">
+	<div class="modal modal--sm">
+		<div class="modal__head">
+			<div><h3 id="assign-modal-title">Assign Task</h3><div class="sub" data-ctx>Assign this task to an employee</div></div>
+			<button type="button" class="modal__close" data-close aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+		</div>
+		<div class="modal__body">
+			<form class="form-grid form-grid--1" id="assign-form">
+				{{ field("Assign To", "assignee", type="select", required=True, placeholder="Select employee", options=assignees, full=True) }}
+				{{ field("Complete By", "assign_due", type="date", full=True) }}
+				{{ field("Comment", "assign_comment", type="textarea", placeholder="Instructions for the assignee") }}
+			</form>
+		</div>
+		<div class="modal__foot">
+			<button type="button" class="btn btn--outline" data-close>Cancel</button>
+			<button type="submit" form="assign-form" class="btn btn--primary"><i class="fa-solid fa-user-check"></i> Assign</button>
+		</div>
+	</div>
+</div>
+
+<!-- Reschedule modal — calendar to change the task date -->
+<div class="modal-overlay" id="reschedule-modal" role="dialog" aria-modal="true" aria-labelledby="reschedule-modal-title">
+	<div class="modal modal--sm">
+		<div class="modal__head">
+			<div><h3 id="reschedule-modal-title">Reschedule Task</h3><div class="sub" data-ctx>Pick a new date for this task</div></div>
+			<button type="button" class="modal__close" data-close aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+		</div>
+		<div class="modal__body">
+			<form class="form-grid form-grid--1" id="reschedule-form">
+				{{ field("New Date", "new_date", type="date", required=True, full=True) }}
+				{{ field("New Time", "new_time", type="time", full=True) }}
+				{{ field("Reason", "reschedule_reason", type="textarea", placeholder="Why is this being rescheduled?") }}
+			</form>
+		</div>
+		<div class="modal__foot">
+			<button type="button" class="btn btn--outline" data-close>Cancel</button>
+			<button type="submit" form="reschedule-form" class="btn btn--primary"><i class="fa-solid fa-calendar-check"></i> Reschedule</button>
+		</div>
+	</div>
+</div>
+
+<!-- Add Note modal — free-text note on the task -->
+<div class="modal-overlay" id="note-modal" role="dialog" aria-modal="true" aria-labelledby="note-modal-title">
+	<div class="modal modal--sm">
+		<div class="modal__head">
+			<div><h3 id="note-modal-title">Add Note</h3><div class="sub" data-ctx>Attach a note to this task</div></div>
+			<button type="button" class="modal__close" data-close aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+		</div>
+		<div class="modal__body">
+			<form class="form-grid form-grid--1" id="note-form">
+				{{ field("Note", "task_note", type="textarea", required=True, placeholder="Write your note…") }}
+			</form>
+		</div>
+		<div class="modal__foot">
+			<button type="button" class="btn btn--outline" data-close>Cancel</button>
+			<button type="submit" form="note-form" class="btn btn--primary"><i class="fa-solid fa-floppy-disk"></i> Save Note</button>
+		</div>
+	</div>
+</div>
+
+<!-- Add Task modal — fields mirror the ERPNext Task doctype -->
+<div class="modal-overlay" id="task-modal" role="dialog" aria-modal="true" aria-labelledby="task-modal-title">
+	<div class="modal">
+		<div class="modal__head">
+			<div><h3 id="task-modal-title">New Task</h3><div class="sub">Add a task to today's planner</div></div>
+			<button type="button" class="modal__close" data-close aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+		</div>
+		<div class="modal__body">
+			<form class="form-grid" id="task-form">
+				{{ field("Subject", "subject", required=True, placeholder="Task subject", full=True) }}
+				{{ field("Project", "project", placeholder="Link to Project / Job Card") }}
+				{{ field("Task Type", "type", placeholder="e.g. Service, QC, Delivery") }}
+				{{ field("Status", "status", type="select", options=["Open","Working","Pending Review","Overdue","Template","Completed","Cancelled"]) }}
+				{{ field("Priority", "priority", type="select", options=["Low","Medium","High","Urgent"]) }}
+				<div class="fieldset-title">Timeline</div>
+				{{ field("Expected Start Date", "exp_start_date", type="datetime-local") }}
+				{{ field("Expected End Date", "exp_end_date", type="datetime-local") }}
+				{{ field("Expected Time (hours)", "expected_time", type="number", placeholder="0") }}
+				{{ field("% Progress", "progress", type="number", placeholder="0") }}
+				{{ field("Parent Task", "parent_task", placeholder="Link to parent task") }}
+				{{ field("Color", "color", type="color", value="#ec2e5d") }}
+				<div class="field"><label>Options</label><label class="check"><input type="checkbox" name="is_milestone"> Is Milestone</label></div>
+				<div class="fieldset-title">Details</div>
+				{{ field("Task Description", "description", type="textarea", placeholder="Describe the task") }}
+			</form>
+		</div>
+		<div class="modal__foot">
+			<button type="button" class="btn btn--outline" data-close>Cancel</button>
+			<button type="submit" form="task-form" class="btn btn--primary"><i class="fa-solid fa-check"></i> Create Task</button>
+		</div>
+	</div>
+</div>
+
+{% raw %}
+<script>
+(function () {
+	function open(overlay) { overlay.classList.add("is-open"); document.body.style.overflow = "hidden"; }
+	function close(overlay) { overlay.classList.remove("is-open"); document.body.style.overflow = ""; }
+	function closeAll() { document.querySelectorAll(".modal-overlay.is-open").forEach(close); }
+
+	// generic close wiring for every modal (X, Cancel, backdrop)
+	document.querySelectorAll(".modal-overlay").forEach(function (overlay) {
+		overlay.querySelectorAll("[data-close]").forEach(function (b) { b.addEventListener("click", function () { close(overlay); }); });
+		overlay.addEventListener("click", function (e) { if (e.target === overlay) close(overlay); });
+	});
+	document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeAll(); });
+
+	// Add Task
+	document.querySelectorAll("[data-open-task]").forEach(function (b) {
+		b.addEventListener("click", function () { open(document.getElementById("task-modal")); });
+	});
+
+	// per-task action buttons → open the matching modal, carrying the task as context
+	function wireAction(attr, modalId) {
+		var modal = document.getElementById(modalId);
+		if (!modal) return;
+		document.querySelectorAll(".act-btn[" + attr + "]").forEach(function (b) {
+			b.addEventListener("click", function () {
+				var task = b.getAttribute("data-task") || "";
+				var ctx = modal.querySelector("[data-ctx]");
+				if (ctx && task) ctx.textContent = "Task · " + task;
+				var form = modal.querySelector("form"); if (form) form.reset();
+				open(modal);
+			});
+		});
+	}
+	wireAction("data-assign", "assign-modal");
+	wireAction("data-reschedule", "reschedule-modal");
+	wireAction("data-note", "note-modal");
+
+	// submit handlers (demo: validate then close)
+	["task-form", "assign-form", "reschedule-form", "note-form"].forEach(function (id) {
+		var f = document.getElementById(id);
+		if (f) f.addEventListener("submit", function (e) { e.preventDefault(); closeAll(); });
+	});
+
+	// mark task complete
+	document.querySelectorAll(".act-btn[data-complete]").forEach(function (b) {
+		b.addEventListener("click", function () { b.classList.toggle("is-on"); b.closest(".task-row").classList.toggle("is-done"); });
+	});
+})();
+</script>
+{% endraw %}
+{% endblock %}

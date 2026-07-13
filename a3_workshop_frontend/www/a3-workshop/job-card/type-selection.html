@@ -1,0 +1,31 @@
+{% extends "templates/workshop_base.html" %}
+{% from "templates/macros/workshop.html" import typecard %}
+{%- macro stepper(active) -%}
+{%- set steps = ["Job Type","Details","Complaints","Tasks","Estimate"] -%}
+<div class="card"><div class="stepper">
+	{%- for s in steps %}
+	{%- set n = loop.index %}
+	<div class="step {{ 'is-active' if n == active else ('is-done' if n < active else '') }}">
+		<div class="step__dot">{% if n < active %}<i class="fa-solid fa-check"></i>{% else %}{{ n }}{% endif %}</div>
+		<div class="step__label">{{ s }}</div>
+	</div>
+	{%- if not loop.last %}<div class="step__line {{ 'is-done' if n < active else '' }}"></div>{% endif %}
+	{%- endfor %}
+</div></div>
+{%- endmacro -%}
+
+{% block page_content %}
+{{ stepper(1) }}
+{%- set types = [
+  {"i":"fa-screwdriver-wrench","t":"General Service","s":"Scheduled maintenance"},
+  {"i":"fa-car-burst","t":"Body Shop","s":"Accident repair & bodywork"},
+  {"i":"fa-gears","t":"Mechanical","s":"Engine & mechanical complaints"},
+  {"i":"fa-magnifying-glass","t":"Inspection","s":"Pre-purchase or general check"},
+  {"i":"fa-rotate","t":"Repeat Service","s":"Follow-up for previous job"}
+] -%}
+<div class="type-grid" style="margin-top:18px">
+	{%- for ty in types %}
+	<a href="/a3-workshop/job-card/new">{{ typecard(ty.i, ty.t, ty.s) }}</a>
+	{%- endfor %}
+</div>
+{% endblock %}

@@ -1,0 +1,612 @@
+{% extends "templates/workshop_base.html" %}
+{% from "templates/macros/workshop.html" import field %}
+
+{% block page_content %}
+<div class="fo-grid">
+
+	<!-- BOX 1 — customer selector + phone-book directory -->
+	<div class="card"><div class="card__head">
+			<h3>Customers</h3>
+			<button type="button" class="btn btn--primary btn--sm" id="create-customer"><i class="fa-solid fa-plus"></i> Create Customer</button>
+		</div>
+		<div class="card__body">
+			<div id="dir-default">
+				<div class="field--inline" style="margin-bottom:12px">
+					<div class="field"><input id="dir-search" placeholder="Job Card / phone…"></div>
+					<button type="button" class="btn btn--primary btn--icon" title="Search"><i class="fa-solid fa-magnifying-glass"></i></button>
+				</div>
+				<div class="dir-list" id="dir-list"></div>
+			</div>
+
+			<div id="dir-selected" style="display:none">
+				<button type="button" class="fo-back" id="dir-back"><i class="fa-solid fa-arrow-left"></i> All customers</button>
+				<div class="dir-item is-active" style="cursor:default">
+					<div class="list-row__avatar" id="sel-avatar">A</div>
+					<div><div class="nm" id="sel-name"></div><div class="ph" id="sel-phone"></div></div>
+				</div>
+				<div class="dir-sections" id="dir-sections"></div>
+			</div>
+		</div>
+	</div>
+
+	<!-- BOX 2 — dynamic middle panel: 360 viewer / enquiry detail / lead form / customer form -->
+	<div class="card"><div class="card__head">
+			<h3 id="viewer-title">Customer 360</h3>
+			<span class="readonly-tag" id="viewer-tag">read-only</span>
+			<button type="button" class="modal__close" id="viewer-close" title="Close" style="display:none"><i class="fa-solid fa-xmark"></i></button>
+		</div>
+		<div class="card__body">
+
+			<!-- STATE A/D: read-only 360 view + enquiry detail -->
+			<div id="viewer">
+				<div class="empty">Select a customer on the left, then choose a section to view.</div>
+			</div>
+
+			<!-- STATE B: create-lead form -->
+			<div id="m-lead" style="display:none">
+				<form id="enquiry-form">
+					<div class="fieldset-title" style="margin-top:0">Customer Details</div>
+					<div class="stack">
+						{{ field("Customer Name","e_name",required=True) }}
+						{{ field("Mobile Number","e_mobile",required=True) }}
+						{{ field("Email","e_email",type="email") }}
+						{{ field("Address","e_address") }}
+					</div>
+					<div class="fieldset-title" style="display:flex;align-items:center;gap:8px">
+						Vehicle Details
+						<label style="display:flex;align-items:center;gap:8px;margin:0 0 0 auto;font-weight:600;cursor:pointer">
+							<input type="checkbox" id="l_add_vehicle"> Add new vehicle
+						</label>
+					</div>
+					<div id="lead-vehicle-cards"></div>
+					<div id="lead-vehicle-fields" style="display:none">
+						<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px 16px">
+							{{ field("Plate Number","lv_plate") }}
+							{{ field("Plate Emirate","lv_emirate",type="select") }}
+							{{ field("Plate Code","lv_plate_code") }}
+							{{ field("Make","lv_make",type="select") }}
+							{{ field("Model","lv_model",type="select") }}
+							{{ field("Model Year","lv_year",type="number") }}
+							{{ field("Odometer (km)","lv_odometer",type="number") }}
+							{{ field("Fuel Type","lv_fuel",type="select") }}
+							{{ field("VIN / Chassis","lv_vin") }}
+						</div>
+					</div>
+				</form>
+				<div class="modal__foot" style="padding:16px 0 0;border:none">
+					<button type="button" class="btn btn--outline" id="save-lead"><i class="fa-solid fa-floppy-disk"></i> Save</button>
+					<button type="button" class="btn btn--primary" id="save-lead-jc">Save &amp; Job Card <i class="fa-solid fa-arrow-right"></i></button>
+				</div>
+			</div>
+
+			<!-- STATE C: create-customer form -->
+			<div id="m-customer" style="display:none">
+				<form id="customer-form">
+					<div class="fieldset-title" style="margin-top:0">Customer Details</div>
+					<div class="stack">
+						{{ field("Customer Name","c_name",required=True) }}
+						{{ field("Mobile Number","c_phone",required=True) }}
+						{{ field("Email","c_email",type="email") }}
+						{{ field("Address","c_address") }}
+						{{ field("City","c_city") }}
+					</div>
+					<div class="fieldset-title" style="display:flex;align-items:center;gap:8px">
+						<label style="display:flex;align-items:center;gap:8px;margin:0;font-weight:600;cursor:pointer">
+							<input type="checkbox" id="c_add_vehicle"> Add Vehicle Details
+							<span style="font-weight:400;color:var(--muted)">(optional)</span>
+						</label>
+					</div>
+					<div id="vehicle-fields" style="display:none">
+						<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px 16px">
+							{{ field("Plate Number","v_plate") }}
+							{{ field("Plate Emirate","v_emirate",type="select") }}
+							{{ field("Plate Code","v_plate_code") }}
+							{{ field("Make","v_make",type="select") }}
+							{{ field("Model","v_model",type="select") }}
+							{{ field("Model Year","v_year",type="number") }}
+							{{ field("Odometer (km)","v_odometer",type="number") }}
+							{{ field("Fuel Type","v_fuel",type="select") }}
+							{{ field("VIN / Chassis","v_vin") }}
+						</div>
+					</div>
+				</form>
+				<div class="modal__foot" style="padding:16px 0 0;border:none">
+					<button type="button" class="btn btn--primary" id="save-customer"><i class="fa-solid fa-floppy-disk"></i> Save Customer</button>
+				</div>
+			</div>
+
+		</div>
+	</div>
+
+	<!-- BOX 3 — incoming enquiries list -->
+	<div class="card">
+		<div class="card__head">
+			<h3>Enquiries</h3>
+			<button type="button" class="btn btn--primary btn--sm" id="create-lead"><i class="fa-solid fa-plus"></i> Create Lead</button>
+		</div>
+		<div class="card__body">
+			<div class="field" style="margin-bottom:12px"><input id="lead-search" placeholder="Search enquiries…"></div>
+			<div class="dir-list" id="lead-list"></div>
+		</div>
+	</div>
+</div>
+
+<script>window.csrf_token = "{{ frappe.session.csrf_token }}";</script>
+{% raw %}
+<script>
+(function () {
+	// Real Customers are loaded from ERPNext on init (see loadCustomers below).
+	var customers = [];
+
+	// POST a JSON body to a whitelisted method and return its `message` payload.
+	function callMethod(method, args) {
+		return fetch("/api/method/" + method, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"X-Frappe-CSRF-Token": window.csrf_token || "",
+				"Accept": "application/json"
+			},
+			body: JSON.stringify(args || {})
+		}).then(function (r) {
+			return r.json().then(function (data) {
+				if (!r.ok) {
+					var msg = (data && data._server_messages) || (data && data.exc) || r.statusText;
+					throw new Error(msg);
+				}
+				return data.message;
+			});
+		});
+	}
+
+	// Map a server Customer row to the shape the directory/360 UI expects.
+	function toUiCustomer(r) {
+		return {
+			id: r.name,
+			name: r.customer_name || r.name,
+			phone: r.mobile_no || "",
+			email: r.email_id || "",
+			plate: "—", model: "—", chassis: "—"
+		};
+	}
+
+	var SECTIONS = [
+		{ key: "jobcard", label: "Job Cards", icon: "fa-clipboard-list", cols: ["Job Card", "Date", "Vehicle", "Service", "Status", "Amount"] },
+		{ key: "order", label: "Orders", icon: "fa-cart-shopping", cols: ["Order No", "Date", "Items", "Total", "Status"] },
+		{ key: "invoice", label: "Invoices", icon: "fa-file-invoice-dollar", cols: ["Invoice", "Date", "Amount", "Paid", "Balance", "Status"] },
+		{ key: "payment", label: "Payments", icon: "fa-money-bill-wave", cols: ["Receipt", "Date", "Mode", "Amount", "Ref"] },
+		{ key: "vehicles", label: "Vehicles", icon: "fa-car", cols: ["Plate", "Make / Model", "Chassis", "Odometer", "Fuel"] },
+		{ key: "calls", label: "Calls", icon: "fa-phone", cols: ["Date", "Type", "Purpose", "Outcome", "By"] },
+		{ key: "complaints", label: "Complaints", icon: "fa-triangle-exclamation", cols: ["Date", "Complaint", "Severity", "Status"] }
+	];
+
+	function rowsFor(c, key) {
+		switch (key) {
+			case "jobcard": return [
+				["JC-2026-06-18-0011", "18 Jun 2026", c.plate, "General Service", "QC Pending", "AED 1,538.46"],
+				["JC-2026-05-12-0007", "12 May 2026", c.plate, "Repeat Service", "Completed", "AED 24,150.00"]];
+			case "order": return [
+				["SO-2026-0042", "17 Jun 2026", "3 items", "AED 1,820.00", "Confirmed"],
+				["SO-2026-0031", "02 May 2026", "1 item", "AED 350.00", "Delivered"]];
+			case "invoice": return [
+				["INV-2026-0088", "18 Jun 2026", "AED 1,615.38", "AED 0.00", "AED 1,615.38", "Unpaid"],
+				["INV-2026-0061", "13 May 2026", "AED 25,357.50", "AED 25,357.50", "AED 0.00", "Paid"]];
+			case "payment": return [
+				["RCPT-0123", "13 May 2026", "Bank Transfer", "AED 25,357.50", "INV-2026-0061"]];
+			case "vehicles": return [
+				[c.plate, c.model, c.chassis, "84,320 km", "Diesel"]];
+			case "calls": return [
+				["16 Jun 2026", "Outgoing", "Service reminder", "Booked", "Telecaller"],
+				["10 May 2026", "Incoming", "Complaint", "Escalated", "CCM"]];
+			case "complaints": return [
+				["16 Jun 2026", "AC not cooling after service", "High", "Escalated"],
+				["28 Apr 2026", "Delay in delivery", "Medium", "Resolved"]];
+			default: return [];
+		}
+	}
+
+	function variant(v) {
+		var m = {
+			"QC Pending": "badge--pending", "Completed": "badge--success", "New": "badge--new",
+			"Paid": "badge--success", "Unpaid": "badge--danger", "Confirmed": "badge--navy",
+			"Delivered": "badge--success", "Escalated": "badge--danger", "Resolved": "badge--success",
+			"Booked": "badge--success", "High": "badge--danger", "Critical": "badge--danger",
+			"Medium": "badge--pending", "Low": "badge--soft"
+		};
+		return m[v] || "badge--soft";
+	}
+
+	var dirList = document.getElementById("dir-list");
+	var dirDefault = document.getElementById("dir-default");
+	var dirSelected = document.getElementById("dir-selected");
+	var dirSections = document.getElementById("dir-sections");
+	var viewer = document.getElementById("viewer");
+	var viewerTitle = document.getElementById("viewer-title");
+	var current = null;
+
+	// ---------------------------------------------------------------
+	// Middle-panel state machine.
+	// States: "view" (customer 360 / enquiry detail — uses #viewer),
+	//         "lead" (#m-lead form), "customer" (#m-customer form).
+	// ---------------------------------------------------------------
+	var mLead = document.getElementById("m-lead");
+	var mCustomer = document.getElementById("m-customer");
+	var viewerTag = document.getElementById("viewer-tag");
+	var viewerClose = document.getElementById("viewer-close");
+	var middleState = "view";
+
+	function setMiddle(state, title) {
+		middleState = state;
+		var isForm = (state === "lead" || state === "customer");
+		viewer.style.display = (state === "view") ? "block" : "none";
+		mLead.style.display = (state === "lead") ? "block" : "none";
+		mCustomer.style.display = (state === "customer") ? "block" : "none";
+		viewerTag.style.display = isForm ? "none" : "";
+		viewerClose.style.display = isForm ? "" : "none";
+		if (title) viewerTitle.textContent = title;
+	}
+
+	// Return the middle panel to whatever the current customer context is.
+	function restoreMiddle() {
+		if (current) selectCustomer(current);
+		else {
+			viewerTitle.textContent = "Customer 360";
+			viewer.innerHTML = '<div class="empty">Select a customer on the left, then choose a section to view.</div>';
+			setMiddle("view");
+		}
+	}
+	viewerClose.addEventListener("click", restoreMiddle);
+
+	// ---- Box 1: customer directory ---------------------------------
+	function renderDirectory(filter) {
+		filter = (filter || "").toLowerCase();
+		var list = customers.filter(function (c) {
+			return !filter || c.name.toLowerCase().indexOf(filter) >= 0 || c.phone.indexOf(filter) >= 0 || c.id.toLowerCase().indexOf(filter) >= 0;
+		});
+		dirList.innerHTML = list.length ? list.map(function (c) {
+			return '<div class="dir-item" data-id="' + c.id + '">' +
+				'<div class="list-row__avatar">' + c.name[0] + '</div>' +
+				'<div><div class="nm">' + c.name + '</div><div class="ph">' + c.phone + '</div></div></div>';
+		}).join("") : '<div class="empty">No customers found.</div>';
+	}
+
+	function selectCustomer(c) {
+		current = c;
+		setMiddle("view");
+		dirDefault.style.display = "none";
+		dirSelected.style.display = "block";
+		document.getElementById("sel-avatar").textContent = c.name[0];
+		document.getElementById("sel-name").textContent = c.name;
+		document.getElementById("sel-phone").textContent = c.phone + " · " + c.id;
+		dirSections.innerHTML = SECTIONS.map(function (s) {
+			return '<button type="button" class="sec-btn" data-key="' + s.key + '">' +
+				'<i class="fa-solid ' + s.icon + '"></i> ' + s.label +
+				'<span class="count">' + rowsFor(c, s.key).length + '</span></button>';
+		}).join("");
+		showSection(SECTIONS[0].key); // default to Job Cards
+	}
+
+	function showSection(key) {
+		var s = SECTIONS.find(function (x) { return x.key === key; });
+		dirSections.querySelectorAll(".sec-btn").forEach(function (b) { b.classList.toggle("is-active", b.dataset.key === key); });
+		setMiddle("view", current.name.split(" ").slice(0, 2).join(" ") + " — " + s.label);
+		var rows = rowsFor(current, key);
+		if (!rows.length) { viewer.innerHTML = '<div class="empty">No ' + s.label.toLowerCase() + ' for this customer.</div>'; return; }
+		var statusCols = ["Status", "Severity"];
+		var thead = "<thead><tr>" + s.cols.map(function (c) { return "<th>" + c + "</th>"; }).join("") + "</tr></thead>";
+		var tbody = "<tbody>" + rows.map(function (r) {
+			return "<tr>" + r.map(function (cell, i) {
+				if (statusCols.indexOf(s.cols[i]) >= 0) return '<td><span class="badge ' + variant(cell) + '">' + cell + "</span></td>";
+				return "<td>" + cell + "</td>";
+			}).join("") + "</tr>";
+		}).join("") + "</tbody>";
+		viewer.innerHTML = '<div style="overflow:auto"><table class="table">' + thead + tbody + "</table></div>";
+	}
+
+	dirList.addEventListener("click", function (e) {
+		var item = e.target.closest("[data-id]"); if (!item) return;
+		selectCustomer(customers.find(function (c) { return c.id === item.dataset.id; }));
+	});
+	dirSections.addEventListener("click", function (e) {
+		var b = e.target.closest(".sec-btn"); if (!b) return;
+		showSection(b.dataset.key);
+	});
+	document.getElementById("dir-back").addEventListener("click", function () {
+		current = null;
+		dirSelected.style.display = "none";
+		dirDefault.style.display = "block";
+		restoreMiddle();
+	});
+	document.getElementById("dir-search").addEventListener("input", function () { renderDirectory(this.value); });
+
+	// ---- Box 3: incoming enquiries ---------------------------------
+	var leads = [
+		{ n: "Mohammed Ali", ph: "+971 50 221 8890", i: "AC Service", s: "New", sv: "badge--new", t: "Today 10:20" },
+		{ n: "Sahir Khan", ph: "+971 55 778 1020", i: "Body Shop estimate", s: "New", sv: "badge--new", t: "Today 09:05" },
+		{ n: "Lulu Hypermarket", ph: "+971 4 880 1133", i: "Fleet — 6 vehicles", s: "Follow-up", sv: "badge--pending", t: "Yesterday" },
+		{ n: "Priya Raj", ph: "+971 52 664 7781", i: "General Service", s: "New", sv: "badge--new", t: "Yesterday" },
+		{ n: "Gulf Cargo LLC", ph: "+971 6 552 9043", i: "Inspection", s: "Quoted", sv: "badge--navy", t: "18 Jun" }
+	];
+	var leadList = document.getElementById("lead-list");
+	function renderLeads(filter) {
+		filter = (filter || "").toLowerCase();
+		var list = leads.filter(function (l) { return !filter || l.n.toLowerCase().indexOf(filter) >= 0 || l.ph.indexOf(filter) >= 0 || l.i.toLowerCase().indexOf(filter) >= 0; });
+		leadList.innerHTML = list.length ? list.map(function (l) {
+			var idx = leads.indexOf(l);
+			return '<div class="dir-item" data-lead="' + idx + '">' +
+				'<div class="list-row__avatar" style="background:var(--navy)">' + l.n[0] + '</div>' +
+				'<div style="flex:1;min-width:0"><div class="nm">' + l.n + '</div><div class="ph">' + l.ph + ' · ' + l.i + '</div></div>' +
+				'<span class="badge ' + l.sv + '">' + l.s + '</span></div>';
+		}).join("") : '<div class="empty">No enquiries found.</div>';
+	}
+
+	// STATE D — enquiry detail in the middle panel.
+	function showEnquiry(l) {
+		setMiddle("view", "Enquiry — " + l.n);
+		var rows = [
+			["Contact", l.n], ["Phone", l.ph], ["Interest", l.i],
+			["Received", l.t], ["Status", '<span class="badge ' + l.sv + '">' + l.s + "</span>"]
+		];
+		viewer.innerHTML = '<div style="overflow:auto"><table class="table"><tbody>' +
+			rows.map(function (r) { return "<tr><th style=\"width:140px\">" + r[0] + "</th><td>" + r[1] + "</td></tr>"; }).join("") +
+			"</tbody></table></div>";
+	}
+	leadList.addEventListener("click", function (e) {
+		var item = e.target.closest("[data-lead]"); if (!item) return;
+		showEnquiry(leads[+item.dataset.lead]);
+	});
+	document.getElementById("lead-search").addEventListener("input", function () { renderLeads(this.value); });
+
+	function val(name) { var el = document.querySelector('[name=' + name + ']'); return el ? el.value.trim() : ""; }
+	function setVal(name, value) { var el = document.querySelector('[name=' + name + ']'); if (el) el.value = value || ""; }
+
+	// ---- Trigger the two inline forms in the middle panel ----------
+	document.getElementById("create-lead").addEventListener("click", function () {
+		setMiddle("lead", "New Lead / Enquiry");
+		resetLeadVehicle();
+		// Prefill customer details + show their vehicles as cards, if a customer is selected.
+		if (current) {
+			// Instant fill from the list row (no flash) …
+			setVal("e_name", current.name);
+			setVal("e_mobile", current.phone);
+			setVal("e_email", current.email);
+			setVal("e_address", "");
+			// … then complete with the authoritative record (incl. address + vehicles).
+			callMethod("garagedesk.api.front_office.get_customer_prefill", { customer: current.id })
+				.then(function (d) {
+					if (!d) return;
+					setVal("e_name", d.customer_name || current.name);
+					setVal("e_mobile", d.mobile_no || current.phone);
+					setVal("e_email", d.email_id || current.email);
+					setVal("e_address", d.address);
+					leadCustomerVehicles = d.vehicles || [];
+					if (!lAddVehChk.checked) renderLeadVehicleCards(leadCustomerVehicles);
+				}).catch(function () {});
+		}
+	});
+	document.getElementById("create-customer").addEventListener("click", function () {
+		setMiddle("customer", "New Customer");
+	});
+
+	// ---- Vehicle grids (customer form + lead form): options, cascade, toggles ----
+	var addVehChk = document.getElementById("c_add_vehicle");
+	var vehFields = document.getElementById("vehicle-fields");
+	var lAddVehChk = document.getElementById("l_add_vehicle");
+	var leadVehFields = document.getElementById("lead-vehicle-fields");
+	var leadVehCards = document.getElementById("lead-vehicle-cards");
+	var vehModels = []; // cached [{name, make, model_name}] for the cascades
+	var leadCustomerVehicles = []; // selected customer's vehicles (for Save & Job Card)
+	var selectedVehicleName = ""; // the one vehicle ticked in the lead cards
+	function selEl(name) { return document.querySelector('select[name="' + name + '"]'); }
+	function fillSelect(sel, items, placeholder) {
+		if (!sel) return;
+		sel.innerHTML = '<option value="">' + (placeholder || "Select") + "</option>" +
+			items.map(function (it) { return '<option value="' + it.value + '">' + it.label + "</option>"; }).join("");
+	}
+	// One vehicle grid = fields prefixed "v_" (customer) or "lv_" (lead).
+	function fillVehicleSelects(prefix, o) {
+		var toOpt = function (x) { return { value: x, label: x }; };
+		fillSelect(selEl(prefix + "make"), (o.makes || []).map(toOpt), "Select make");
+		fillSelect(selEl(prefix + "fuel"), (o.fuel_types || []).map(toOpt), "Select fuel type");
+		fillSelect(selEl(prefix + "emirate"), (o.plate_emirates || []).map(toOpt), "Select emirate");
+		fillSelect(selEl(prefix + "model"), [], "Select make first");
+	}
+	function wireMakeCascade(prefix) {
+		var mk = selEl(prefix + "make");
+		if (!mk) return;
+		mk.addEventListener("change", function () {
+			var chosen = this.value;
+			var opts = vehModels.filter(function (m) { return m.make === chosen; })
+				.map(function (m) { return { value: m.name, label: m.model_name }; });
+			fillSelect(selEl(prefix + "model"), opts, opts.length ? "Select model" : "No models for this make");
+		});
+	}
+	function loadVehicleOptions() {
+		return callMethod("garagedesk.api.front_office.get_vehicle_form_options", {}).then(function (o) {
+			o = o || {};
+			vehModels = o.models || [];
+			fillVehicleSelects("v_", o);
+			fillVehicleSelects("lv_", o);
+		}).catch(function () {});
+	}
+	function resetVehicleFields() { // customer form
+		if (addVehChk) addVehChk.checked = false;
+		if (vehFields) vehFields.style.display = "none";
+		fillSelect(selEl("v_model"), [], "Select make first");
+	}
+	function resetLeadVehicle() { // lead form
+		if (lAddVehChk) lAddVehChk.checked = false;
+		if (leadVehFields) leadVehFields.style.display = "none";
+		if (leadVehCards) { leadVehCards.style.display = ""; leadVehCards.innerHTML = ""; }
+		leadCustomerVehicles = [];
+		selectedVehicleName = "";
+		fillSelect(selEl("lv_model"), [], "Select make first");
+	}
+	function renderLeadVehicleCards(vehicles) {
+		if (!leadVehCards) return;
+		selectedVehicleName = "";
+		if (!vehicles || !vehicles.length) {
+			leadVehCards.innerHTML = '<div class="empty" style="padding:10px 0">No vehicles on file for this customer.</div>';
+			return;
+		}
+		leadVehCards.innerHTML = vehicles.map(function (v) {
+			var meta = [v.plate, v.fuel, v.odometer].filter(Boolean).join(" · ");
+			return '<label class="dir-item" style="cursor:pointer;gap:10px">' +
+				'<input type="checkbox" class="veh-pick" data-veh="' + v.name + '">' +
+				'<div class="list-row__avatar" style="background:var(--navy)"><i class="fa-solid fa-car"></i></div>' +
+				'<div><div class="nm">' + (v.title || v.name) + '</div><div class="ph">' + meta + "</div></div></label>";
+		}).join("");
+	}
+	// Single-select: ticking one vehicle unticks the rest.
+	if (leadVehCards) leadVehCards.addEventListener("change", function (e) {
+		if (!e.target.classList || !e.target.classList.contains("veh-pick")) return;
+		if (e.target.checked) {
+			leadVehCards.querySelectorAll(".veh-pick").forEach(function (c) { if (c !== e.target) c.checked = false; });
+			selectedVehicleName = e.target.dataset.veh;
+		} else {
+			selectedVehicleName = "";
+		}
+	});
+	if (addVehChk) addVehChk.addEventListener("change", function () {
+		vehFields.style.display = this.checked ? "block" : "none";
+	});
+	if (lAddVehChk) lAddVehChk.addEventListener("change", function () {
+		var on = this.checked;
+		if (leadVehFields) leadVehFields.style.display = on ? "block" : "none";
+		if (leadVehCards) leadVehCards.style.display = on ? "none" : "";
+	});
+	wireMakeCascade("v_");
+	wireMakeCascade("lv_");
+	loadVehicleOptions();
+
+	// ---- Save lead -> create ERPNext CRM Lead, refresh Box 3 -----------
+	function saveLead() {
+		var name = val("e_name"), mobile = val("e_mobile");
+		if (!name || !mobile) {
+			alert("Customer Name and Mobile Number are required.");
+			return Promise.reject();
+		}
+		// Optional new vehicle (only when "Add new vehicle" is ticked).
+		var vehicle = null;
+		if (lAddVehChk && lAddVehChk.checked) {
+			var vp = val("lv_plate"), ve = val("lv_emirate"), vmk = val("lv_make"),
+				vmd = val("lv_model"), vf = val("lv_fuel");
+			if (!vp || !ve || !vmk || !vmd || !vf) {
+				alert("Vehicle: Plate Number, Emirate, Make, Model and Fuel Type are required.");
+				return Promise.reject();
+			}
+			vehicle = {
+				plate: vp, emirate: ve, plate_code: val("lv_plate_code"),
+				make: vmk, model: vmd, year: val("lv_year"),
+				odometer: val("lv_odometer"), fuel_type: vf, vin: val("lv_vin")
+			};
+		}
+		return callMethod("garagedesk.api.front_office.create_lead", {
+			lead_name: name,
+			mobile_no: mobile,
+			email: val("e_email"),
+			address: val("e_address"),
+			customer: current ? current.id : null,
+			vehicle: vehicle,
+			selected_vehicle: selectedVehicleName || null
+		}).then(function (res) {
+			leads.unshift({ n: name, ph: mobile, i: vehicle ? (vehicle.make + " enquiry") : "New enquiry", s: "New", sv: "badge--new", t: "Just now" });
+			document.getElementById("enquiry-form").reset();
+			resetLeadVehicle();
+			renderLeads(""); document.getElementById("lead-search").value = "";
+			return res;
+		});
+	}
+	document.getElementById("save-lead").addEventListener("click", function () {
+		saveLead().then(function () { restoreMiddle(); }).catch(function (err) {
+			if (err && err.message) alert("Could not create lead: " + err.message);
+		});
+	});
+	document.getElementById("save-lead-jc").addEventListener("click", function () {
+		// Capture the details BEFORE saveLead() resets the form.
+		var cid = current ? current.id : "";
+		var cname = val("e_name") || (current ? current.name : "");
+		var mob = val("e_mobile");
+		var addingNew = !!(lAddVehChk && lAddVehChk.checked);
+		var newPlate = addingNew ? val("lv_plate") : "";
+		// The vehicle ticked in the cards (ignored when adding a brand-new one).
+		var selVeh = addingNew ? null : (leadCustomerVehicles.filter(function (v) { return v.name === selectedVehicleName; })[0] || null);
+		saveLead().then(function (res) {
+			var p = new URLSearchParams();
+			if (cid) p.set("customer", cid);
+			if (cname) p.set("customer_name", cname);
+			if (mob) p.set("mobile", mob);
+			// res.vehicle = newly-created or selected vehicle; label from whichever applies.
+			var vehId = (res && res.vehicle) || (selVeh && selVeh.name) || "";
+			var vehLabel = selVeh ? (selVeh.plate || selVeh.title) : newPlate;
+			if (vehId) p.set("vehicle", vehId);
+			if (vehLabel) p.set("vehicle_label", vehLabel);
+			window.location.href = "/a3-workshop/job-card/new?" + p.toString();
+		}).catch(function (err) {
+			if (err && err.message) alert("Could not create lead: " + err.message);
+		});
+	});
+
+	// ---- Save customer -> create in ERPNext, then refresh Box 1 -----
+	var saveCustomerBtn = document.getElementById("save-customer");
+	saveCustomerBtn.addEventListener("click", function () {
+		var name = val("c_name"), phone = val("c_phone");
+		if (!name || !phone) {
+			alert("Customer Name and Mobile Number are required.");
+			return;
+		}
+		// Optional vehicle: only when "Add Vehicle Details" is ticked.
+		var vehicle = null;
+		if (addVehChk && addVehChk.checked) {
+			var vp = val("v_plate"), ve = val("v_emirate"), vmk = val("v_make"),
+				vmd = val("v_model"), vf = val("v_fuel");
+			if (!vp || !ve || !vmk || !vmd || !vf) {
+				alert("Vehicle: Plate Number, Emirate, Make, Model and Fuel Type are required.");
+				return;
+			}
+			vehicle = {
+				plate: vp, emirate: ve, plate_code: val("v_plate_code"),
+				make: vmk, model: vmd, year: val("v_year"),
+				odometer: val("v_odometer"), fuel_type: vf, vin: val("v_vin")
+			};
+		}
+		saveCustomerBtn.disabled = true;
+		callMethod("garagedesk.api.front_office.create_customer", {
+			customer_name: name,
+			mobile_no: phone,
+			email: val("c_email"),
+			address: val("c_address"),
+			city: val("c_city"),
+			vehicle: vehicle
+		}).then(function (res) {
+			var cust = toUiCustomer(res);
+			// Drop any existing row for this customer (dedupe-by-mobile may reuse one).
+			customers = customers.filter(function (c) { return c.id !== cust.id; });
+			customers.unshift(cust);
+			document.getElementById("customer-form").reset();
+			resetVehicleFields();
+			renderDirectory(""); document.getElementById("dir-search").value = "";
+			selectCustomer(cust); // jump straight into the new customer's 360 view
+		}).catch(function (err) {
+			alert("Could not create customer: " + (err && err.message ? err.message : err));
+		}).then(function () {
+			saveCustomerBtn.disabled = false;
+		});
+	});
+
+	// ---- Initial load: pull real Customers for the LHS directory ----
+	function loadCustomers() {
+		return callMethod("garagedesk.api.front_office.list_customers", {}).then(function (rows) {
+			customers = (rows || []).map(toUiCustomer);
+			renderDirectory("");
+		}).catch(function () {
+			dirList.innerHTML = '<div class="empty">Could not load customers.</div>';
+		});
+	}
+
+	loadCustomers();
+	renderLeads("");
+})();
+</script>
+{% endraw %}
+{% endblock %}

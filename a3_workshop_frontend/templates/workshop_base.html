@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>{{ title or "Workshop" }} | Service Center CRM</title>
+	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+	{{ include_style('workshop.bundle.css') }}
+</head>
+<body class="workshop">
+	{%- set nav_items = [
+		{"label": "Home", "route": "/a3-workshop", "icon": "fa-gauge-high"},
+		{"label": "Daily Planner", "route": "/a3-workshop/daily-planner", "icon": "fa-calendar-day"},
+		{"label": "Front Office", "route": "/a3-workshop/front-office", "icon": "fa-bell-concierge"},
+		{"label": "Job Cards", "route": "/a3-workshop/job-cards", "icon": "fa-clipboard-list"},
+		{"label": "Vehicles", "route": "/a3-workshop/vehicles", "icon": "fa-car"},
+		{"label": "Customers", "route": "/a3-workshop/customers", "icon": "fa-users"},
+		{"label": "Telecalling", "route": "/a3-workshop/telecalling", "icon": "fa-phone-volume"},
+		{"label": "Complaints", "route": "/a3-workshop/complaints", "icon": "fa-triangle-exclamation"},
+		{"label": "Technician Board", "route": "/a3-workshop/technician-board", "icon": "fa-screwdriver-wrench"},
+		{"label": "Manufacturing", "route": "/a3-workshop/manufacturing", "icon": "fa-industry"},
+	] -%}
+	{%- set current_path = (frappe.request.path if frappe.request else "/a3-workshop").rstrip("/") -%}
+	{%- set uname = (frappe.session.user or "User") -%}
+	{%- set uinitial = uname[0] if uname and uname != "Guest" else "U" -%}
+
+	<div class="workshop-shell">
+		<aside class="workshop-sidebar">
+			<a class="workshop-logo" href="/a3-workshop" title="Redlines International">
+				<img src="/assets/a3_workshop_frontend/images/redline-logo.png" alt="Redlines International">
+			</a>
+			<div class="workshop-avatar">{{ uinitial }}</div>
+			<div class="workshop-userblock">
+				<div class="name">{{ (frappe.db.get_value("User", uname, "first_name") if uname != "Guest" else "User") or uname }}</div>
+				<div class="role">System User</div>
+			</div>
+
+			<nav class="workshop-nav">
+				{%- for item in nav_items %}
+				{%- set is_active = (current_path == item.route) or (item.route != "/a3-workshop" and current_path.startswith(item.route)) %}
+				<a class="workshop-nav-item{% if is_active %} is-active{% endif %}" href="{{ item.route }}">
+					<i class="fa-solid {{ item.icon }}"></i><span>{{ item.label }}</span>
+				</a>
+				{%- endfor %}
+				<a class="workshop-nav-item workshop-nav-item--logout" href="/?cmd=web_logout">
+					<i class="fa-solid fa-right-from-bracket"></i><span>Logout</span>
+				</a>
+			</nav>
+		</aside>
+
+		<div class="workshop-main">
+			{% block topbar %}
+			<header class="workshop-topbar">
+				<div class="workshop-topbar__title">
+					<span class="icon"><i class="fa-solid {{ page_icon or 'fa-table-columns' }}"></i></span>
+					<div>
+						<h1>{{ title or "Workshop" }}</h1>
+						{% if subtitle %}<div class="sub">{{ subtitle }}</div>{% endif %}
+					</div>
+				</div>
+				<div class="workshop-breadcrumb">
+					<a href="/a3-workshop">Home</a>{% if breadcrumb %}<span class="sep">›</span><b>{{ breadcrumb }}</b>{% endif %}
+				</div>
+			</header>
+			{% endblock %}
+
+			<main class="workshop-content">
+				{% block page_content %}{% endblock %}
+			</main>
+		</div>
+	</div>
+</body>
+</html>

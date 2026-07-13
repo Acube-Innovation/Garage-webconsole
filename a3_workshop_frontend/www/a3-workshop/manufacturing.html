@@ -1,0 +1,213 @@
+{% extends "templates/workshop_base.html" %}
+{% from "templates/macros/workshop.html" import field %}
+
+{% block page_content %}
+
+<!-- production KPIs -->
+<div class="tc-stats">
+	<div class="stat-card stat-card--sm"><div class="label">Open Work Orders</div><div class="value" id="s-open">5</div></div>
+	<div class="stat-card stat-card--sm stat-card--navy"><div class="label">In Production</div><div class="value" id="s-prod">3</div></div>
+	<div class="stat-card stat-card--sm stat-card--purple"><div class="label">Ready for Delivery</div><div class="value" id="s-ready">2</div></div>
+	<div class="stat-card stat-card--sm"><div class="label">Delivered (MTD)</div><div class="value" id="s-delivered">7</div></div>
+	<div class="stat-card stat-card--sm stat-card--navy"><div class="label">WIP Value</div><div class="value">AED 84.2k</div></div>
+	<div class="stat-card stat-card--sm stat-card--purple"><div class="label">On-time %</div><div class="value">92%</div></div>
+</div>
+
+<div class="mfg-grid">
+	<!-- Work Orders list -->
+	<div class="card"><div class="card__head">
+			<h3>Work Orders</h3>
+			<button type="button" class="btn btn--primary btn--sm" id="new-wo"><i class="fa-solid fa-plus"></i> New</button>
+		</div>
+		<div class="card__body">
+			<div class="field" style="margin-bottom:12px"><input id="wo-search" placeholder="Search body type / customer…"></div>
+			<div class="mfg-list" id="wo-list"></div>
+		</div>
+	</div>
+
+	<!-- Work Order lifecycle detail -->
+	<div class="card"><div class="card__head"><h3 id="wo-title">Production Detail</h3><span class="readonly-tag" id="wo-tag">select a work order</span></div>
+		<div class="card__body" id="wo-detail">
+			<div class="empty">Select a work order to manage its BOM, costing and delivery — all on this page.</div>
+		</div>
+	</div>
+</div>
+
+<!-- New Work Order modal -->
+<div class="modal-overlay" id="wo-modal" role="dialog" aria-modal="true">
+	<div class="modal">
+		<div class="modal__head">
+			<div><h3>New Work Order</h3><div class="sub">Start a truck body build</div></div>
+			<button type="button" class="modal__close" data-close><i class="fa-solid fa-xmark"></i></button>
+		</div>
+		<div class="modal__body">
+			<form class="form-grid" id="wo-form">
+				{{ field("Truck Body Type","wo_item",type="select",required=True,options=["Dry Cargo Box Body — 20ft","Refrigerated (Reefer) Body — 16ft","Flatbed Body — 40ft","Tipper / Dump Body — 12ft","Curtain-side Body — 24ft"]) }}
+				{{ field("Customer","wo_customer",placeholder="Link to customer") }}
+				{{ field("Quantity","wo_qty",type="number",value="1") }}
+				{{ field("BOM","wo_bom",placeholder="BOM-TRUCKBODY-001") }}
+				{{ field("Target Delivery","wo_target",type="date") }}
+				{{ field("Warehouse","wo_wh",type="select",options=["Body Shop WIP","Fabrication Store","Finished Goods"]) }}
+			</form>
+		</div>
+		<div class="modal__foot">
+			<button type="button" class="btn btn--outline" data-close>Cancel</button>
+			<button type="button" class="btn btn--primary" id="wo-create"><i class="fa-solid fa-check"></i> Create Work Order</button>
+		</div>
+	</div>
+</div>
+
+{% raw %}
+<script>
+(function () {
+	var STAGES = ["Material", "Fabrication", "Assembly", "Paint", "QC", "Delivery"];
+
+	var BASE_MAT = [
+		["MS Sheet 2mm", "45 sqm", "AED 38.00", "AED 1,710.00"],
+		["MS Square Tube 50x50", "120 m", "AED 12.00", "AED 1,440.00"],
+		["MS Angle 40x40", "80 m", "AED 9.50", "AED 760.00"],
+		["Marine Plywood 18mm", "22 sheet", "AED 95.00", "AED 2,090.00"],
+		["Hardware (hinges, locks, bolts)", "1 set", "AED 980.00", "AED 980.00"],
+		["Primer & PU Paint", "1 set", "AED 1,250.00", "AED 1,250.00"]
+	];
+	var EXTRA = {
+		reefer: [["PU Insulation Panels 75mm", "30 sqm", "AED 145.00", "AED 4,350.00"], ["Refrigeration Unit Mount", "1 set", "AED 2,500.00", "AED 2,500.00"]],
+		curtain: [["PVC Tarpaulin Curtain", "1 set", "AED 1,800.00", "AED 1,800.00"]],
+		flatbed: [["Container Twist Locks", "8 pcs", "AED 120.00", "AED 960.00"]],
+		tipper: [["Hydraulic Tipping Cylinder", "1 set", "AED 3,200.00", "AED 3,200.00"]]
+	};
+	var BASE_OPS = [
+		["Cutting & Bending", "Fabrication Bay 1", "18", "AED 35", "AED 630.00"],
+		["Welding & Frame Assembly", "Fabrication Bay 2", "26", "AED 40", "AED 1,040.00"],
+		["Floor & Panel Fitting", "Assembly Line", "20", "AED 35", "AED 700.00"],
+		["Painting & Finishing", "Paint Booth", "12", "AED 38", "AED 456.00"],
+		["Electrical & Lights", "Assembly Line", "6", "AED 42", "AED 252.00"],
+		["QC & Road Test", "QC Bay", "4", "AED 45", "AED 180.00"]
+	];
+
+	var orders = [
+		{ id: "MFG-WO-0001", type: "", item: "Dry Cargo Box Body — 20ft", customer: "AAS Shipping LLC", qty: 1, status: "In Production", sv: "badge--progress", stage: 1, delivered: false, started: "18 Jun 2026", target: "05 Jul 2026", warehouse: "Body Shop WIP", bom: "BOM-TRUCKBODY-DRY-001", costs: { rm: "AED 8,230.00", op: "AED 3,258.00", add: "AED 800.00", total: "AED 12,288.00", unit: "AED 12,288.00" } },
+		{ id: "MFG-WO-0002", type: "reefer", item: "Refrigerated (Reefer) Body — 16ft", customer: "District Cooling Company", qty: 1, status: "QC", sv: "badge--pending", stage: 4, delivered: false, started: "10 Jun 2026", target: "28 Jun 2026", warehouse: "Body Shop WIP", bom: "BOM-TRUCKBODY-REEFER-002", costs: { rm: "AED 15,080.00", op: "AED 3,258.00", add: "AED 1,200.00", total: "AED 19,538.00", unit: "AED 19,538.00" } },
+		{ id: "MFG-WO-0003", type: "flatbed", item: "Flatbed Body — 40ft", customer: "Gulf Cargo LLC", qty: 2, status: "Material Request", sv: "badge--navy", stage: 0, delivered: false, started: "22 Jun 2026", target: "15 Jul 2026", warehouse: "Fabrication Store", bom: "BOM-TRUCKBODY-FLAT-003", costs: { rm: "AED 9,190.00", op: "AED 3,258.00", add: "AED 600.00", total: "AED 13,048.00", unit: "AED 6,524.00" } },
+		{ id: "MFG-WO-0004", type: "tipper", item: "Tipper / Dump Body — 12ft", customer: "Daat Logistics L.L.C", qty: 1, status: "Delivered", sv: "badge--success", stage: 5, delivered: true, started: "01 Jun 2026", target: "20 Jun 2026", warehouse: "Finished Goods", bom: "BOM-TRUCKBODY-TIP-004", costs: { rm: "AED 11,430.00", op: "AED 3,258.00", add: "AED 900.00", total: "AED 15,588.00", unit: "AED 15,588.00" } },
+		{ id: "MFG-WO-0005", type: "curtain", item: "Curtain-side Body — 24ft", customer: "Aaber Facilities Management", qty: 1, status: "Assembly", sv: "badge--progress", stage: 2, delivered: false, started: "16 Jun 2026", target: "08 Jul 2026", warehouse: "Body Shop WIP", bom: "BOM-TRUCKBODY-CURT-005", costs: { rm: "AED 10,030.00", op: "AED 3,258.00", add: "AED 700.00", total: "AED 13,988.00", unit: "AED 13,988.00" } }
+	];
+
+	function mat(o) { return BASE_MAT.concat(EXTRA[o.type] || []); }
+	function progress(o) { return o.delivered ? 100 : Math.round((o.stage / STAGES.length) * 100); }
+
+	var listEl = document.getElementById("wo-list");
+	var detailEl = document.getElementById("wo-detail");
+	var titleEl = document.getElementById("wo-title");
+	var tagEl = document.getElementById("wo-tag");
+	var current = null, search = "";
+
+	function renderList() {
+		var rows = orders.filter(function (o) {
+			return !search || (o.item + " " + o.customer + " " + o.id).toLowerCase().indexOf(search) >= 0;
+		});
+		listEl.innerHTML = rows.map(function (o) {
+			return '<div class="tc-row' + (current === o.id ? ' is-active' : '') + '" data-id="' + o.id + '">' +
+				'<div class="row-between"><div class="list-row__title">' + o.item + '</div><span class="badge ' + o.sv + '">' + o.status + '</span></div>' +
+				'<div class="sub">' + o.id + ' · ' + o.customer + ' · Qty ' + o.qty + '</div>' +
+				'<div class="bar"><span style="width:' + progress(o) + '%"></span></div>' +
+				'<div class="muted" style="font-size:11px;margin-top:5px">' + (o.delivered ? "Delivered" : STAGES[o.stage]) + ' · ' + progress(o) + '%</div></div>';
+		}).join("") || '<div class="empty">No work orders.</div>';
+	}
+
+	function stepperHtml(o) {
+		var h = '<div class="card" style="box-shadow:none;background:var(--bg)"><div class="stepper stepper--read">';
+		STAGES.forEach(function (s, i) {
+			var cls = (o.delivered || i < o.stage) ? "is-done" : (i === o.stage ? "is-active" : "");
+			h += '<div class="step ' + cls + '"><div class="step__dot">' + ((o.delivered || i < o.stage) ? '<i class="fa-solid fa-check"></i>' : (i + 1)) + '</div><div class="step__label">' + s + '</div></div>';
+			if (i < STAGES.length - 1) h += '<div class="step__line ' + ((o.delivered || i < o.stage) ? "is-done" : "") + '"></div>';
+		});
+		return h + '</div></div>';
+	}
+
+	function table(cols, rows) {
+		return '<div style="overflow:auto"><table class="table"><thead><tr>' + cols.map(function (c) { return "<th>" + c + "</th>"; }).join("") +
+			'</tr></thead><tbody>' + rows.map(function (r) { return "<tr>" + r.map(function (c) { return "<td>" + c + "</td>"; }).join("") + "</tr>"; }).join("") + "</tbody></table></div>";
+	}
+
+	function kv(pairs) { return pairs.map(function (p) { return '<div class="kv-row"><span class="muted">' + p[0] + '</span><b style="text-align:right">' + p[1] + '</b></div>'; }).join(""); }
+
+	function actionBtn(o) {
+		if (o.delivered) return '<button class="btn btn--outline" style="width:100%;justify-content:center;margin-top:14px" disabled><i class="fa-solid fa-circle-check"></i> Delivered</button>';
+		if (o.stage >= STAGES.length - 1) return '<button class="btn btn--primary" style="width:100%;justify-content:center;margin-top:14px" data-deliver="' + o.id + '"><i class="fa-solid fa-truck-ramp-box"></i> Deliver Finished Goods</button>';
+		return '<button class="btn btn--primary" style="width:100%;justify-content:center;margin-top:14px" data-advance="' + o.id + '"><i class="fa-solid fa-arrow-right"></i> Move to ' + STAGES[o.stage + 1] + '</button>';
+	}
+
+	function renderDetail(o) {
+		titleEl.textContent = o.id;
+		tagEl.textContent = o.item;
+		detailEl.innerHTML =
+			'<div class="row-between" style="margin-bottom:14px"><div><div style="font-weight:800;font-size:16px">' + o.item + '</div>' +
+				'<div class="muted">' + o.customer + ' · Qty ' + o.qty + '</div></div><span class="badge ' + o.sv + '">' + o.status + '</span></div>' +
+			stepperHtml(o) +
+			'<div class="fieldset-title">Work Order</div>' +
+			kv([["Item / Body Type", o.item], ["Quantity", o.qty], ["Customer", o.customer], ["BOM", o.bom], ["Started", o.started], ["Target Delivery", o.target], ["WIP Warehouse", o.warehouse]]) +
+			'<div class="fieldset-title">BOM — Raw Materials</div>' +
+			table(["Item", "Qty", "Rate", "Amount"], mat(o)) +
+			'<div class="fieldset-title">BOM — Operations</div>' +
+			table(["Operation", "Workstation", "Hrs", "Rate / hr", "Cost"], BASE_OPS) +
+			'<div class="fieldset-title">Costing</div>' +
+			kv([["Raw Material Cost", o.costs.rm], ["Operating Cost", o.costs.op], ["Additional Cost", o.costs.add]]) +
+			'<div class="totals"><div class="row-between"><span class="muted">Total Production Cost</span><span>' + o.costs.total + '</span></div>' +
+				'<div class="row-between grand"><span>Cost per Unit</span><span>' + o.costs.unit + '</span></div></div>' +
+			'<div class="fieldset-title">Finished Goods & Delivery</div>' +
+			kv([
+				["Produced", (o.delivered ? o.qty : (o.stage >= STAGES.length - 1 ? o.qty : 0)) + " / " + o.qty],
+				["Manufacture Entry", o.delivered ? "STE-MFG-" + o.id.slice(-4) : "—"],
+				["Delivery Note", o.delivered ? "DN-" + o.id.slice(-4) : "—"],
+				["Delivery Status", o.delivered ? "Delivered" : (o.stage >= STAGES.length - 1 ? "Ready for delivery" : "In production")]
+			]) +
+			actionBtn(o);
+	}
+
+	function byId(id) { return orders.filter(function (o) { return o.id === id; })[0]; }
+	function select(id) { current = id; renderList(); renderDetail(byId(id)); }
+	function bump(id, by) { var el = document.getElementById(id); if (el) el.textContent = (parseInt(el.textContent) || 0) + by; }
+
+	listEl.addEventListener("click", function (e) {
+		var row = e.target.closest("[data-id]"); if (row) select(row.dataset.id);
+	});
+	detailEl.addEventListener("click", function (e) {
+		var adv = e.target.closest("[data-advance]");
+		var del = e.target.closest("[data-deliver]");
+		if (adv) { var o = byId(adv.dataset.advance); o.stage++; o.status = STAGES[o.stage]; o.sv = (o.stage === 4 ? "badge--pending" : "badge--progress"); select(o.id); }
+		else if (del) { var d = byId(del.dataset.deliver); d.delivered = true; d.status = "Delivered"; d.sv = "badge--success"; bump("s-delivered", 1); bump("s-ready", -1); select(d.id); }
+	});
+	document.getElementById("wo-search").addEventListener("input", function () { search = this.value.toLowerCase(); renderList(); });
+
+	// New Work Order modal
+	var modal = document.getElementById("wo-modal");
+	function openModal() { document.getElementById("wo-form").reset(); modal.classList.add("is-open"); document.body.style.overflow = "hidden"; }
+	function closeModal() { modal.classList.remove("is-open"); document.body.style.overflow = ""; }
+	document.getElementById("new-wo").addEventListener("click", openModal);
+	modal.querySelectorAll("[data-close]").forEach(function (b) { b.addEventListener("click", closeModal); });
+	modal.addEventListener("click", function (e) { if (e.target === modal) closeModal(); });
+	document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeModal(); });
+	document.getElementById("wo-create").addEventListener("click", function () {
+		var item = document.querySelector('[name=wo_item]').value || "Dry Cargo Box Body — 20ft";
+		var type = /reefer/i.test(item) ? "reefer" : /curtain/i.test(item) ? "curtain" : /flatbed/i.test(item) ? "flatbed" : /tipper/i.test(item) ? "tipper" : "";
+		var n = String(orders.length + 1).padStart(4, "0");
+		var o = {
+			id: "MFG-WO-" + n, type: type, item: item,
+			customer: document.querySelector('[name=wo_customer]').value || "New Customer",
+			qty: parseInt(document.querySelector('[name=wo_qty]').value) || 1,
+			status: "Material Request", sv: "badge--navy", stage: 0, delivered: false,
+			started: "Today", target: document.querySelector('[name=wo_target]').value || "—",
+			warehouse: document.querySelector('[name=wo_wh]').value || "Body Shop WIP",
+			bom: document.querySelector('[name=wo_bom]').value || "BOM-TRUCKBODY-" + n,
+			costs: { rm: "AED 0.00", op: "AED 0.00", add: "AED 0.00", total: "AED 0.00", unit: "AED 0.00" }
+		};
+		orders.unshift(o); bump("s-open", 1); closeModal(); select(o.id);
+	});
+
+	renderList();
+	select(orders[0].id);
+})();
+</script>
+{% endraw %}
+{% endblock %}
