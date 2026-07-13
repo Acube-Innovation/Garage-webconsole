@@ -1,5 +1,4 @@
 {% extends "templates/workshop_base.html" %}
-{% from "templates/macros/workshop.html" import badge %}
 
 {% block page_content %}
 <div class="toolbar">
@@ -10,18 +9,170 @@
 </div>
 <div class="list-rows">
 	{%- for v in vehicles %}
-	<div class="list-row" style="grid-template-columns:2fr 1.4fr 1.4fr 1fr auto">
+	<div class="list-row" style="grid-template-columns:2fr 1.6fr 1.4fr auto">
 		<div class="list-row__party">
 			<div class="list-row__avatar" style="background:var(--navy)"><i class="fa-solid fa-car"></i></div>
-			<div><div class="list-row__title">{{ v.title }}</div><div class="list-row__meta">Plate: {{ v.plate }}<br>Chassis: {{ v.chassis }}</div></div>
+			<div>
+				<div class="list-row__title">{{ v.model }}</div>
+				<div class="list-row__meta">Plate: {{ v.plate }}<br>Chassis: {{ v.chassis }}</div>
+			</div>
 		</div>
-		<div class="list-row__col"><div class="k">Customer</div><div style="font-weight:600">{{ v.customer }}</div><div class="muted">{{ v.customer_phone }}</div><div class="muted">{{ v.customer_location }}</div></div>
-		<div class="list-row__col"><div class="k">Odometer</div><div style="font-weight:600">{{ v.odometer }}</div><div class="muted">{{ v.fuel }}</div></div>
-		<div>{{ badge(v.status, v.status_variant) }}</div>
-		<a class="btn btn--primary btn--sm" href="/app/vehicle/{{ v.name }}">View Details</a>
+		<div class="list-row__col">
+			<div class="k">Customer</div>
+			<div style="font-weight:600">{{ v.customer }}</div>
+			<div class="muted">{% if v.customer_contact_is_email %}<i class="fa-solid fa-envelope"></i> {% elif v.customer_contact != '—' %}<i class="fa-solid fa-phone"></i> {% endif %}{{ v.customer_contact }}</div>
+		</div>
+		<div class="list-row__col">
+			<div class="k">Odometer</div>
+			<div style="font-weight:600">{{ v.odometer }}</div>
+			<div class="muted">{{ v.fuel }}</div>
+		</div>
+		<button type="button" class="btn btn--primary btn--sm" data-view="{{ v.name }}">View Details</button>
 	</div>
 	{%- else %}
 	<div class="empty">{% if search %}No vehicles match "{{ search }}".{% else %}No vehicles yet. Register one, or add a vehicle while creating a customer in Front Office.{% endif %}</div>
 	{%- endfor %}
 </div>
+
+<!-- View Details modal -->
+<div class="modal-overlay" id="vehicle-modal" role="dialog" aria-modal="true" aria-labelledby="vehicle-modal-title">
+	<div class="modal">
+		<div class="modal__head">
+			<div><h3 id="vehicle-modal-title">Vehicle Details</h3><div class="sub" id="vehicle-modal-sub">—</div></div>
+			<button type="button" class="modal__close" data-close aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+		</div>
+		<div class="modal__body" id="vehicle-modal-body">
+			<div class="empty">Loading…</div>
+		</div>
+		<div class="modal__foot">
+			<a class="btn btn--outline btn--sm" id="vehicle-open-desk" href="#" target="_blank"><i class="fa-solid fa-up-right-from-square"></i> Open in Desk</a>
+			<button type="button" class="btn btn--primary btn--sm" data-close>Close</button>
+		</div>
+	</div>
+</div>
+
+<style>
+	.vd-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:14px 22px; }
+	@media (max-width:640px){ .vd-grid { grid-template-columns:1fr; } }
+	.vd-item .k { color:var(--muted); font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
+	.vd-item .v { font-weight:600; margin-top:2px; word-break:break-word; }
+	.vd-section-title { font-size:12px; font-weight:800; letter-spacing:.04em; text-transform:uppercase;
+		color:var(--muted); margin:20px 0 12px; }
+	.vd-photos { display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:12px; }
+	.vd-photo { border:1px solid var(--border); border-radius:var(--radius-sm,8px); overflow:hidden;
+		background:var(--bg); display:block; text-decoration:none; color:inherit; }
+	.vd-photo img { width:100%; height:100px; object-fit:cover; display:block; }
+	.vd-photo .doc { display:flex; flex-direction:column; align-items:center; justify-content:center;
+		height:100px; gap:8px; color:var(--muted); }
+	.vd-photo .cap { padding:6px 8px; font-size:11px; color:var(--muted); overflow:hidden;
+		text-overflow:ellipsis; white-space:nowrap; }
+</style>
+
+<script>window.csrf_token = "{{ frappe.session.csrf_token }}";</script>
+{% raw %}
+<script>
+(function () {
+	function callMethod(method, args) {
+		return fetch("/api/method/" + method, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"X-Frappe-CSRF-Token": window.csrf_token || "",
+				"Accept": "application/json"
+			},
+			body: JSON.stringify(args || {})
+		}).then(function (r) {
+			return r.json().then(function (data) {
+				if (!r.ok) { throw new Error((data && data.exc) || r.statusText); }
+				return data.message;
+			});
+		});
+	}
+	function esc(s) {
+		return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+			return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+		});
+	}
+
+	var overlay = document.getElementById("vehicle-modal");
+	var body = document.getElementById("vehicle-modal-body");
+	var sub = document.getElementById("vehicle-modal-sub");
+	var deskLink = document.getElementById("vehicle-open-desk");
+
+	function open() { overlay.classList.add("is-open"); }
+	function close() { overlay.classList.remove("is-open"); }
+	overlay.querySelectorAll("[data-close]").forEach(function (b) { b.addEventListener("click", close); });
+	overlay.addEventListener("click", function (e) { if (e.target === overlay) close(); });
+	document.addEventListener("keydown", function (e) { if (e.key === "Escape") close(); });
+
+	function item(label, value) {
+		if (value === "" || value == null) return "";
+		return '<div class="vd-item"><div class="k">' + esc(label) + '</div><div class="v">' + esc(value) + '</div></div>';
+	}
+
+	function render(d) {
+		sub.textContent = (d.model || d.name || "") + (d.plate ? "  •  " + d.plate : "");
+		deskLink.href = "/app/vehicle/" + encodeURIComponent(d.name);
+
+		var odo = d.odometer ? (Number(d.odometer).toLocaleString() + " " + (d.odometer_uom || "km")) : "";
+
+		var grid = "";
+		grid += item("Make / Model", d.model);
+		grid += item("Plate Number", d.plate);
+		grid += item("Chassis / VIN", d.chassis_no);
+		grid += item("Engine Number", d.engine);
+		grid += item("Odometer", odo);
+		grid += item("Fuel Type", d.fuel_type);
+		grid += item("Transmission", d.transmission);
+		grid += item("Year", d.year);
+		grid += item("Color", d.color);
+
+		var cust = d.customer || {};
+		var custGrid = "";
+		custGrid += item("Name", d.customer_name || cust.name);
+		custGrid += item("Phone", cust.phone);
+		custGrid += item("Email", cust.email);
+
+		var html = '<div class="vd-grid">' + grid + "</div>";
+		if (custGrid) {
+			html += '<div class="vd-section-title">Owner / Customer</div>';
+			html += '<div class="vd-grid">' + custGrid + "</div>";
+		}
+
+		var atts = d.attachments || [];
+		html += '<div class="vd-section-title">Photos &amp; Documents (' + atts.length + ")</div>";
+		if (!atts.length) {
+			html += '<div class="muted" style="font-size:13px">No attachments for this vehicle.</div>';
+		} else {
+			html += '<div class="vd-photos">' + atts.map(function (a) {
+				var inner;
+				if (a.is_image) {
+					inner = '<img src="' + esc(a.file_url) + '" alt="' + esc(a.file_name) + '">';
+				} else {
+					inner = '<div class="doc"><i class="fa-solid fa-file-lines" style="font-size:26px"></i></div>';
+				}
+				return '<a class="vd-photo" href="' + esc(a.file_url) + '" target="_blank" rel="noopener">' +
+					inner + '<div class="cap">' + esc(a.file_name) + "</div></a>";
+			}).join("") + "</div>";
+		}
+		body.innerHTML = html;
+	}
+
+	document.querySelectorAll("[data-view]").forEach(function (b) {
+		b.addEventListener("click", function () {
+			var name = b.getAttribute("data-view");
+			body.innerHTML = '<div class="empty">Loading…</div>';
+			sub.textContent = "—";
+			open();
+			callMethod("garagedesk.api.vehicle.get_vehicle", { name: name })
+				.then(render)
+				.catch(function (err) {
+					body.innerHTML = '<div class="empty">Could not load vehicle details.<br><span class="muted">' +
+						esc(err && err.message ? err.message : err) + "</span></div>";
+				});
+		});
+	});
+})();
+</script>
+{% endraw %}
 {% endblock %}
