@@ -188,6 +188,7 @@
 <script>
 (function () {
 	var TOTAL = 5, cur = 1;
+	var isEditing = false; // true when the wizard was opened on an existing card (?id=)
 	var steps = document.querySelectorAll('#wizard-stepper .step');
 	var lines = document.querySelectorAll('#wizard-stepper .step__line');
 	var tabs = document.querySelectorAll('.wizard-tab');
@@ -204,7 +205,7 @@
 		lines.forEach(function (l) { l.classList.toggle('is-done', +l.dataset.line < cur); });
 		prevBtn.style.visibility = cur === 1 ? 'hidden' : 'visible';
 		nextBtn.innerHTML = cur === TOTAL
-			? '<i class="fa-solid fa-check"></i> Create Job Card'
+			? '<i class="fa-solid fa-check"></i> ' + (isEditing ? 'Update Job Card' : 'Create Job Card')
 			: 'Next <i class="fa-solid fa-arrow-right"></i>';
 		if (cur === 4) sizeCanvas();
 	}
@@ -358,8 +359,48 @@
 	nextBtn.addEventListener('click', function () { saveJobCard(true); });
 	document.getElementById('wiz-save').addEventListener('click', function () { saveJobCard(false); });
 
-	loadJobCardOptions();
-	prefillFromUrl();
+	// Options first (so advisor / service / technician dropdowns exist), then either
+	// load an existing card for editing (?id=) or prefill from a lead's Save & Job Card.
+	loadJobCardOptions().then(function () {
+		if (qparam("id")) loadJobCard(qparam("id"));
+		else prefillFromUrl();
+	});
+
+	// Load a saved Workshop Job Card into every tab for editing.
+	function loadJobCard(id) {
+		return callMethod("garagedesk.api.front_office.get_job_card", { name: id }).then(function (jc) {
+			jobCardName = id;
+			setVal("job_no", id);
+			// Tab 1 — Customer Details
+			setVal("customer_id", jc.customer); setVal("customer", jc.customer_name);
+			setVal("vehicle_id", jc.vehicle); setVal("vehicle", jc.vehicle_label);
+			setVal("mobile", jc.mobile_no);
+			setVal("booking_date", jc.booking_date); setVal("delivery", jc.promised_delivery);
+			setVal("channel", jc.booking_channel);
+			var pb = document.querySelector('[name="project_booking"]'); if (pb) pb.checked = !!jc.project_booking;
+			var adv = document.querySelector('select[name="advisor"]'); if (adv) adv.value = jc.service_advisor || "";
+			if (jc.customer) loadCustomerVehicles(jc.customer);
+			// Tab 2 / 3 — service + complaint rows
+			(jc.services || []).forEach(function (s) { addServiceRow(s); });
+			(jc.complaints || []).forEach(function (c) { addComplaintRow(c); });
+			// Tab 4 — readings, body condition, photos
+			loadReadings(jc.readings);
+			if (jc.body_condition) pendingBodyImage = jc.body_condition;
+			photos = (jc.photos || []).map(function (p) { return { image: p.image, caption: p.caption || "" }; });
+			renderPhotos();
+			isEditing = true; render();
+		}).catch(function (err) {
+			alert("Could not load job card: " + (err && err.message ? err.message : err));
+		});
+	}
+	function loadReadings(r) {
+		r = r || {};
+		setVal("km", r.odometer); setVal("next_km", r.next_km);
+		setVal("coolant", r.coolant); setVal("battery", r.battery); setVal("tyre", r.tyre);
+		var fuel = document.querySelector('[name="fuel"]'); if (fuel) { fuel.value = r.fuel_level || 0; fuel.dispatchEvent(new Event("input")); }
+		var oil = document.querySelector('[name="oil"]'); if (oil) { oil.value = r.oil_level || 0; oil.dispatchEvent(new Event("input")); }
+		var sp = document.querySelector('[name="spare"]'); if (sp) sp.checked = !!r.spare;
+	}
 
 	function toggleEmpty(body, el) { el.style.display = body.children.length ? 'none' : 'block'; }
 
@@ -420,20 +461,26 @@
 		var sv = e.target.closest('tr').querySelector('select.svc');
 		if (sv) sv.innerHTML = serviceOptions(e.target.value, '');
 	});
-	document.getElementById('add-job-detail').addEventListener('click', function () {
-		if (!selected.length) { jdEmpty.textContent = 'Select at least one job type on the left first.'; return; }
-		var jt0 = selected[0];
+	function escAttr(s) { return String(s == null ? '' : s).replace(/"/g, '&quot;'); }
+	// Build a service row, optionally pre-filled (used by Add and by edit-load).
+	function addServiceRow(v) {
+		v = v || {};
+		if (v.jobtype && selected.indexOf(v.jobtype) < 0) { selected.push(v.jobtype); renderJobTypeList(); }
+		if (!v.jobtype && !selected.length) { jdEmpty.textContent = 'Select at least one job type on the left first.'; return; }
+		var jt0 = v.jobtype || selected[0];
 		var tr = document.createElement('tr');
+		tr.dataset.task = v.task || '';
 		tr.innerHTML =
 			'<td><select class="jt">' + jobTypeOptions(jt0) + '</select></td>' +
-			'<td><select class="svc">' + serviceOptions(jt0, '') + '</select></td>' +
-			'<td><input class="desc" placeholder="Description"></td>' +
-			'<td><select class="tech">' + technicianOptions('') + '</select></td>' +
-			'<td><input class="hrs" type="number" min="0" step="0.5" value="1"></td>' +
+			'<td><select class="svc">' + serviceOptions(jt0, v.service || '') + '</select></td>' +
+			'<td><input class="desc" placeholder="Description" value="' + escAttr(v.description || '') + '"></td>' +
+			'<td><select class="tech">' + technicianOptions(v.technician || '') + '</select></td>' +
+			'<td><input class="hrs" type="number" min="0" step="0.5" value="' + (v.hours != null && v.hours !== '' ? v.hours : 1) + '"></td>' +
 			'<td><button type="button" class="icon-del"><i class="fa-solid fa-trash"></i></button></td>';
 		tr.querySelector('.icon-del').addEventListener('click', function () { tr.remove(); toggleEmpty(jdBody, jdEmpty); });
 		jdBody.appendChild(tr); toggleEmpty(jdBody, jdEmpty);
-	});
+	}
+	document.getElementById('add-job-detail').addEventListener('click', function () { addServiceRow(); });
 	function gatherServices() {
 		var rows = [];
 		document.querySelectorAll('#job-detail-body tr').forEach(function (tr) {
@@ -443,7 +490,8 @@
 				service: sv ? sv.value : '',
 				description: (tr.querySelector('.desc') || {}).value || '',
 				technician: (tr.querySelector('.tech') || {}).value || '',
-				hours: (tr.querySelector('.hrs') || {}).value || 0
+				hours: (tr.querySelector('.hrs') || {}).value || 0,
+				task: tr.dataset.task || ''
 			});
 		});
 		return rows.filter(function (r) { return r.jobtype || r.service; });
@@ -453,19 +501,26 @@
 	var cBody = document.getElementById('complaint-body');
 	var cEmpty = document.getElementById('complaint-empty');
 	function renumber(body) { Array.prototype.forEach.call(body.children, function (tr, i) { tr.firstElementChild.textContent = i + 1; }); }
-	document.getElementById('add-complaint').addEventListener('click', function () {
+	function sevOptions(val) {
+		return ['', 'Low', 'Medium', 'High', 'Critical'].map(function (s) {
+			return '<option value="' + s + '"' + (s === val ? ' selected' : '') + '>' + (s || '—') + '</option>';
+		}).join('');
+	}
+	function addComplaintRow(v) {
+		v = v || {};
 		var tr = document.createElement('tr');
 		tr.innerHTML =
 			'<td>' + (cBody.children.length + 1) + '</td>' +
-			'<td><input class="cmp" placeholder="Complaint"></td>' +
-			'<td><input class="rby" placeholder="Reported by"></td>' +
-			'<td><select class="sev"><option value="">—</option><option>Low</option><option>Medium</option><option>High</option><option>Critical</option></select></td>' +
-			'<td><input class="nts" placeholder="Notes"></td>' +
-			'<td><select class="ctech">' + technicianOptions('') + '</select></td>' +
+			'<td><input class="cmp" placeholder="Complaint" value="' + escAttr(v.complaint || '') + '"></td>' +
+			'<td><input class="rby" placeholder="Reported by" value="' + escAttr(v.reported_by || '') + '"></td>' +
+			'<td><select class="sev">' + sevOptions(v.severity || '') + '</select></td>' +
+			'<td><input class="nts" placeholder="Notes" value="' + escAttr(v.notes || '') + '"></td>' +
+			'<td><select class="ctech">' + technicianOptions(v.technician || '') + '</select></td>' +
 			'<td><button type="button" class="icon-del"><i class="fa-solid fa-trash"></i></button></td>';
 		tr.querySelector('.icon-del').addEventListener('click', function () { tr.remove(); renumber(cBody); toggleEmpty(cBody, cEmpty); });
 		cBody.appendChild(tr); toggleEmpty(cBody, cEmpty);
-	});
+	}
+	document.getElementById('add-complaint').addEventListener('click', function () { addComplaintRow(); });
 	function gatherComplaints() {
 		var rows = [];
 		document.querySelectorAll('#complaint-body tr').forEach(function (tr) {
@@ -492,6 +547,7 @@
 	var ctx = canvas.getContext('2d');
 	var drawing = false;
 	var canvasDrawn = false; // only persist the body-condition drawing once touched
+	var pendingBodyImage = null; // saved drawing to paint onto the canvas when it's sized
 	function sizeCanvas() {
 		var r = canvas.getBoundingClientRect();
 		if (!r.width) return;
@@ -499,6 +555,15 @@
 			canvas.width = Math.round(r.width); canvas.height = Math.round(r.height);
 		}
 		ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.lineWidth = 3; ctx.strokeStyle = '#ec2e5d';
+		drawPendingBody();
+	}
+	// Repaint a previously-saved body-condition drawing once the canvas has a size.
+	function drawPendingBody() {
+		if (!pendingBodyImage || !canvas.width) return;
+		var img = new Image();
+		var url = pendingBodyImage; pendingBodyImage = null;
+		img.onload = function () { ctx.drawImage(img, 0, 0, canvas.width, canvas.height); canvasDrawn = true; };
+		img.src = url;
 	}
 	function pos(e) { var r = canvas.getBoundingClientRect(); var t = e.touches ? e.touches[0] : e; return { x: t.clientX - r.left, y: t.clientY - r.top }; }
 	function start(e) { drawing = true; var p = pos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); e.preventDefault(); }

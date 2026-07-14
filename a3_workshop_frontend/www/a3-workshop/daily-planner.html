@@ -9,17 +9,6 @@
   {"stage":"QC","n":5,"sub":["Final inspection","Road test"]},
   {"stage":"Ready Delivery","n":3,"sub":["Ready for delivery","Customer informed"]}
 ] -%}
-{%- set booking_slots = [
-  {"slot":"Morning","rows":[
-    {"t":"09:00 AM","c":"AAS Shipping — Nissan Patrol"},
-    {"t":"09:30 AM","c":"Walk-in — Toyota Corolla"},
-    {"t":"10:00 AM","c":"Aaber Facilities — Fortuner"}]},
-  {"slot":"Afternoon","rows":[
-    {"t":"01:00 PM","c":"District Cooling — Canter"},
-    {"t":"02:30 PM","c":"Gulf Cargo — Ford Transit"}]},
-  {"slot":"Evening","rows":[
-    {"t":"05:00 PM","c":"Daat Logistics — Hilux"}]}
-] -%}
 {%- set followups = [
   {"icon":"fa-file-circle-check","reason":"Pending Approval","sub":"Estimate approval","n":6},
   {"icon":"fa-car-side","reason":"Vehicle Ready","sub":"Delivery reminder","n":3},
@@ -69,7 +58,15 @@
 				</div>
 				{%- for t in g.tasks %}
 				<div class="task-row" data-task="{{ t.name }}">
-					<span class="txt">{{ t.subject }}</span>
+					<div style="flex:1;min-width:0">
+						<span class="txt">{{ t.subject }}</span>
+						{%- if t.vehicle_no or t.assignee %}
+						<div style="display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap">
+							{%- if t.vehicle_no %}<span style="font-size:11px;font-weight:700;color:var(--text)">{{ t.vehicle_no }}</span>{%- endif %}
+							{%- if t.assignee %}<span style="font-size:11px;font-weight:600;color:#fff;background:{{ g.color }};border-radius:999px;padding:2px 9px">{{ t.assignee }}</span>{%- endif %}
+						</div>
+						{%- endif %}
+					</div>
 					<div class="act-btns">
 						<button class="act-btn" data-complete title="Mark Completed"><i class="fa-solid fa-check"></i></button>
 						<button class="act-btn" data-assign title="Assign"><i class="fa-solid fa-user-plus"></i></button>
@@ -100,15 +97,15 @@
 			</div>
 		</div>
 
-		<!-- 3. Today's Bookings -->
-		<div class="card"><div class="card__head"><h3>Today's Bookings</h3><span class="muted">By time slot</span></div>
+		<!-- 3. Today's Bookings — real Leads (input time · customer — vehicle) -->
+		<div class="card"><div class="card__head"><h3>Today's Bookings</h3><span class="muted">Leads by time slot</span></div>
 			<div class="card__body">
 				{%- for s in booking_slots %}
 				<div class="group-head"><i class="fa-regular fa-clock" style="color:var(--navy)"></i>{{ s.slot }}<span class="count">{{ s.rows|length }}</span></div>
 				{%- for b in s.rows %}
 				<div class="slot-row">
-					<span class="time-chip">{{ b.t }}</span>
-					<span class="txt" style="flex:1">{{ b.c }}</span>
+					<span class="time-chip">{{ b.time }}</span>
+					<span class="txt" style="flex:1">{{ b.customer }} &mdash; {{ b.vehicle }}</span>
 					<div class="act-btns">
 						<button class="act-btn" title="Check-in"><i class="fa-solid fa-right-to-bracket"></i></button>
 						<button class="act-btn" title="Reschedule"><i class="fa-solid fa-calendar-day"></i></button>
@@ -116,6 +113,8 @@
 					</div>
 				</div>
 				{%- endfor %}
+				{%- else %}
+				<div class="empty" style="padding:14px 0">No leads yet.</div>
 				{%- endfor %}
 			</div>
 		</div>
@@ -154,14 +153,9 @@
 		<!-- 6. Cash & Bills Summary -->
 		<div class="card"><div class="card__head"><h3>Cash &amp; Bills Summary</h3><span class="muted">Today</span></div>
 			<div class="card__body">
-				<div class="kv-row"><span class="k"><i class="fa-solid fa-arrow-down" style="color:var(--green)"></i> Cash In</span><b>₹25,000</b></div>
-				<div class="kv-row"><span class="k"><i class="fa-solid fa-arrow-up" style="color:var(--red)"></i> Cash Out</span><b>₹8,500</b></div>
-				<div class="kv-row"><span class="k"><i class="fa-solid fa-wallet" style="color:var(--navy)"></i> Balance</span><b style="color:var(--red)">₹16,500</b></div>
-				<div class="qbtns">
-					<button class="btn btn--primary btn--sm"><i class="fa-solid fa-receipt"></i> New Receipt</button>
-					<button class="btn btn--navy btn--sm"><i class="fa-solid fa-money-bill"></i> New Payment</button>
-					<button class="btn btn--outline btn--sm"><i class="fa-solid fa-file-invoice"></i> Expense Entry</button>
-				</div>
+				<div class="kv-row"><span class="k"><i class="fa-solid fa-arrow-down" style="color:var(--green)"></i> Cash In</span><b>{{ cash.cash_in }}</b></div>
+				<div class="kv-row"><span class="k"><i class="fa-solid fa-arrow-up" style="color:var(--red)"></i> Cash Out</span><b>{{ cash.cash_out }}</b></div>
+				<div class="kv-row"><span class="k"><i class="fa-solid fa-wallet" style="color:var(--navy)"></i> Balance</span><b style="color:{{ 'var(--red)' if cash.balance_raw < 0 else 'var(--text)' }}">{{ cash.balance }}</b></div>
 			</div>
 		</div>
 
