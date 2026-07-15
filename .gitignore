@@ -1,0 +1,4 @@
+# Python bytecode — regenerated at runtime, never commit
+__pycache__/
+*.py[cod]
+*$py.class
