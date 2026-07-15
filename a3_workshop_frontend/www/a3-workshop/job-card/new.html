@@ -2,7 +2,7 @@
 {% from "templates/macros/workshop.html" import field %}
 
 {% block page_content %}
-{%- set steps = ["Customer Details", "Service Jobs", "Complaints / Check-Up", "Readings", "Estimate"] -%}
+{%- set steps = ["Customer Details", "Service Jobs", "Complaints / Check-Up", "Readings", "Estimate", "Billing"] -%}
 {%- set jobtypes = [
   {"i":"fa-screwdriver-wrench","t":"General Service","s":"Scheduled maintenance"},
   {"i":"fa-car-burst","t":"Body Shop","s":"Accident repair & bodywork"},
@@ -223,6 +223,63 @@
 	</div>
 </section>
 
+<!-- TAB 6 — Billing (LHS completed tasks, RHS editable kit billing tables) -->
+<section class="wizard-tab" data-tab="6" style="margin-top:18px">
+	<div id="billing-need-save" class="card" style="display:none"><div class="card__body">
+		<div class="empty">Save the job card first — billing appears once the card exists and its tasks are completed.</div></div></div>
+	<div id="billing-body" class="split">
+		<div class="card"><div class="card__head"><h3>Completed Tasks</h3>
+			<button type="button" class="btn btn--outline btn--sm" id="bill-refresh"><i class="fa-solid fa-rotate"></i> Refresh</button></div>
+			<div class="card__body" style="padding:0">
+				<table class="table"><thead><tr>
+					<th>Task</th><th>Service</th><th>Technician</th><th style="width:50px">Hrs</th><th style="width:120px">Completed</th>
+				</tr></thead><tbody id="billing-tasks-body"></tbody></table>
+				<div class="empty" id="billing-tasks-empty">No completed tasks yet.</div>
+			</div>
+		</div>
+		<div class="card"><div class="card__head"><h3>Billing</h3><span class="muted">Edit lines, then create the Sales Order</span></div>
+			<div class="card__body">
+				<div class="kit-block">
+					<h4 class="bill-kit-title">Labor <button type="button" class="btn btn--outline btn--sm" data-badd="labor"><i class="fa-solid fa-plus"></i> Add</button></h4>
+					<table class="table editable"><thead><tr>
+						<th>Description</th><th style="width:66px">Hrs</th><th style="width:96px">Rate</th><th style="width:88px">Skill</th><th style="width:34px"></th>
+					</tr></thead><tbody id="bill-labor-body"></tbody></table>
+					<div class="empty" id="bill-labor-empty">No labor lines.</div>
+				</div>
+				<div class="kit-block">
+					<h4 class="bill-kit-title">Parts <button type="button" class="btn btn--outline btn--sm" data-badd="parts"><i class="fa-solid fa-plus"></i> Add</button></h4>
+					<table class="table editable"><thead><tr>
+						<th>Item</th><th style="width:56px">Qty</th><th style="width:72px">UOM</th><th style="width:96px">Rate</th><th style="width:34px"></th>
+					</tr></thead><tbody id="bill-parts-body"></tbody></table>
+					<div class="empty" id="bill-parts-empty">No parts lines.</div>
+				</div>
+				<div class="kit-block">
+					<h4 class="bill-kit-title">Sublet <button type="button" class="btn btn--outline btn--sm" data-badd="sublet"><i class="fa-solid fa-plus"></i> Add</button></h4>
+					<table class="table editable"><thead><tr>
+						<th>Service</th><th>Vendor</th><th style="width:96px">Cost</th><th style="width:80px">Markup %</th><th style="width:34px"></th>
+					</tr></thead><tbody id="bill-sublet-body"></tbody></table>
+					<div class="empty" id="bill-sublet-empty">No sublet lines.</div>
+				</div>
+				<div class="totals">
+					<div class="row-between grand"><span>Billing Total</span><span id="bill-total">AED 0.00</span></div>
+				</div>
+				<div class="row" style="gap:10px;margin-top:12px">
+					<button type="button" class="btn btn--ghost" id="bill-save"><i class="fa-solid fa-floppy-disk"></i> Save Billing</button>
+					<button type="button" class="btn btn--primary" id="bill-create-so" style="flex:1;justify-content:center"><i class="fa-solid fa-file-invoice-dollar"></i> Create Sales Order</button>
+				</div>
+				<div id="bill-so-result" class="muted" style="font-size:12px;margin-top:8px"></div>
+			</div>
+		</div>
+	</div>
+</section>
+
+<style>
+	.bill-kit-title { display:flex; align-items:center; justify-content:space-between; gap:8px;
+		font-size:13px; font-weight:800; letter-spacing:.02em; margin:0 0 8px; }
+	#billing-body .table.editable td { padding:5px 6px; }
+	#billing-body .table.editable input { width:100%; box-sizing:border-box; }
+</style>
+
 <!-- nav -->
 <div class="form-actions" style="margin-top:18px">
 	<button type="button" class="btn btn--outline" id="wiz-prev" style="visibility:hidden"><i class="fa-solid fa-arrow-left"></i> Previous</button>
@@ -236,7 +293,7 @@
 {% raw %}
 <script>
 (function () {
-	var TOTAL = 5, cur = 1;
+	var TOTAL = 6, cur = 1;
 	var isEditing = false; // true when the wizard was opened on an existing card (?id=)
 	var steps = document.querySelectorAll('#wizard-stepper .step');
 	var lines = document.querySelectorAll('#wizard-stepper .step__line');
@@ -258,6 +315,7 @@
 			: 'Next <i class="fa-solid fa-arrow-right"></i>';
 		if (cur === 4) sizeCanvas();
 		if (cur === 5) loadEstimateItems();
+		if (cur === 6) loadBillingData();
 	}
 	function goTo(n) { cur = Math.max(1, Math.min(TOTAL, n)); render(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
 	steps.forEach(function (s) { s.addEventListener('click', function () { goTo(+s.dataset.goto); }); });
@@ -943,6 +1001,192 @@
 			})
 			.catch(function (err) { out.textContent = 'Could not create quotation: ' + (err && err.message ? err.message : err); })
 			.then(function () { btn.disabled = false; });
+	});
+
+	// ---- Billing tab: LHS completed tasks (read-only), RHS editable kit tables ----
+	var billTasksBody = document.getElementById('billing-tasks-body');
+	var billLaborBody = document.getElementById('bill-labor-body');
+	var billPartsBody = document.getElementById('bill-parts-body');
+	var billSubletBody = document.getElementById('bill-sublet-body');
+	var BILL_ITEMS = [];   // item catalog for the parts picker
+	var billLoaded = false; // load once so unsaved edits survive tab switches (Refresh forces reload)
+
+	function renderBillingTasks(tasks) {
+		billTasksBody.innerHTML = (tasks || []).map(function (t) {
+			return '<tr><td>' + esc(t.subject || t.task) + '</td><td>' + esc(t.service || '') + '</td>' +
+				'<td>' + esc(t.technician || '') + '</td><td>' + (t.hours || 0) + '</td>' +
+				'<td>' + esc((t.completed_on || '').slice(0, 16).replace('T', ' ')) + '</td></tr>';
+		}).join('');
+		document.getElementById('billing-tasks-empty').style.display = (tasks && tasks.length) ? 'none' : 'block';
+	}
+	// Editable-row builders (source_task kept on the row so provenance survives edits).
+	function addBillLabor(r) {
+		r = r || {};
+		var tr = document.createElement('tr');
+		tr.dataset.src = r.source_task || ''; tr.dataset.op = r.operation || ''; tr.dataset.dar = r.description_ar || '';
+		tr.innerHTML =
+			'<td><input class="bl-desc" value="' + escAttr(r.description || '') + '" placeholder="Description"></td>' +
+			'<td><input class="bl-hours" type="number" min="0" step="0.1" value="' + (r.hours != null ? r.hours : 0) + '"></td>' +
+			'<td><input class="bl-rate" type="number" min="0" step="0.01" value="' + (r.rate != null ? r.rate : 0) + '"></td>' +
+			'<td><input class="bl-skill" value="' + escAttr(r.skill_level || '') + '" placeholder="Skill"></td>' +
+			'<td><button type="button" class="icon-del" data-brm><i class="fa-solid fa-trash"></i></button></td>';
+		billLaborBody.appendChild(tr);
+	}
+	function addBillPart(r) {
+		r = r || {};
+		var tr = document.createElement('tr');
+		tr.dataset.src = r.source_task || '';
+		tr.innerHTML =
+			'<td><input class="bp-item" value="' + escAttr(r.item_code || '') + '" placeholder="Item code" autocomplete="off"></td>' +
+			'<td><input class="bp-qty" type="number" min="0" step="1" value="' + (r.qty != null ? r.qty : 1) + '"></td>' +
+			'<td><input class="bp-uom" value="' + escAttr(r.uom || '') + '" placeholder="UOM"></td>' +
+			'<td><input class="bp-rate" type="number" min="0" step="0.01" value="' + (r.rate != null ? r.rate : 0) + '"></td>' +
+			'<td><button type="button" class="icon-del" data-brm><i class="fa-solid fa-trash"></i></button></td>';
+		billPartsBody.appendChild(tr);
+		attachAutocomplete(tr.querySelector('.bp-item'), function (q) {
+			q = (q || '').toLowerCase();
+			return BILL_ITEMS.filter(function (it) {
+				return !q || (it.item || '').toLowerCase().indexOf(q) >= 0 || (it.item_name || '').toLowerCase().indexOf(q) >= 0;
+			}).slice(0, 10).map(function (it) {
+				return { label: it.item, sub: (it.item_name && it.item_name !== it.item) ? it.item_name : '', value: it.item, rate: it.rate };
+			});
+		}, function (it) {
+			tr.querySelector('.bp-item').value = it.value;
+			if (it.rate) tr.querySelector('.bp-rate').value = it.rate;
+			renderBillTotal();
+		});
+	}
+	function addBillSublet(r) {
+		r = r || {};
+		var tr = document.createElement('tr');
+		tr.dataset.src = r.source_task || '';
+		tr.innerHTML =
+			'<td><input class="bs-desc" value="' + escAttr(r.service_description || '') + '" placeholder="Service"></td>' +
+			'<td><input class="bs-vendor" value="' + escAttr(r.vendor || '') + '" placeholder="Vendor"></td>' +
+			'<td><input class="bs-cost" type="number" min="0" step="0.01" value="' + (r.cost != null ? r.cost : 0) + '"></td>' +
+			'<td><input class="bs-markup" type="number" min="0" step="1" value="' + (r.markup_pct != null ? r.markup_pct : 0) + '"></td>' +
+			'<td><button type="button" class="icon-del" data-brm><i class="fa-solid fa-trash"></i></button></td>';
+		billSubletBody.appendChild(tr);
+	}
+	function toggleBillEmpties() {
+		document.getElementById('bill-labor-empty').style.display = billLaborBody.children.length ? 'none' : 'block';
+		document.getElementById('bill-parts-empty').style.display = billPartsBody.children.length ? 'none' : 'block';
+		document.getElementById('bill-sublet-empty').style.display = billSubletBody.children.length ? 'none' : 'block';
+	}
+	function num(el, sel) { var i = el.querySelector(sel); return i ? (parseFloat(i.value) || 0) : 0; }
+	function renderBillTotal() {
+		var t = 0;
+		Array.prototype.forEach.call(billLaborBody.children, function (tr) { t += num(tr, '.bl-hours') * num(tr, '.bl-rate'); });
+		Array.prototype.forEach.call(billPartsBody.children, function (tr) { t += num(tr, '.bp-qty') * num(tr, '.bp-rate'); });
+		Array.prototype.forEach.call(billSubletBody.children, function (tr) { t += num(tr, '.bs-cost') * (1 + num(tr, '.bs-markup') / 100); });
+		document.getElementById('bill-total').textContent = money(t);
+	}
+	function gatherBillLabor() {
+		return Array.prototype.map.call(billLaborBody.children, function (tr) {
+			return {
+				description: tr.querySelector('.bl-desc').value, hours: tr.querySelector('.bl-hours').value,
+				rate: tr.querySelector('.bl-rate').value, skill_level: tr.querySelector('.bl-skill').value,
+				operation: tr.dataset.op || '', description_ar: tr.dataset.dar || '', source_task: tr.dataset.src || ''
+			};
+		}).filter(function (r) { return (r.description || '').trim() || parseFloat(r.hours) || parseFloat(r.rate); });
+	}
+	function gatherBillParts() {
+		return Array.prototype.map.call(billPartsBody.children, function (tr) {
+			return {
+				item_code: tr.querySelector('.bp-item').value, qty: tr.querySelector('.bp-qty').value,
+				uom: tr.querySelector('.bp-uom').value, rate: tr.querySelector('.bp-rate').value, source_task: tr.dataset.src || ''
+			};
+		}).filter(function (r) { return (r.item_code || '').trim(); });
+	}
+	function gatherBillSublet() {
+		return Array.prototype.map.call(billSubletBody.children, function (tr) {
+			return {
+				service_description: tr.querySelector('.bs-desc').value, vendor: tr.querySelector('.bs-vendor').value,
+				cost: tr.querySelector('.bs-cost').value, markup_pct: tr.querySelector('.bs-markup').value, source_task: tr.dataset.src || ''
+			};
+		}).filter(function (r) { return (r.service_description || '').trim(); });
+	}
+	function renderSoState(so) {
+		var btn = document.getElementById('bill-create-so');
+		btn.dataset.so = so || '';
+		btn.innerHTML = so
+			? '<i class="fa-solid fa-up-right-from-square"></i> View Sales Order'
+			: '<i class="fa-solid fa-file-invoice-dollar"></i> Create Sales Order';
+	}
+	function loadBillingData() {
+		var needSave = document.getElementById('billing-need-save');
+		var body = document.getElementById('billing-body');
+		if (!jobCardName) { needSave.style.display = ''; body.style.display = 'none'; return; }
+		needSave.style.display = 'none'; body.style.display = '';
+		if (billLoaded) return;
+		billLoaded = true;
+		if (!BILL_ITEMS.length) {
+			callMethod("garagedesk.api.front_office.get_estimate_items", { services: gatherServices().map(function (r) { return r.service; }).filter(Boolean) })
+				.then(function (o) { o = o || {}; BILL_ITEMS = (o.mapped || []).concat(o.others || []); }).catch(function () { });
+		}
+		callMethod("garagedesk.api.front_office.get_job_card_billing", { name: jobCardName }).then(function (b) {
+			b = b || {};
+			renderBillingTasks(b.billing_tasks || []);
+			billLaborBody.innerHTML = ''; billPartsBody.innerHTML = ''; billSubletBody.innerHTML = '';
+			(b.billing_kit_labor || []).forEach(addBillLabor);
+			(b.billing_kit_parts || []).forEach(addBillPart);
+			(b.billing_kit_sublet || []).forEach(addBillSublet);
+			toggleBillEmpties(); renderBillTotal(); renderSoState(b.sales_order);
+		}).catch(function (err) {
+			document.getElementById('bill-so-result').textContent = 'Could not load billing: ' + (err && err.message ? err.message : err);
+		});
+	}
+	function saveBilling() {
+		return callMethod("garagedesk.api.front_office.save_job_card_billing", {
+			job_card: jobCardName,
+			billing_kit_labor: gatherBillLabor(),
+			billing_kit_parts: gatherBillParts(),
+			billing_kit_sublet: gatherBillSublet()
+		}).then(function (r) {
+			if (r && r.billing_total != null) document.getElementById('bill-total').textContent = money(r.billing_total);
+			return r;
+		});
+	}
+	// Add-row buttons, per-row remove, and live total recompute.
+	document.querySelectorAll('[data-badd]').forEach(function (btn) {
+		btn.addEventListener('click', function () {
+			var g = btn.dataset.badd;
+			if (g === 'labor') addBillLabor(); else if (g === 'parts') addBillPart(); else addBillSublet();
+			toggleBillEmpties(); renderBillTotal();
+		});
+	});
+	document.getElementById('billing-body').addEventListener('input', function (e) {
+		if (e.target.matches('input')) renderBillTotal();
+	});
+	document.getElementById('billing-body').addEventListener('click', function (e) {
+		var rm = e.target.closest('[data-brm]'); if (!rm) return;
+		rm.closest('tr').remove(); toggleBillEmpties(); renderBillTotal();
+	});
+	document.getElementById('bill-refresh').addEventListener('click', function () { billLoaded = false; loadBillingData(); });
+	document.getElementById('bill-save').addEventListener('click', function () {
+		var out = document.getElementById('bill-so-result');
+		if (!jobCardName) { alert('Save the job card first.'); return; }
+		out.textContent = 'Saving…';
+		saveBilling().then(function () { out.textContent = 'Billing saved.'; })
+			.catch(function (err) { out.textContent = 'Could not save billing: ' + (err && err.message ? err.message : err); });
+	});
+	document.getElementById('bill-create-so').addEventListener('click', function () {
+		var btn = this, out = document.getElementById('bill-so-result');
+		if (btn.dataset.so) { window.open('/app/sales-order/' + encodeURIComponent(btn.dataset.so), '_blank'); return; }
+		if (!jobCardName) { alert('Save the job card first (it needs a customer).'); return; }
+		btn.disabled = true; out.textContent = 'Saving billing…';
+		saveBilling().then(function () {
+			out.textContent = 'Creating sales order…';
+			return callMethod("garagedesk.api.workshop.create_sales_order_from_job_card", { job_card: jobCardName });
+		}).then(function (r) {
+			var so = r.sales_order;
+			out.innerHTML = 'Sales Order <b>' + esc(so) + '</b> created' +
+				(r.grand_total != null ? (' — Total ' + money(r.grand_total)) : '') +
+				'. <a href="/app/sales-order/' + encodeURIComponent(so) + '" target="_blank">Open</a>';
+			renderSoState(so);
+		}).catch(function (err) {
+			out.textContent = 'Could not create sales order: ' + (err && err.message ? err.message : err);
+		}).then(function () { btn.disabled = false; });
 	});
 
 	render();
