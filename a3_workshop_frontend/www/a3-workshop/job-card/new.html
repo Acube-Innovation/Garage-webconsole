@@ -12,12 +12,6 @@
   {"i":"fa-snowflake","t":"AC Service","s":"Cooling & AC"},
   {"i":"fa-car-battery","t":"Electrical","s":"Battery & electrical"}
 ] -%}
-{%- set catalog = [
-  {"n":"Engine Oil Change","p":150},{"n":"Oil Filter","p":45},{"n":"Air Filter","p":60},
-  {"n":"Brake Pad Set","p":280},{"n":"Wheel Alignment","p":120},{"n":"AC Gas Refill","p":200},
-  {"n":"Battery Replacement","p":350},{"n":"Coolant Top-up","p":40},{"n":"Labor (per hour)","p":100},
-  {"n":"Car Wash","p":50}
-] -%}
 
 <style>
 	.jc-ac { position:absolute; left:0; right:0; top:100%; z-index:60; margin-top:2px; background:#fff;
@@ -151,13 +145,7 @@
 		<div class="card"><div class="card__head"><h3>Items</h3>
 			<input id="item-search" placeholder="Search items..." style="border:1px solid var(--border);border-radius:8px;padding:7px 10px;font:inherit"></div>
 			<div class="card__body" style="padding:6px 18px"><div id="catalog">
-				{%- for it in catalog %}
-				<div class="cart-item" data-name="{{ it.n }}" data-price="{{ it.p }}" style="cursor:pointer">
-					<div><div class="name">{{ it.n }}</div><div class="unit">AED {{ "%.2f"|format(it.p) }}</div></div>
-					<span></span><span></span>
-					<button type="button" class="btn btn--primary btn--icon" title="Add"><i class="fa-solid fa-plus"></i></button>
-				</div>
-				{%- endfor %}
+				<div class="empty">Add service lines in the Service Jobs tab, then open this tab.</div>
 			</div></div>
 		</div>
 		<div class="card"><div class="card__head"><h3>Cart</h3><span class="muted">Adjust quantities</span></div>
@@ -169,6 +157,8 @@
 					<div class="row-between"><span class="muted">VAT (5%)</span><span id="t-vat">AED 0.00</span></div>
 					<div class="row-between grand"><span>Total Amount</span><span id="t-grand">AED 0.00</span></div>
 				</div>
+				<button type="button" class="btn btn--primary" id="create-quotation" style="width:100%;justify-content:center;margin-top:14px"><i class="fa-solid fa-file-invoice-dollar"></i> Create / Update Quotation</button>
+				<div id="quotation-result" class="muted" style="font-size:12px;margin-top:8px"></div>
 			</div>
 		</div>
 	</div>
@@ -208,6 +198,7 @@
 			? '<i class="fa-solid fa-check"></i> ' + (isEditing ? 'Update Job Card' : 'Create Job Card')
 			: 'Next <i class="fa-solid fa-arrow-right"></i>';
 		if (cur === 4) sizeCanvas();
+		if (cur === 5) loadEstimateItems();
 	}
 	function goTo(n) { cur = Math.max(1, Math.min(TOTAL, n)); render(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
 	steps.forEach(function (s) { s.addEventListener('click', function () { goTo(+s.dataset.goto); }); });
@@ -388,6 +379,12 @@
 			if (jc.body_condition) pendingBodyImage = jc.body_condition;
 			photos = (jc.photos || []).map(function (p) { return { image: p.image, caption: p.caption || "" }; });
 			renderPhotos();
+			// Tab 5 — reload the estimate cart from the linked Draft quotation.
+			if (jc.estimate && jc.estimate.length) {
+				cart = {};
+				jc.estimate.forEach(function (e) { cart[e.item] = { item_name: e.item_name, rate: e.rate, qty: e.qty }; });
+				renderCart();
+			}
 			isEditing = true; render();
 		}).catch(function (err) {
 			alert("Could not load job card: " + (err && err.message ? err.message : err));
@@ -624,51 +621,96 @@
 		};
 	}
 
-	// ---- Estimate cart
-	var cart = {};
+	// ---- Estimate: items driven by Labor Time Standard; cart -> Quotation ----
+	function esc(s) { return String(s == null ? '' : s).replace(/[&<>]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]; }); }
+	var cart = {}; // item_code -> { item_name, rate, qty }
 	var cartEl = document.getElementById('cart');
 	var cartEmpty = document.getElementById('cart-empty');
-	function money(v) { return 'AED ' + v.toFixed(2); }
-	document.getElementById('catalog').addEventListener('click', function (e) {
-		var row = e.target.closest('[data-name]'); if (!row) return;
-		var n = row.dataset.name, p = parseFloat(row.dataset.price);
-		if (cart[n]) cart[n].qty++; else cart[n] = { price: p, qty: 1 };
+	var catalogEl = document.getElementById('catalog');
+	var mappedHours = {}; // item_code -> default qty (from the mapped service's hours)
+	function money(v) { return 'AED ' + (v || 0).toFixed(2); }
+
+	function serviceHours() {
+		var m = {};
+		gatherServices().forEach(function (r) { if (r.service) m[r.service] = parseFloat(r.hours) || 1; });
+		return m;
+	}
+	function itemRow(it, mapped) {
+		return '<div class="cart-item" data-item="' + escAttr(it.item) + '" data-rate="' + (it.rate || 0) + '" style="cursor:pointer">' +
+			'<div><div class="name">' + (mapped ? '<i class="fa-solid fa-circle-check" style="color:#16a34a;margin-right:6px"></i>' : '') + esc(it.item_name) + '</div>' +
+			'<div class="unit">' + money(it.rate) + (mapped ? ' /hr' : '') + '</div></div>' +
+			'<span></span><span></span>' +
+			'<button type="button" class="btn btn--primary btn--icon" title="Add"><i class="fa-solid fa-plus"></i></button></div>';
+	}
+	// Refresh the item list from the currently-selected services (mapped first, green tick).
+	function loadEstimateItems() {
+		var services = gatherServices().map(function (r) { return r.service; }).filter(Boolean);
+		return callMethod("garagedesk.api.front_office.get_estimate_items", { services: services }).then(function (o) {
+			o = o || { mapped: [], others: [] };
+			var hrs = serviceHours();
+			mappedHours = {};
+			(o.mapped || []).forEach(function (m) { mappedHours[m.item] = hrs[m.service] || 1; });
+			var html = (o.mapped || []).map(function (m) { return itemRow(m, true); }).join('') +
+				(o.others || []).map(function (m) { return itemRow(m, false); }).join('');
+			catalogEl.innerHTML = html || '<div class="empty">No items configured.</div>';
+		}).catch(function () { catalogEl.innerHTML = '<div class="empty">Could not load items.</div>'; });
+	}
+	catalogEl.addEventListener('click', function (e) {
+		var row = e.target.closest('[data-item]'); if (!row) return;
+		var code = row.dataset.item, rate = parseFloat(row.dataset.rate) || 0;
+		var name = row.querySelector('.name').textContent.trim();
+		if (cart[code]) cart[code].qty += 1;
+		else cart[code] = { item_name: name, rate: rate, qty: mappedHours[code] || 1 };
 		renderCart();
 	});
 	function renderCart() {
-		var names = Object.keys(cart);
-		cartEmpty.style.display = names.length ? 'none' : 'block';
-		cartEl.innerHTML = names.map(function (n) {
-			var it = cart[n];
-			return '<div class="cart-item" data-cn="' + n + '">' +
-				'<div><div class="name">' + n + '</div><div class="unit">' + money(it.price) + '</div></div>' +
+		var codes = Object.keys(cart);
+		cartEmpty.style.display = codes.length ? 'none' : 'block';
+		cartEl.innerHTML = codes.map(function (c) {
+			var it = cart[c];
+			return '<div class="cart-item" data-cn="' + escAttr(c) + '">' +
+				'<div><div class="name">' + esc(it.item_name) + '</div><div class="unit">' + money(it.rate) + '</div></div>' +
 				'<div class="qty"><button type="button" data-dec>−</button><input data-q value="' + it.qty + '"><button type="button" data-inc>+</button></div>' +
-				'<div class="line">' + money(it.price * it.qty) + '</div>' +
+				'<div class="line">' + money(it.rate * it.qty) + '</div>' +
 				'<button type="button" class="icon-del" data-rm><i class="fa-solid fa-trash"></i></button></div>';
 		}).join('');
-		var sub = names.reduce(function (s, n) { return s + cart[n].price * cart[n].qty; }, 0);
+		var sub = codes.reduce(function (s, c) { return s + cart[c].rate * cart[c].qty; }, 0);
 		document.getElementById('t-sub').textContent = money(sub);
 		document.getElementById('t-vat').textContent = money(sub * 0.05);
 		document.getElementById('t-grand').textContent = money(sub * 1.05);
 	}
 	cartEl.addEventListener('click', function (e) {
-		var item = e.target.closest('[data-cn]'); if (!item) return; var n = item.dataset.cn;
-		if (e.target.closest('[data-inc]')) cart[n].qty++;
-		else if (e.target.closest('[data-dec]')) cart[n].qty = Math.max(1, cart[n].qty - 1);
-		else if (e.target.closest('[data-rm]')) delete cart[n];
+		var item = e.target.closest('[data-cn]'); if (!item) return; var c = item.dataset.cn;
+		if (e.target.closest('[data-inc]')) cart[c].qty++;
+		else if (e.target.closest('[data-dec]')) cart[c].qty = Math.max(1, cart[c].qty - 1);
+		else if (e.target.closest('[data-rm]')) delete cart[c];
 		else return;
 		renderCart();
 	});
 	cartEl.addEventListener('change', function (e) {
 		if (!e.target.matches('[data-q]')) return;
-		var item = e.target.closest('[data-cn]'); cart[item.dataset.cn].qty = Math.max(1, parseInt(e.target.value) || 1); renderCart();
+		var item = e.target.closest('[data-cn]'); cart[item.dataset.cn].qty = Math.max(1, parseFloat(e.target.value) || 1); renderCart();
 	});
-	var search = document.getElementById('item-search');
-	search.addEventListener('input', function () {
+	document.getElementById('item-search').addEventListener('input', function () {
 		var q = this.value.toLowerCase();
-		document.querySelectorAll('#catalog [data-name]').forEach(function (r) {
-			r.style.display = r.dataset.name.toLowerCase().indexOf(q) >= 0 ? '' : 'none';
+		catalogEl.querySelectorAll('[data-item]').forEach(function (r) {
+			r.style.display = r.querySelector('.name').textContent.toLowerCase().indexOf(q) >= 0 ? '' : 'none';
 		});
+	});
+	// Create / Update the Quotation from the cart.
+	document.getElementById('create-quotation').addEventListener('click', function () {
+		var btn = this, out = document.getElementById('quotation-result');
+		var lines = Object.keys(cart).map(function (c) { return { item: c, qty: cart[c].qty, rate: cart[c].rate }; });
+		if (!lines.length) { alert('Add at least one item to the estimate.'); return; }
+		if (!jobCardName) { alert('Save the job card first (it needs a customer).'); return; }
+		btn.disabled = true; out.textContent = 'Creating quotation…';
+		callMethod("garagedesk.api.front_office.create_quotation", { job_card: jobCardName, items: lines })
+			.then(function (r) {
+				out.innerHTML = 'Quotation <b>' + esc(r.name) + '</b> saved — Total ' + money(r.grand_total) +
+					'. <a href="/app/quotation/' + encodeURIComponent(r.name) + '" target="_blank">Open</a>';
+			})
+			.catch(function (err) { out.textContent = 'Could not create quotation: ' + (err && err.message ? err.message : err); })
+			.then(function () { btn.disabled = false; });
 	});
 
 	render();
