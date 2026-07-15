@@ -11,7 +11,7 @@
 	<div class="stat-card stat-card--sm"><div class="label">Connected</div><div class="value" id="s-connected">12</div></div>
 	<div class="stat-card stat-card--sm stat-card--navy"><div class="label">Follow-ups</div><div class="value" id="s-followups">9</div></div>
 	<div class="stat-card stat-card--sm stat-card--purple"><div class="label">Conversions</div><div class="value" id="s-conversions">5</div></div>
-	<div class="stat-card stat-card--sm"><div class="label">Bookings</div><div class="value" id="s-bookings">3</div></div>
+	<div class="stat-card stat-card--sm"><div class="label">Appointments</div><div class="value" id="s-bookings">3</div></div>
 </div>
 
 <div class="tc-grid">
@@ -224,6 +224,7 @@
 				'<div class="row-between">' +
 					'<span class="tc-due' + (q.overdue ? ' is-late' : '') + '"><i class="fa-regular fa-clock"></i> ' + (q.overdue ? 'Overdue · ' : 'Due ') + q.due + '</span>' +
 					'<div class="row" style="gap:6px">' +
+						'<button class="btn btn--navy btn--sm" data-appt="' + q.id + '">Appointment</button>' +
 						'<button class="btn btn--primary btn--sm" data-log="' + q.id + '">Log Call</button>' +
 					'</div>' +
 				'</div></div>';
@@ -293,7 +294,26 @@
 		}).catch(function () {});
 	}
 
+	// Navigate to the Front Office "New Lead / Enquiry" form, prefilled from this
+	// call, with the Add-appointment box pre-ticked.
+	function goToAppointment(id) {
+		var q = byId(id);
+		if (!q) return;
+		var p = new URLSearchParams();
+		p.set("new_lead", "1");
+		p.set("appointment", "1");
+		if (q.customer) p.set("customer", q.customer);
+		if (q.name) p.set("customer_name", q.name);
+		if (q.mobile) p.set("mobile", q.mobile);
+		if (q.email) p.set("email", q.email);
+		if (q.vehicle) p.set("vehicle", q.vehicle);
+		if (q.vehNo && q.vehNo !== "—") p.set("vehicle_label", q.vehNo);
+		window.location.href = "/a3-workshop/front-office?" + p.toString();
+	}
+
 	listEl.addEventListener("click", function (e) {
+		var appt = e.target.closest("[data-appt]");
+		if (appt) { goToAppointment(appt.dataset.appt); return; }
 		var log = e.target.closest("[data-log]");
 		if (log) { openModal(log.dataset.log); return; }
 		var row = e.target.closest("[data-id]"); if (row) select(row.dataset.id);
