@@ -72,6 +72,18 @@
 							{{ field("VIN / Chassis","lv_vin") }}
 						</div>
 					</div>
+					<div class="fieldset-title" style="display:flex;align-items:center;gap:8px">
+						Appointment
+						<label style="display:flex;align-items:center;gap:8px;margin:0 0 0 auto;font-weight:600;cursor:pointer">
+							<input type="checkbox" id="l_add_appointment"> Add appointment
+						</label>
+					</div>
+					<div id="lead-appointment-fields" style="display:none">
+						<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px 16px">
+							{{ field("Appointment Date","appt_date",type="date") }}
+							{{ field("Appointment Time","appt_time",type="time") }}
+						</div>
+					</div>
 				</form>
 				<div class="modal__foot" style="padding:16px 0 0;border:none">
 					<button type="button" class="btn btn--outline" id="save-lead"><i class="fa-solid fa-floppy-disk"></i> Save</button>
@@ -388,15 +400,64 @@
 		setMiddle("customer", "New Customer");
 	});
 
+	// Tick the customer's existing vehicle that matches `vehId` in the lead cards.
+	function preselectLeadVehicle(vehId) {
+		if (!vehId || !leadVehCards) return;
+		var box = leadVehCards.querySelector('.veh-pick[data-veh="' + vehId + '"]');
+		if (!box) return;
+		leadVehCards.querySelectorAll(".veh-pick").forEach(function (c) { c.checked = false; });
+		box.checked = true;
+		selectedVehicleName = vehId;
+	}
+	// Open the New Lead / Enquiry form straight from URL params (arriving from the
+	// Telecalling "Appointment" button). Sources customer/vehicle from the query
+	// string instead of a directory selection, and pre-ticks "Add appointment".
+	function openLeadFromUrl() {
+		var p = new URLSearchParams(window.location.search);
+		if (!p.get("new_lead")) return;
+		setMiddle("lead", "New Lead / Enquiry");
+		resetLeadVehicle();
+		leadPrefillCustomer = p.get("customer") || null;
+		leadPrefillVehicle = p.get("vehicle") || null;
+		setVal("e_name", p.get("customer_name") || "");
+		setVal("e_mobile", p.get("mobile") || "");
+		setVal("e_email", p.get("email") || "");
+		setVal("e_address", "");
+		if (p.get("appointment") && lAddApptChk) {
+			lAddApptChk.checked = true;
+			if (leadApptFields) leadApptFields.style.display = "block";
+		}
+		if (leadPrefillCustomer) {
+			callMethod("garagedesk.api.front_office.get_customer_prefill", { customer: leadPrefillCustomer })
+				.then(function (d) {
+					if (!d) return;
+					setVal("e_name", d.customer_name || p.get("customer_name") || "");
+					setVal("e_mobile", d.mobile_no || p.get("mobile") || "");
+					setVal("e_email", d.email_id || p.get("email") || "");
+					setVal("e_address", d.address);
+					leadCustomerVehicles = d.vehicles || [];
+					if (!lAddVehChk.checked) {
+						renderLeadVehicleCards(leadCustomerVehicles);
+						preselectLeadVehicle(leadPrefillVehicle);
+					}
+				}).catch(function () {});
+		}
+	}
+
 	// ---- Vehicle grids (customer form + lead form): options, cascade, toggles ----
 	var addVehChk = document.getElementById("c_add_vehicle");
 	var vehFields = document.getElementById("vehicle-fields");
 	var lAddVehChk = document.getElementById("l_add_vehicle");
 	var leadVehFields = document.getElementById("lead-vehicle-fields");
 	var leadVehCards = document.getElementById("lead-vehicle-cards");
+	var lAddApptChk = document.getElementById("l_add_appointment");
+	var leadApptFields = document.getElementById("lead-appointment-fields");
 	var vehModels = []; // cached [{name, make, model_name}] for the cascades
 	var leadCustomerVehicles = []; // selected customer's vehicles (for Save & Job Card)
 	var selectedVehicleName = ""; // the one vehicle ticked in the lead cards
+	// Prefill carried in via URL (e.g. from Telecalling's Appointment button), used
+	// as the customer/vehicle fallback when no customer is selected in the directory.
+	var leadPrefillCustomer = null, leadPrefillVehicle = null;
 	function selEl(name) { return document.querySelector('select[name="' + name + '"]'); }
 	function fillSelect(sel, items, placeholder) {
 		if (!sel) return;
@@ -440,7 +501,16 @@
 		if (leadVehCards) { leadVehCards.style.display = ""; leadVehCards.innerHTML = ""; }
 		leadCustomerVehicles = [];
 		selectedVehicleName = "";
+		leadPrefillCustomer = null;
+		leadPrefillVehicle = null;
 		fillSelect(selEl("lv_model"), [], "Select make first");
+		resetLeadAppointment();
+	}
+	function resetLeadAppointment() { // lead form: appointment sub-section
+		if (lAddApptChk) lAddApptChk.checked = false;
+		if (leadApptFields) leadApptFields.style.display = "none";
+		setVal("appt_date", "");
+		setVal("appt_time", "");
 	}
 	function renderLeadVehicleCards(vehicles) {
 		if (!leadVehCards) return;
@@ -475,6 +545,9 @@
 		if (leadVehFields) leadVehFields.style.display = on ? "block" : "none";
 		if (leadVehCards) leadVehCards.style.display = on ? "none" : "";
 	});
+	if (lAddApptChk) lAddApptChk.addEventListener("change", function () {
+		if (leadApptFields) leadApptFields.style.display = this.checked ? "block" : "none";
+	});
 	wireMakeCascade("v_");
 	wireMakeCascade("lv_");
 	loadVehicleOptions();
@@ -501,19 +574,45 @@
 				odometer: val("lv_odometer"), fuel_type: vf, vin: val("lv_vin")
 			};
 		}
+		// Optional appointment (only when "Add appointment" is ticked).
+		var addAppt = !!(lAddApptChk && lAddApptChk.checked);
+		if (addAppt) {
+			if (!val("appt_date")) {
+				alert("Appointment: please choose an appointment date.");
+				return Promise.reject();
+			}
+			var now = new Date();
+			var todayStr = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0");
+			if (val("appt_date") < todayStr) {
+				alert("Appointment date must be today or later.");
+				return Promise.reject();
+			}
+			var customerForAppt = current ? current.id : leadPrefillCustomer;
+			if (!customerForAppt) {
+				alert("An appointment needs an existing customer. Select a customer (or open this from a call in Telecalling) before adding an appointment.");
+				return Promise.reject();
+			}
+		}
+		var customerId = current ? current.id : (leadPrefillCustomer || null);
 		return callMethod("garagedesk.api.front_office.create_lead", {
 			lead_name: name,
 			mobile_no: mobile,
 			email: val("e_email"),
 			address: val("e_address"),
-			customer: current ? current.id : null,
+			customer: customerId,
 			vehicle: vehicle,
-			selected_vehicle: selectedVehicleName || null
+			selected_vehicle: selectedVehicleName || leadPrefillVehicle || null,
+			add_appointment: addAppt ? 1 : 0,
+			appointment_date: val("appt_date"),
+			appointment_time: val("appt_time")
 		}).then(function (res) {
 			leads.unshift({ n: name, ph: mobile, i: vehicle ? (vehicle.make + " enquiry") : "New enquiry", s: "New", sv: "badge--new", t: "Just now" });
 			document.getElementById("enquiry-form").reset();
 			resetLeadVehicle();
 			renderLeads(""); document.getElementById("lead-search").value = "";
+			if (res && res.appointment_error) {
+				alert("Lead saved, but the appointment could not be booked: " + res.appointment_error);
+			}
 			return res;
 		});
 	}
@@ -524,11 +623,12 @@
 	});
 	document.getElementById("save-lead-jc").addEventListener("click", function () {
 		// Capture the details BEFORE saveLead() resets the form.
-		var cid = current ? current.id : "";
+		var cid = current ? current.id : (leadPrefillCustomer || "");
 		var cname = val("e_name") || (current ? current.name : "");
 		var mob = val("e_mobile");
 		var addingNew = !!(lAddVehChk && lAddVehChk.checked);
 		var newPlate = addingNew ? val("lv_plate") : "";
+		var prefillVeh = leadPrefillVehicle; // saveLead() clears this on reset
 		// The vehicle ticked in the cards (ignored when adding a brand-new one).
 		var selVeh = addingNew ? null : (leadCustomerVehicles.filter(function (v) { return v.name === selectedVehicleName; })[0] || null);
 		saveLead().then(function (res) {
@@ -537,7 +637,7 @@
 			if (cname) p.set("customer_name", cname);
 			if (mob) p.set("mobile", mob);
 			// res.vehicle = newly-created or selected vehicle; label from whichever applies.
-			var vehId = (res && res.vehicle) || (selVeh && selVeh.name) || "";
+			var vehId = (res && res.vehicle) || (selVeh && selVeh.name) || prefillVeh || "";
 			var vehLabel = selVeh ? (selVeh.plate || selVeh.title) : newPlate;
 			if (vehId) p.set("vehicle", vehId);
 			if (vehLabel) p.set("vehicle_label", vehLabel);
@@ -606,6 +706,7 @@
 
 	loadCustomers();
 	renderLeads("");
+	openLeadFromUrl();
 })();
 </script>
 {% endraw %}
