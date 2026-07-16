@@ -25,4 +25,9 @@ def get_context(context):
 	context.booking_slots = get_lead_bookings()
 	# Section 6 — Cash & Bills Summary (real accounting).
 	context.cash = get_cash_summary()
+	# Section 9 — Purchase Requirements: Critical Stock (job-card parts short/below reorder)
+	# and Reorder Level Reached (items at/below reorder level).
+	from garagedesk.api.workshop import get_purchase_requirements
+
+	context.purchase_requirements = get_purchase_requirements()
 	return context

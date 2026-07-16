@@ -34,10 +34,6 @@
   {"label":"Due Today","amt":"₹30,000","light":"light--y"},
   {"label":"Due This Week","amt":"₹85,000","light":"light--g"}
 ] -%}
-{%- set purchase = [
-  {"label":"Critical Stock","rows":["Brake Pads","Engine Oil"],"badge":"badge--danger"},
-  {"label":"Reorder Level Reached","rows":["Air Filters","Spark Plugs"],"badge":"badge--pending"}
-] -%}
 
 <div class="toolbar">
 	<div class="section-title" style="margin:0">Today &middot; {{ frappe.utils.formatdate(frappe.utils.nowdate(), "dd MMM yyyy") }}</div>
@@ -186,16 +182,35 @@
 			</div>
 		</div>
 
-		<!-- 9. Purchase Requirements -->
-		<div class="card"><div class="card__head"><h3>Purchase Requirements</h3><span class="muted">Auto-generated</span></div>
-			<div class="card__body">
-				{%- for grp in purchase %}
-				<div class="group-head" style="margin-top:{{ '0' if loop.first else '16px' }}">{{ badge(grp.label, grp.badge) }}</div>
-				{%- for it in grp.rows %}
-				<div class="kv-row"><span class="k"><i class="fa-solid fa-box" style="color:var(--muted)"></i>{{ it }}</span><a class="btn btn--outline btn--sm">Add</a></div>
+		<!-- 9. Purchase Requirements — live: Critical Stock + Reorder Level Reached -->
+		<div class="card"><div class="card__head"><h3>Purchase Requirements</h3><span class="muted">Live stock</span></div>
+			<div class="card__body" id="purchase-req">
+				{%- set crit = purchase_requirements.critical %}
+				{%- set reord = purchase_requirements.reorder %}
+				{%- if crit %}
+				<div class="group-head">{{ badge("Critical Stock", "badge--danger") }}</div>
+				{%- for it in crit %}
+				<div class="kv-row">
+					<span class="k"><i class="fa-solid fa-triangle-exclamation" style="color:#dc2626"></i>{{ it.item_name }} <span class="muted" style="font-size:11.5px">· {{ it.available }} in stock, need {{ it.need }} {{ it.uom }}</span></span>
+					<button type="button" class="btn btn--outline btn--sm pr-add" data-item="{{ it.item_code }}" data-name="{{ it.item_name }}" data-need="{{ it.need }}" data-uom="{{ it.uom }}" data-available="{{ it.available }}">Add</button>
+				</div>
 				{%- endfor %}
+				{%- endif %}
+				{%- if reord %}
+				<div class="group-head" style="margin-top:{{ '16px' if crit else '0' }}">{{ badge("Reorder Level Reached", "badge--pending") }}</div>
+				{%- for it in reord %}
+				<div class="kv-row">
+					<span class="k"><i class="fa-solid fa-box" style="color:var(--muted)"></i>{{ it.item_name }} <span class="muted" style="font-size:11.5px">· {{ it.available }} ≤ reorder {{ it.reorder_level }} {{ it.uom }}</span></span>
+					<button type="button" class="btn btn--outline btn--sm pr-add" data-item="{{ it.item_code }}" data-name="{{ it.item_name }}" data-need="{{ it.need }}" data-uom="{{ it.uom }}" data-available="{{ it.available }}">Add</button>
+				</div>
 				{%- endfor %}
-				<button class="btn btn--primary" style="width:100%;justify-content:center;margin-top:14px"><i class="fa-solid fa-cart-plus"></i> Create Purchase Request</button>
+				{%- endif %}
+				{%- if crit or reord %}
+				<button type="button" class="btn btn--primary" id="pr-create-all" style="width:100%;justify-content:center;margin-top:14px"><i class="fa-solid fa-cart-plus"></i> Create Purchase Request</button>
+				<div id="pr-result" class="muted" style="font-size:12px;margin-top:8px"></div>
+				{%- else %}
+				<div class="empty">All required parts are in stock — nothing to purchase.</div>
+				{%- endif %}
 			</div>
 		</div>
 	</div>
@@ -297,6 +312,24 @@
 		<div class="modal__foot">
 			<button type="button" class="btn btn--outline" data-close>Cancel</button>
 			<button type="submit" form="task-form" class="btn btn--primary"><i class="fa-solid fa-check"></i> Create Task</button>
+		</div>
+	</div>
+</div>
+
+<!-- Purchase Request confirm modal — selected items with adjustable quantities -->
+<div class="modal-overlay" id="pr-modal" role="dialog" aria-modal="true" aria-labelledby="pr-modal-title">
+	<div class="modal" style="max-width:560px">
+		<div class="modal__head">
+			<div><h3 id="pr-modal-title">Create Purchase Request</h3><div class="sub">Adjust quantities, then confirm</div></div>
+			<button type="button" class="modal__close" data-close aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+		</div>
+		<div class="modal__body" id="pr-modal-body"></div>
+		<div class="modal__foot" style="justify-content:space-between; gap:10px; flex-wrap:wrap">
+			<div id="pr-modal-result" class="muted" style="font-size:12px"></div>
+			<div class="row" style="gap:8px">
+				<button type="button" class="btn btn--outline btn--sm" data-close>Cancel</button>
+				<button type="button" class="btn btn--primary btn--sm" id="pr-confirm"><i class="fa-solid fa-check"></i> Create Material Request</button>
+			</div>
 		</div>
 	</div>
 </div>
@@ -413,6 +446,69 @@
 				})
 				.catch(function (err) { b.disabled = false; b.classList.remove("is-on"); fail(err); });
 		});
+	});
+
+	// ---- Purchase Requirements: pick items (Add), adjust qty in a modal, create one MR
+	var prSelected = {};
+	var prCard = document.getElementById("purchase-req");
+	var prModal = document.getElementById("pr-modal");
+	function prEsc(s) { var d = document.createElement("div"); d.textContent = (s == null ? "" : s); return d.innerHTML; }
+	function prSetBtn(btn, on) {
+		btn.classList.toggle("btn--primary", on);
+		btn.classList.toggle("btn--outline", !on);
+		btn.innerHTML = on ? '<i class="fa-solid fa-check"></i> Added' : "Add";
+	}
+	// Toggle an item in/out of the selection.
+	if (prCard) prCard.addEventListener("click", function (e) {
+		var btn = e.target.closest(".pr-add"); if (!btn) return;
+		var code = btn.dataset.item;
+		if (prSelected[code]) { delete prSelected[code]; prSetBtn(btn, false); }
+		else {
+			prSelected[code] = {
+				item_code: code, item_name: btn.dataset.name, uom: btn.dataset.uom || "",
+				need: parseFloat(btn.dataset.need) || 1, available: btn.dataset.available || "0"
+			};
+			prSetBtn(btn, true);
+		}
+	});
+	// Open the confirm modal with the selected items (qty pre-filled from need / reorder qty).
+	var prCreateBtn = document.getElementById("pr-create-all");
+	if (prCreateBtn) prCreateBtn.addEventListener("click", function () {
+		var codes = Object.keys(prSelected);
+		if (!codes.length) { alert("Add at least one item to the request (use the Add buttons)."); return; }
+		document.getElementById("pr-modal-body").innerHTML =
+			'<table class="table"><thead><tr><th>Item</th><th style="width:78px">Stock</th><th style="width:96px">Order Qty</th></tr></thead><tbody>' +
+			codes.map(function (c) {
+				var it = prSelected[c];
+				return '<tr data-item="' + prEsc(c) + '"><td>' + prEsc(it.item_name) +
+					' <span class="muted" style="font-size:11px">' + prEsc(it.uom) + '</span></td>' +
+					'<td class="muted">' + prEsc(it.available) + '</td>' +
+					'<td><input type="number" min="0" step="1" class="pr-qty" value="' + it.need + '" style="width:100%"></td></tr>';
+			}).join("") + '</tbody></table>';
+		document.getElementById("pr-modal-result").textContent = "";
+		open(prModal);
+	});
+	// Confirm → create one Purchase Material Request with the chosen items + quantities.
+	document.getElementById("pr-confirm").addEventListener("click", function () {
+		var btn = this, out = document.getElementById("pr-modal-result");
+		var items = [];
+		prModal.querySelectorAll("#pr-modal-body tbody tr").forEach(function (tr) {
+			var qty = parseFloat(tr.querySelector(".pr-qty").value) || 0;
+			if (qty > 0) items.push({ item_code: tr.dataset.item, qty: qty });
+		});
+		if (!items.length) { out.textContent = "Set a quantity for at least one item."; return; }
+		btn.disabled = true; out.textContent = "Creating Material Request…";
+		callMethod("garagedesk.api.workshop.create_material_request", { items: items, force: 1 })
+			.then(function (r) {
+				var mr = r && r.material_request;
+				close(prModal);
+				document.getElementById("pr-result").innerHTML = "Material Request <b>" + mr + "</b> created (" + r.items +
+					" item" + (r.items === 1 ? "" : "s") + '). <a href="/app/material-request/' + encodeURIComponent(mr) + '" target="_blank">Open</a>';
+				items.forEach(function (i) { delete prSelected[i.item_code]; });
+				prCard.querySelectorAll(".pr-add").forEach(function (b) { if (!prSelected[b.dataset.item]) prSetBtn(b, false); });
+			})
+			.catch(function (err) { out.textContent = "Could not create: " + (err && err.message ? err.message : err); })
+			.then(function () { btn.disabled = false; });
 	});
 })();
 </script>

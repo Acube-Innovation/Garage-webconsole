@@ -86,7 +86,7 @@
 			<div class="kit-block">
 				<h4 class="kit-title">Kit Parts <span class="muted" id="kit-parts-count"></span></h4>
 				<table class="table editable"><thead><tr>
-					<th>Item</th><th>Item Name</th><th style="width:70px">Qty</th><th style="width:80px">UOM</th><th style="width:110px">Rate</th><th style="width:40px"></th>
+					<th style="width:13%">Item</th><th style="width:13%">Item Name</th><th style="width:118px">Task</th><th style="width:132px">Material Request</th><th style="width:78px">Status</th><th style="width:48px">Qty</th><th style="width:54px">UOM</th><th style="width:80px">Rate</th><th style="width:34px"></th>
 				</tr></thead><tbody id="kit-parts-body"></tbody></table>
 				<div class="empty kit-empty" id="kit-parts-empty">No kit parts lines.</div>
 			</div>
@@ -106,14 +106,17 @@
 	<div class="modal" style="max-width:860px">
 		<div class="modal__head">
 			<div><h3 id="kit-modal-title">Add Kit Components</h3><div class="sub" id="kit-modal-sub">—</div></div>
-			<button type="button" class="modal__close" data-kit-close aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+			<div class="row" style="gap:8px; align-items:center">
+				<button type="button" class="btn btn--outline btn--sm" id="kit-save-standard-btn"><i class="fa-solid fa-floppy-disk"></i> Create / Update Standard</button>
+				<button type="button" class="modal__close" data-kit-close aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+			</div>
 		</div>
 		<div class="modal__body" id="kit-modal-body">
 			<div class="empty">Loading…</div>
 		</div>
 		<div class="modal__foot">
 			<button type="button" class="btn btn--outline btn--sm" data-kit-close>Cancel</button>
-			<button type="button" class="btn btn--primary btn--sm" id="kit-add-btn"><i class="fa-solid fa-plus"></i> Add Selected</button>
+			<button type="button" class="btn btn--primary btn--sm" id="kit-add-btn"><i class="fa-solid fa-plus"></i> Add to Job</button>
 		</div>
 	</div>
 </div>
@@ -143,7 +146,7 @@
 	#tech-modal-body .tech-card { margin-bottom:0; }
 	.jc-labor-code { display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600;
 		background:#eef4ff; color:#1b4fd6; border:1px solid #cfe0ff; border-radius:6px; padding:3px 8px; cursor:pointer; }
-	.jc-labor-code.is-empty { background:transparent; color:var(--muted,#7a8598); border-style:dashed; cursor:default; font-weight:500; }
+	.jc-labor-code.is-empty { background:transparent; color:var(--muted,#7a8598); border-style:dashed; cursor:pointer; font-weight:500; }
 	.kit-block { margin-bottom:18px; }
 	.kit-block:last-child { margin-bottom:0; }
 	.kit-title { font-size:13px; font-weight:800; letter-spacing:.02em; margin:0 0 8px; }
@@ -152,6 +155,12 @@
 	.kit-grp__head { display:flex; align-items:center; gap:8px; font-weight:700; margin-bottom:6px; }
 	#kit-modal .table th, #kit-modal .table td { padding:6px 8px; }
 	#kit-modal-body .kit-none { color:var(--muted,#7a8598); font-size:13px; padding:6px 2px; }
+	/* Create / Update Standard button — light red, matching the active job-type card */
+	#kit-save-standard-btn { background: var(--red-soft, #fde7ee); border-color: var(--red, #ec2e5d); color: var(--red, #ec2e5d); }
+	/* Kit tables under Job Details — compact so the extra columns don't feel cramped */
+	#kit-card .table.editable th, #kit-card .table.editable td { padding:5px 8px; font-size:12.5px; vertical-align:middle; }
+	#kit-card .table.editable td a { white-space:nowrap; }
+	#kit-card .kit-block { overflow-x:auto; }
 </style>
 
 <!-- TAB 3 — Complaints / Check-Up -->
@@ -614,21 +623,43 @@
 		if (e.target.matches('select.jt')) {
 			var sv = tr.querySelector('select.svc');
 			if (sv) sv.innerHTML = serviceOptions(e.target.value, '');
+			var oldStd = tr.dataset.labour || '';
 			setRowLaborCode(tr, ''); // job type changed → service list reset, drop stale code
+			if (oldStd) cleanupKitForStandard(oldStd);
 			return;
 		}
 		if (e.target.matches('select.svc')) {
+			var prevStd = tr.dataset.labour || '';
 			var service = e.target.value;
+			// A service can only appear once in Job Details.
+			if (service && serviceAlreadyUsed(service, tr)) {
+				alert('“' + e.target.options[e.target.selectedIndex].text + '” is already added. Each service can only be added once.');
+				e.target.value = '';
+				setRowLaborCode(tr, '');
+				if (prevStd) cleanupKitForStandard(prevStd);
+				return;
+			}
 			var standard = service ? (LTS_BY_SERVICE[service] || '') : '';
 			setRowLaborCode(tr, standard);
-			if (standard) openKitDialog(standard, e.target.options[e.target.selectedIndex].text);
+			if (prevStd && prevStd !== standard) cleanupKitForStandard(prevStd);
+			// Open the popup whenever a service is picked — even with no standard (empty tables).
+			if (service) openKitDialog(standard, service, tr, e.target.options[e.target.selectedIndex].text);
 		}
 	});
-	// Click the labor-code chip to re-open the kit popup for that row's standard.
+	// True if another Job Details row already has this service selected.
+	function serviceAlreadyUsed(service, exceptTr) {
+		if (!service) return false;
+		return Array.prototype.some.call(jdBody.children, function (tr) {
+			var sv = tr.querySelector('select.svc');
+			return tr !== exceptTr && sv && sv.value === service;
+		});
+	}
+	// Click the labor-code chip to (re)open the kit popup for that row — with or without a standard.
 	jdBody.addEventListener('click', function (e) {
 		var chip = e.target.closest('[data-labor-code]'); if (!chip) return;
-		var tr = chip.closest('tr'), code = tr && tr.dataset.labour;
-		if (code) openKitDialog(code, '');
+		var tr = chip.closest('tr'), svc = tr.querySelector('select.svc');
+		var service = svc ? svc.value : '', code = tr.dataset.labour || '';
+		if (service || code) openKitDialog(code, service, tr, '');
 	});
 	function setRowLaborCode(tr, standard) { tr.dataset.labour = standard || ''; renderLaborCodeCell(tr); }
 	function renderLaborCodeCell(tr) {
@@ -640,8 +671,8 @@
 			span.title = 'Click to pick kit components';
 		} else {
 			span.className = 'jc-labor-code is-empty';
-			span.textContent = '—';
-			span.title = '';
+			span.textContent = '+ Kit';
+			span.title = 'Click to add kit components manually';
 		}
 	}
 	function escAttr(s) { return String(s == null ? '' : s).replace(/"/g, '&quot;'); }
@@ -663,8 +694,24 @@
 			'<button type="button" class="tech-pick" title="Technician Activity Board"><i class="fa-solid fa-user"></i></button></div></td>' +
 			'<td><input class="hrs" type="number" min="0" step="0.5" value="' + (v.hours != null && v.hours !== '' ? v.hours : 1) + '"></td>' +
 			'<td><button type="button" class="icon-del"><i class="fa-solid fa-trash"></i></button></td>';
-		tr.querySelector('.icon-del').addEventListener('click', function () { tr.remove(); toggleEmpty(jdBody, jdEmpty); });
+		tr.querySelector('.icon-del').addEventListener('click', function () {
+			var std = tr.dataset.labour || '';
+			tr.remove(); toggleEmpty(jdBody, jdEmpty);
+			cleanupKitForStandard(std); // drop this service's kit rows if no other row still uses it
+		});
 		jdBody.appendChild(tr); renderLaborCodeCell(tr); toggleEmpty(jdBody, jdEmpty);
+	}
+	// Is a standard still referenced by any Job Details row? (kept if so.)
+	function standardStillUsed(standard) {
+		if (!standard) return true;
+		return Array.prototype.some.call(jdBody.children, function (tr) { return (tr.dataset.labour || '') === standard; });
+	}
+	// Remove committed kit rows that came from a standard no longer used by any service row.
+	function cleanupKitForStandard(standard) {
+		if (!standard || standardStillUsed(standard)) return;
+		var drop = function (arr) { return arr.filter(function (r) { return (r.source_standard || '') !== standard; }); };
+		kitLabor = drop(kitLabor); kitParts = drop(kitParts); kitSublet = drop(kitSublet);
+		renderKitTables();
 	}
 	document.getElementById('add-job-detail').addEventListener('click', function () { addServiceRow(); });
 	function gatherServices() {
@@ -703,14 +750,20 @@
 		return keys;
 	}
 	function buildKitRow(group, s) {
-		if (group === 'labor') return { operation: s.operation || '', description: s.description || '', description_ar: s.description_ar || '', hours: s.hours || 0, rate: s.rate || 0, amount: s.amount || 0, skill_level: s.skill_level || '' };
-		if (group === 'parts') return { item_code: s.item_code || '', item_name: s.item_name || '', qty: s.qty || 0, uom: s.uom || '', rate: s.rate || 0, markup_pct: s.markup_pct || 0, amount: s.amount || 0 };
-		return { vendor: s.vendor || '', service_description: s.service_description || '', cost: s.cost || 0, markup_pct: s.markup_pct || 0, sell_amount: s.sell_amount || 0, warranty_months: s.warranty_months || 0 };
+		var b;
+		if (group === 'labor') b = { operation: s.operation || '', description: s.description || '', description_ar: s.description_ar || '', hours: s.hours || 0, rate: s.rate || 0, amount: s.amount || 0, skill_level: s.skill_level || '' };
+		else if (group === 'parts') b = { item_code: s.item_code || '', item_name: s.item_name || '', qty: s.qty || 0, uom: s.uom || '', rate: s.rate || 0, markup_pct: s.markup_pct || 0, amount: s.amount || 0, task: s.task || '', material_request: s.material_request || '', material_request_status: s.material_request_status || '' };
+		else b = { vendor: s.vendor || '', service_description: s.service_description || '', cost: s.cost || 0, markup_pct: s.markup_pct || 0, sell_amount: s.sell_amount || 0, warranty_months: s.warranty_months || 0 };
+		b.source_standard = s.source_standard || '';
+		return b;
 	}
 
 	// --- popup ---
 	var kitModal = document.getElementById('kit-modal');
 	var kitDialogData = { labor: [], parts: [], sublet: [] };
+	var kitDialogStandard = ''; // the standard the open popup belongs to (stamped on committed rows)
+	var kitDialogService = '';  // the Job Type Service the popup was opened for (may have no standard)
+	var kitDialogRow = null;    // the Job Details <tr> the popup belongs to (to update its labor-code chip)
 	function kitModalClose() { kitModal.classList.remove('is-open'); }
 	kitModal.querySelectorAll('[data-kit-close]').forEach(function (b) { b.addEventListener('click', kitModalClose); });
 	kitModal.addEventListener('click', function (e) { if (e.target === kitModal) kitModalClose(); });
@@ -763,68 +816,165 @@
 		techModalClose();
 	});
 
-	function openKitDialog(standard, label) {
-		if (!standard) return;
-		document.getElementById('kit-modal-sub').textContent = label || LTS_LABEL[standard] || standard;
+	// Item catalog for the popup's Parts "Item" autocomplete (loaded once, reused).
+	var KIT_ITEMS = [];
+	function ensureKitItems() {
+		if (KIT_ITEMS.length) return;
+		callMethod("garagedesk.api.front_office.get_estimate_items", { services: gatherServices().map(function (r) { return r.service; }).filter(Boolean) })
+			.then(function (o) { o = o || {}; KIT_ITEMS = (o.mapped || []).concat(o.others || []); }).catch(function () { });
+	}
+	function attachKitItemAutocomplete(input) {
+		if (!input || input.dataset.acset) return;
+		input.dataset.acset = '1';
+		attachAutocomplete(input, function (q) {
+			q = (q || '').toLowerCase();
+			return KIT_ITEMS.filter(function (it) {
+				return !q || (it.item || '').toLowerCase().indexOf(q) >= 0 || (it.item_name || '').toLowerCase().indexOf(q) >= 0;
+			}).slice(0, 10).map(function (it) {
+				return { label: it.item, sub: (it.item_name && it.item_name !== it.item) ? it.item_name : '', value: it.item, rate: it.rate };
+			});
+		}, function (it) {
+			input.value = it.value;
+			var tr = input.closest('tr'), rateEl = tr && tr.querySelector('.ke-rate');
+			if (rateEl && it.rate && !parseFloat(rateEl.value)) rateEl.value = it.rate;
+		});
+	}
+
+	// Open the kit popup for a service row. Works with or without a Labor Time Standard:
+	// with a standard the tables are pre-filled; without one they start empty for manual entry.
+	function openKitDialog(standard, service, row, label) {
+		kitDialogStandard = standard || '';
+		kitDialogService = service || '';
+		kitDialogRow = row || null;
+		var stdBtn = document.getElementById('kit-save-standard-btn');
+		if (stdBtn) { stdBtn.disabled = false; stdBtn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> ' + (standard ? 'Update Standard' : 'Create Standard'); }
+		ensureKitItems();
+		document.getElementById('kit-modal-sub').textContent = label || LTS_LABEL[standard] || service || standard || __svcLabelForRow(row) || 'Manual kit';
+		kitModal.classList.add('is-open');
+		if (!standard) { // no standard for this service — start with empty editable tables
+			kitDialogData = { labor: [], parts: [], sublet: [] };
+			renderKitModalBody();
+			return;
+		}
 		var body = document.getElementById('kit-modal-body');
 		body.innerHTML = '<div class="empty">Loading…</div>';
-		kitModal.classList.add('is-open');
 		callMethod('garagedesk.workshop.doctype.workshop_job_card.workshop_job_card.kit_components_for_standard', { standard: standard })
 			.then(function (data) {
 				data = data || { labor: [], parts: [], sublet: [] };
-				var have = existingKitKeys();
-				kitDialogData = {
-					labor: (data.labor || []).filter(function (x) { return !have.has(kitKey('labor', x)); }),
-					parts: (data.parts || []).filter(function (x) { return !have.has(kitKey('parts', x)); }),
-					sublet: (data.sublet || []).filter(function (x) { return !have.has(kitKey('sublet', x)); })
-				};
+				// Always show the standard's full kit — "Add to Job" dedupes on commit,
+				// so re-opening a saved card still shows the components (not an empty popup).
+				kitDialogData = { labor: data.labor || [], parts: data.parts || [], sublet: data.sublet || [] };
 				renderKitModalBody();
 			})
 			.catch(function () { body.innerHTML = '<div class="kit-none">Could not load kit components.</div>'; });
 	}
-	function kitGroupHtml(group, title, rows, cells, headers) {
-		if (!rows.length) return '';
-		var ths = headers.map(function (h) { return '<th>' + esc(h) + '</th>'; }).join('');
-		var trs = rows.map(function (r, i) {
-			return '<tr><td style="width:34px"><input type="checkbox" data-kit-row="' + group + '" data-i="' + i + '" checked></td>' + cells(r) + '</tr>';
-		}).join('');
-		return '<div class="kit-grp"><div class="kit-grp__head"><label><input type="checkbox" data-kit-all="' + group + '" checked> ' + esc(title) + ' (' + rows.length + ')</label></div>' +
-			'<table class="table"><thead><tr><th style="width:34px"></th>' + ths + '</tr></thead><tbody>' + trs + '</tbody></table></div>';
+	function __svcLabelForRow(row) {
+		var svc = row && row.querySelector('select.svc');
+		return svc && svc.options[svc.selectedIndex] ? svc.options[svc.selectedIndex].text : '';
+	}
+	// One editable <tr> for a kit group (auto-filled from the standard, or blank via Add row).
+	function kitEditRow(group, r) {
+		r = r || {};
+		if (group === 'labor') return '<tr>' +
+			'<td><input class="ke-desc" value="' + escAttr(r.description || r.operation || '') + '" placeholder="Description"></td>' +
+			'<td><input class="ke-hours" type="number" min="0" step="0.1" value="' + (r.hours != null ? r.hours : 0) + '"></td>' +
+			'<td><input class="ke-rate" type="number" min="0" step="0.01" value="' + (r.rate != null ? r.rate : 0) + '"></td>' +
+			'<td><input class="ke-skill" value="' + escAttr(r.skill_level || '') + '" placeholder="Skill"></td>' +
+			'<td><button type="button" class="icon-del" data-kdel><i class="fa-solid fa-trash"></i></button></td></tr>';
+		if (group === 'parts') return '<tr>' +
+			'<td><input class="ke-item" value="' + escAttr(r.item_code || '') + '" placeholder="Item code"></td>' +
+			'<td><input class="ke-qty" type="number" min="0" step="1" value="' + (r.qty != null ? r.qty : 1) + '"></td>' +
+			'<td><input class="ke-uom" value="' + escAttr(r.uom || '') + '" placeholder="UOM"></td>' +
+			'<td><input class="ke-rate" type="number" min="0" step="0.01" value="' + (r.rate != null ? r.rate : 0) + '"></td>' +
+			'<td><button type="button" class="icon-del" data-kdel><i class="fa-solid fa-trash"></i></button></td></tr>';
+		return '<tr>' +
+			'<td><input class="ke-desc" value="' + escAttr(r.service_description || '') + '" placeholder="Service"></td>' +
+			'<td><input class="ke-vendor" value="' + escAttr(r.vendor || '') + '" placeholder="Vendor"></td>' +
+			'<td><input class="ke-cost" type="number" min="0" step="0.01" value="' + (r.cost != null ? r.cost : 0) + '"></td>' +
+			'<td><input class="ke-markup" type="number" min="0" step="1" value="' + (r.markup_pct != null ? r.markup_pct : 0) + '"></td>' +
+			'<td><button type="button" class="icon-del" data-kdel><i class="fa-solid fa-trash"></i></button></td></tr>';
+	}
+	function kitEditSection(group, title, headers) {
+		var ths = headers.map(function (h) { return '<th>' + esc(h) + '</th>'; }).join('') + '<th style="width:34px"></th>';
+		var rows = (kitDialogData[group] || []).map(function (r) { return kitEditRow(group, r); }).join('');
+		return '<div class="kit-grp"><div class="bill-kit-title">' + esc(title) +
+			'<button type="button" class="btn btn--outline btn--sm" data-kadd="' + group + '"><i class="fa-solid fa-plus"></i> Add row</button></div>' +
+			'<table class="table editable"><thead><tr>' + ths + '</tr></thead><tbody id="kmod-' + group + '-body">' + rows + '</tbody></table></div>';
 	}
 	function renderKitModalBody() {
-		var d = kitDialogData, body = document.getElementById('kit-modal-body');
-		if (!d.labor.length && !d.parts.length && !d.sublet.length) {
-			body.innerHTML = '<div class="kit-none">No new kit components for this labor code — everything is already added.</div>';
+		document.getElementById('kit-modal-body').innerHTML =
+			'<div class="kit-none" style="margin-bottom:10px">Kit items for this service are listed below — edit quantities/rates, add rows if needed, then “Add to Job”.</div>' +
+			kitEditSection('labor', 'Kit Labor', ['Description', 'Hours', 'Rate', 'Skill']) +
+			kitEditSection('parts', 'Kit Parts', ['Item', 'Qty', 'UOM', 'Rate']) +
+			kitEditSection('sublet', 'Kit Sublet', ['Service', 'Vendor', 'Cost', 'Markup %']);
+		document.querySelectorAll('#kit-modal-body .ke-item').forEach(attachKitItemAutocomplete);
+	}
+	// Add-row / remove-row inside the popup.
+	document.getElementById('kit-modal-body').addEventListener('click', function (e) {
+		var add = e.target.closest('[data-kadd]');
+		if (add) {
+			var tb = document.getElementById('kmod-' + add.dataset.kadd + '-body');
+			tb.insertAdjacentHTML('beforeend', kitEditRow(add.dataset.kadd, {}));
+			if (add.dataset.kadd === 'parts') attachKitItemAutocomplete(tb.lastElementChild.querySelector('.ke-item'));
 			return;
 		}
-		body.innerHTML =
-			'<div class="kit-none" style="margin-bottom:10px">Tick the lines to add, then “Add Selected”.</div>' +
-			kitGroupHtml('labor', 'Kit Labor', d.labor, function (r) {
-				return '<td>' + esc(r.description || r.operation || '') + '</td><td>' + fmtNum(r.hours) + '</td><td>' + fmtMoney(r.rate) + '</td><td>' + esc(r.skill_level || '') + '</td>';
-			}, ['Description', 'Hours', 'Rate', 'Skill']) +
-			kitGroupHtml('parts', 'Kit Parts', d.parts, function (r) {
-				return '<td>' + esc(r.item_code || '') + '</td><td>' + esc(r.item_name || '') + '</td><td>' + fmtNum(r.qty) + '</td><td>' + esc(r.uom || '') + '</td><td>' + fmtMoney(r.rate) + '</td>';
-			}, ['Item', 'Name', 'Qty', 'UOM', 'Rate']) +
-			kitGroupHtml('sublet', 'Kit Sublet', d.sublet, function (r) {
-				return '<td>' + esc(r.service_description || '') + '</td><td>' + esc(r.vendor || '') + '</td><td>' + fmtMoney(r.cost) + '</td><td>' + fmtNum(r.markup_pct) + '</td>';
-			}, ['Service', 'Vendor', 'Cost', 'Markup %']);
-	}
-	// Header checkbox toggles all rows in its group.
-	document.getElementById('kit-modal-body').addEventListener('change', function (e) {
-		var all = e.target.closest('[data-kit-all]'); if (!all) return;
-		this.querySelectorAll('[data-kit-row="' + all.dataset.kitAll + '"]').forEach(function (cb) { cb.checked = all.checked; });
+		var del = e.target.closest('[data-kdel]');
+		if (del) { del.closest('tr').remove(); }
 	});
-	document.getElementById('kit-add-btn').addEventListener('click', function () {
-		var added = 0;
+	function gatherKitModal(group) {
+		var tb = document.getElementById('kmod-' + group + '-body');
+		if (!tb) return [];
+		return Array.prototype.map.call(tb.children, function (tr) {
+			if (group === 'labor') return { description: tr.querySelector('.ke-desc').value, hours: tr.querySelector('.ke-hours').value, rate: tr.querySelector('.ke-rate').value, skill_level: tr.querySelector('.ke-skill').value };
+			if (group === 'parts') return { item_code: tr.querySelector('.ke-item').value, qty: tr.querySelector('.ke-qty').value, uom: tr.querySelector('.ke-uom').value, rate: tr.querySelector('.ke-rate').value };
+			return { service_description: tr.querySelector('.ke-desc').value, vendor: tr.querySelector('.ke-vendor').value, cost: tr.querySelector('.ke-cost').value, markup_pct: tr.querySelector('.ke-markup').value };
+		});
+	}
+	// Push popup rows into the Job's kit tables (stamped with the standard, deduped).
+	function commitKitRows(rows, std) {
+		var have = existingKitKeys();
 		['labor', 'parts', 'sublet'].forEach(function (g) {
 			var target = g === 'labor' ? kitLabor : g === 'parts' ? kitParts : kitSublet;
-			document.querySelectorAll('#kit-modal-body [data-kit-row="' + g + '"]:checked').forEach(function (cb) {
-				var src = kitDialogData[g][+cb.dataset.i]; if (!src) return;
-				target.push(buildKitRow(g, src)); added++;
+			(rows[g] || []).forEach(function (src) {
+				if (g === 'labor' && !(src.description || '').trim()) return;
+				if (g === 'parts' && !(src.item_code || '').trim()) return;
+				if (g === 'sublet' && !(src.service_description || '').trim()) return;
+				var row = buildKitRow(g, src); row.source_standard = std || '';
+				var k = kitKey(g, row);
+				if (have.has(k)) return; // never store the same line twice
+				have.add(k); target.push(row);
 			});
 		});
-		if (!added) { alert('Select at least one line to add.'); return; }
-		renderKitTables(); kitModalClose();
+		renderKitTables();
+	}
+	// "Add to Job" — commit the popup rows to the Job's kit tables (stamped with the standard).
+	document.getElementById('kit-add-btn').addEventListener('click', function () {
+		var rows = { labor: gatherKitModal('labor'), parts: gatherKitModal('parts'), sublet: gatherKitModal('sublet') };
+		commitKitRows(rows, kitDialogStandard || '');
+		kitModalClose();
+	});
+	// Top-right "Create / Update Standard" — persist the popup rows to the Labor Time Standard.
+	document.getElementById('kit-save-standard-btn').addEventListener('click', function () {
+		var btn = this;
+		if (!kitDialogService && !kitDialogStandard) { alert('Pick a service before saving to a Labor Time Standard.'); return; }
+		var rows = { labor: gatherKitModal('labor'), parts: gatherKitModal('parts'), sublet: gatherKitModal('sublet') };
+		btn.disabled = true;
+		callMethod('garagedesk.workshop.doctype.workshop_job_card.workshop_job_card.save_kit_to_standard', {
+			service: kitDialogService, standard: kitDialogStandard,
+			kit_labor: rows.labor, kit_parts: rows.parts, kit_sublet: rows.sublet
+		}).then(function (r) {
+			var std = (r && r.standard) || kitDialogStandard || '';
+			if (std) {
+				kitDialogStandard = std; // a subsequent "Add to Job" stamps rows with this standard
+				if (kitDialogService) LTS_BY_SERVICE[kitDialogService] = std;
+				LTS_LABEL[std] = (r && r.standard_code) || std;
+				if (kitDialogRow) setRowLaborCode(kitDialogRow, std); // reflect the (new) code on the row
+			}
+			btn.innerHTML = '<i class="fa-solid fa-check"></i> Saved';
+			setTimeout(function () { btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Update Standard'; }, 1600);
+		}).catch(function (err) {
+			alert('Could not save to Labor Time Standard: ' + (err && err.message ? err.message : err));
+		}).then(function () { btn.disabled = false; });
 	});
 
 	// --- three tables under Job Details ---
@@ -832,7 +982,12 @@
 		labor: { body: 'kit-labor-body', empty: 'kit-labor-empty', count: 'kit-labor-count', arr: function () { return kitLabor; },
 			cells: function (r) { return '<td>' + esc(r.description || r.operation || '') + '</td><td>' + fmtNum(r.hours) + '</td><td>' + fmtMoney(r.rate) + '</td><td>' + esc(r.skill_level || '') + '</td>'; } },
 		parts: { body: 'kit-parts-body', empty: 'kit-parts-empty', count: 'kit-parts-count', arr: function () { return kitParts; },
-			cells: function (r) { return '<td>' + esc(r.item_code || '') + '</td><td>' + esc(r.item_name || '') + '</td><td>' + fmtNum(r.qty) + '</td><td>' + esc(r.uom || '') + '</td><td>' + fmtMoney(r.rate) + '</td>'; } },
+			cells: function (r) {
+				var tk = r.task ? '<a href="/app/task/' + encodeURIComponent(r.task) + '" target="_blank">' + esc(r.task) + '</a>' : '<span class="muted">—</span>';
+				var mr = r.material_request ? '<a href="/app/material-request/' + encodeURIComponent(r.material_request) + '" target="_blank">' + esc(r.material_request) + '</a>' : '<span class="muted">—</span>';
+				var st = r.material_request_status ? esc(r.material_request_status) : '<span class="muted">—</span>';
+				return '<td>' + esc(r.item_code || '') + '</td><td>' + esc(r.item_name || '') + '</td><td>' + tk + '</td><td>' + mr + '</td><td>' + st + '</td><td>' + fmtNum(r.qty) + '</td><td>' + esc(r.uom || '') + '</td><td>' + fmtMoney(r.rate) + '</td>';
+			} },
 		sublet: { body: 'kit-sublet-body', empty: 'kit-sublet-empty', count: 'kit-sublet-count', arr: function () { return kitSublet; },
 			cells: function (r) { return '<td>' + esc(r.service_description || '') + '</td><td>' + esc(r.vendor || '') + '</td><td>' + fmtMoney(r.cost) + '</td><td>' + fmtNum(r.markup_pct) + '</td>'; } }
 	};
