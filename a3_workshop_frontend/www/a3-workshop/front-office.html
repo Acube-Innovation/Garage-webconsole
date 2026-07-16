@@ -587,11 +587,8 @@
 				alert("Appointment date must be today or later.");
 				return Promise.reject();
 			}
-			var customerForAppt = current ? current.id : leadPrefillCustomer;
-			if (!customerForAppt) {
-				alert("An appointment needs an existing customer. Select a customer (or open this from a call in Telecalling) before adding an appointment.");
-				return Promise.reject();
-			}
+			// No existing customer? The backend will create one from the
+			// lead's name + mobile so the appointment can still be booked.
 		}
 		var customerId = current ? current.id : (leadPrefillCustomer || null);
 		return callMethod("garagedesk.api.front_office.create_lead", {
