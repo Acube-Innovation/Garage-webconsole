@@ -5,6 +5,12 @@
 
 {% block page_content %}
 {%- set fullname = (frappe.db.get_value("User", frappe.session.user, "full_name") if frappe.session.user != "Guest" else "User") or "User" -%}
+<div class="dashboard-actions" style="display:flex; justify-content:flex-end; margin-bottom:4px">
+	<a class="btn btn--icon btn--navy" href="/app/home" title="Go to Desk">
+		<i class="fa-solid fa-table-columns"></i>
+	</a>
+</div>
+
 <div class="welcome">
 	<div class="workshop-avatar workshop-avatar--lg" style="margin:0 auto">{{ fullname[0] }}</div>
 	<div class="hi">Welcome back, {{ fullname.split(" ")[0] }}</div>

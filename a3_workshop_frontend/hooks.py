@@ -70,7 +70,10 @@ website_route_rules = [
 # ----------
 
 # application home page (will override Website Settings)
-# home_page = "login"
+# Root "/" renders the Workshop dashboard. Its require_login() gate bounces Guests to
+# /login?redirect-to=/a3-workshop, so after login they land on /a3-workshop (the
+# redirect-to arg wins over the default /app/home for System Users too).
+home_page = "a3-workshop"
 
 # website user home page (by Role)
 # role_home_page = {
