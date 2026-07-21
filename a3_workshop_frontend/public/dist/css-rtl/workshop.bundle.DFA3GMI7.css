@@ -1,4 +1,4 @@
-/* ../../../../../../../tmp/tmp-4129-sOg5THoU7s9t/a3_workshop_frontend/a3_workshop_frontend/public/scss/workshop.bundle.css */
+/* ../../../../../../../tmp/tmp-83768-6yShL5CEC8nR/a3_workshop_frontend/a3_workshop_frontend/public/scss/workshop.bundle.css */
 :root {
   --red: #ec2e5d;
   --red-600: #d81e4d;
@@ -70,7 +70,7 @@ h4 {
   width: var(--sidebar-w);
   flex: 0 0 var(--sidebar-w);
   background: var(--surface);
-  border-right: 1px solid var(--border);
+  border-left: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -400,7 +400,7 @@ h4 {
 .list-row__amount {
   font-weight: 800;
   font-size: 16px;
-  text-align: right;
+  text-align: left;
 }
 .list-row__actions {
   display: flex;
@@ -612,7 +612,7 @@ h4 {
 .table thead th {
   background: var(--red);
   color: #fff;
-  text-align: left;
+  text-align: right;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   font-size: 11px;
@@ -620,10 +620,10 @@ h4 {
   padding: 12px 16px;
 }
 .table thead th:first-child {
-  border-top-left-radius: 10px;
+  border-top-right-radius: 10px;
 }
 .table thead th:last-child {
-  border-top-right-radius: 10px;
+  border-top-left-radius: 10px;
 }
 .table tbody td {
   padding: 12px 16px;
@@ -866,7 +866,7 @@ h4 {
   background: var(--red-soft);
 }
 .jobtype-box .tick {
-  margin-left: auto;
+  margin-right: auto;
   color: var(--red);
   display: none;
 }
@@ -951,7 +951,7 @@ h4 {
 .cart-item .line {
   font-weight: 700;
   min-width: 90px;
-  text-align: right;
+  text-align: left;
 }
 .totals {
   background: var(--bg);
@@ -1069,7 +1069,7 @@ input[type=range] {
   cursor: pointer;
   font: inherit;
   color: var(--text);
-  text-align: left;
+  text-align: right;
 }
 .sec-btn i {
   color: var(--red);
@@ -1077,7 +1077,7 @@ input[type=range] {
   text-align: center;
 }
 .sec-btn .count {
-  margin-left: auto;
+  margin-right: auto;
   color: var(--muted);
   font-size: 12px;
   background: var(--bg);
@@ -1144,7 +1144,7 @@ input[type=range] {
   margin-top: 0;
 }
 .group-head .count {
-  margin-left: auto;
+  margin-right: auto;
   color: var(--muted);
   font-size: 12px;
   font-weight: 600;
@@ -1381,7 +1381,7 @@ input[type=range] {
   background: var(--red-soft);
 }
 .tc-row.is-overdue {
-  border-left: 3px solid var(--red);
+  border-right: 3px solid var(--red);
 }
 .tc-row .sub {
   color: var(--muted);
@@ -1472,4 +1472,4 @@ input[type=range] {
   flex-wrap: wrap;
   gap: 6px 0;
 }
-/*# sourceMappingURL=workshop.bundle.7ICD4MXJ.css.map */
+/*# sourceMappingURL=workshop.bundle.DFA3GMI7.css.map */
