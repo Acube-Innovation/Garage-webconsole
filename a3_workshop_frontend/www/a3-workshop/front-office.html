@@ -29,7 +29,7 @@
 		</div>
 	</div>
 
-	<!-- BOX 2 — dynamic middle panel: 360 viewer / enquiry detail / lead form / customer form -->
+	<!-- BOX 2 — dynamic middle panel: 360 viewer / enquiry detail / opportunity form / customer form -->
 	<div class="card"><div class="card__head">
 			<h3 id="viewer-title">Customer 360</h3>
 			<span class="readonly-tag" id="viewer-tag">read-only</span>
@@ -42,8 +42,8 @@
 				<div class="empty">Select a customer on the left, then choose a section to view.</div>
 			</div>
 
-			<!-- STATE B: create-lead form -->
-			<div id="m-lead" style="display:none">
+			<!-- STATE B: create-opportunity form -->
+			<div id="m-opportunity" style="display:none">
 				<form id="enquiry-form">
 					<div class="fieldset-title" style="margin-top:0">Customer Details</div>
 					<div class="stack">
@@ -55,30 +55,30 @@
 					<div class="fieldset-title" style="display:flex;align-items:center;gap:8px">
 						Vehicle Details
 						<label style="display:flex;align-items:center;gap:8px;margin:0 0 0 auto;font-weight:600;cursor:pointer">
-							<input type="checkbox" id="l_add_vehicle"> Add new vehicle
+							<input type="checkbox" id="o_add_vehicle"> Add new vehicle
 						</label>
 					</div>
-					<div id="lead-vehicle-cards"></div>
-					<div id="lead-vehicle-fields" style="display:none">
+					<div id="opp-vehicle-cards"></div>
+					<div id="opp-vehicle-fields" style="display:none">
 						<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px 16px">
-							{{ field("Plate Number","lv_plate") }}
-							{{ field("Plate Emirate","lv_emirate",type="select") }}
-							{{ field("Plate Code","lv_plate_code") }}
-							{{ field("Make","lv_make",type="select") }}
-							{{ field("Model","lv_model",type="select") }}
-							{{ field("Model Year","lv_year",type="number") }}
-							{{ field("Odometer (km)","lv_odometer",type="number") }}
-							{{ field("Fuel Type","lv_fuel",type="select") }}
-							{{ field("VIN / Chassis","lv_vin") }}
+							{{ field("Plate Number","ov_plate") }}
+							{{ field("Plate Emirate","ov_emirate",type="select") }}
+							{{ field("Plate Code","ov_plate_code") }}
+							{{ field("Make","ov_make",type="select") }}
+							{{ field("Model","ov_model",type="select") }}
+							{{ field("Model Year","ov_year",type="number") }}
+							{{ field("Odometer (km)","ov_odometer",type="number") }}
+							{{ field("Fuel Type","ov_fuel",type="select") }}
+							{{ field("VIN / Chassis","ov_vin") }}
 						</div>
 					</div>
 					<div class="fieldset-title" style="display:flex;align-items:center;gap:8px">
 						Appointment
 						<label style="display:flex;align-items:center;gap:8px;margin:0 0 0 auto;font-weight:600;cursor:pointer">
-							<input type="checkbox" id="l_add_appointment"> Add appointment
+							<input type="checkbox" id="o_add_appointment"> Add appointment
 						</label>
 					</div>
-					<div id="lead-appointment-fields" style="display:none">
+					<div id="opp-appointment-fields" style="display:none">
 						<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px 16px">
 							{{ field("Appointment Date","appt_date",type="date") }}
 							{{ field("Appointment Time","appt_time",type="time") }}
@@ -86,8 +86,8 @@
 					</div>
 				</form>
 				<div class="modal__foot" style="padding:16px 0 0;border:none">
-					<button type="button" class="btn btn--outline" id="save-lead"><i class="fa-solid fa-floppy-disk"></i> Save</button>
-					<button type="button" class="btn btn--primary" id="save-lead-jc">Save &amp; Job Card <i class="fa-solid fa-arrow-right"></i></button>
+					<button type="button" class="btn btn--outline" id="save-opportunity"><i class="fa-solid fa-floppy-disk"></i> Save</button>
+					<button type="button" class="btn btn--primary" id="save-opportunity-jc">Save &amp; Job Card <i class="fa-solid fa-arrow-right"></i></button>
 				</div>
 			</div>
 
@@ -130,15 +130,15 @@
 		</div>
 	</div>
 
-	<!-- BOX 3 — incoming enquiries list -->
+	<!-- BOX 3 — incoming enquiries list (real CRM Opportunities) -->
 	<div class="card">
 		<div class="card__head">
 			<h3>Enquiries</h3>
-			<button type="button" class="btn btn--primary btn--sm" id="create-lead"><i class="fa-solid fa-plus"></i> Create Lead</button>
+			<button type="button" class="btn btn--primary btn--sm" id="create-opportunity"><i class="fa-solid fa-plus"></i> Create Opportunity</button>
 		</div>
 		<div class="card__body">
-			<div class="field" style="margin-bottom:12px"><input id="lead-search" placeholder="Search enquiries…"></div>
-			<div class="dir-list" id="lead-list"></div>
+			<div class="field" style="margin-bottom:12px"><input id="opp-search" placeholder="Search enquiries…"></div>
+			<div class="dir-list" id="opp-list"></div>
 		</div>
 	</div>
 </div>
@@ -177,11 +177,20 @@
 			id: r.name,
 			name: r.customer_name || r.name,
 			phone: r.mobile_no || "",
-			email: r.email_id || "",
-			plate: "—", model: "—", chassis: "—"
+			email: r.email_id || ""
 		};
 	}
 
+	// Every cell/label rendered below comes from the database, so escape before
+	// interpolating it into innerHTML.
+	function esc(v) {
+		return String(v == null ? "" : v).replace(/[&<>"']/g, function (ch) {
+			return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch];
+		});
+	}
+
+	// The LHS sections. `cols` is the column order the server's row cells arrive in
+	// (see garagedesk.api.front_office.get_customer_360) — keep the two in step.
 	var SECTIONS = [
 		{ key: "jobcard", label: "Job Cards", icon: "fa-clipboard-list", cols: ["Job Card", "Date", "Vehicle", "Service", "Status", "Amount"] },
 		{ key: "order", label: "Orders", icon: "fa-cart-shopping", cols: ["Order No", "Date", "Items", "Total", "Status"] },
@@ -192,38 +201,34 @@
 		{ key: "complaints", label: "Complaints", icon: "fa-triangle-exclamation", cols: ["Date", "Complaint", "Severity", "Status"] }
 	];
 
-	function rowsFor(c, key) {
-		switch (key) {
-			case "jobcard": return [
-				["JC-2026-06-18-0011", "18 Jun 2026", c.plate, "General Service", "QC Pending", "AED 1,538.46"],
-				["JC-2026-05-12-0007", "12 May 2026", c.plate, "Repeat Service", "Completed", "AED 24,150.00"]];
-			case "order": return [
-				["SO-2026-0042", "17 Jun 2026", "3 items", "AED 1,820.00", "Confirmed"],
-				["SO-2026-0031", "02 May 2026", "1 item", "AED 350.00", "Delivered"]];
-			case "invoice": return [
-				["INV-2026-0088", "18 Jun 2026", "AED 1,615.38", "AED 0.00", "AED 1,615.38", "Unpaid"],
-				["INV-2026-0061", "13 May 2026", "AED 25,357.50", "AED 25,357.50", "AED 0.00", "Paid"]];
-			case "payment": return [
-				["RCPT-0123", "13 May 2026", "Bank Transfer", "AED 25,357.50", "INV-2026-0061"]];
-			case "vehicles": return [
-				[c.plate, c.model, c.chassis, "84,320 km", "Diesel"]];
-			case "calls": return [
-				["16 Jun 2026", "Outgoing", "Service reminder", "Booked", "Telecaller"],
-				["10 May 2026", "Incoming", "Complaint", "Escalated", "CCM"]];
-			case "complaints": return [
-				["16 Jun 2026", "AC not cooling after service", "High", "Escalated"],
-				["28 Apr 2026", "Delay in delivery", "Medium", "Resolved"]];
-			default: return [];
-		}
+	// The selected customer's live 360 payload: { key: { rows: [[cell, …], …] } }.
+	var sections360 = {};
+	// Bumped on every customer selection so a slow response for a customer the user
+	// has already navigated away from is discarded instead of overwriting the panel.
+	var load360Token = 0;
+
+	function rowsFor(key) {
+		return (sections360[key] && sections360[key].rows) || [];
 	}
 
 	function variant(v) {
 		var m = {
-			"QC Pending": "badge--pending", "Completed": "badge--success", "New": "badge--new",
-			"Paid": "badge--success", "Unpaid": "badge--danger", "Confirmed": "badge--navy",
-			"Delivered": "badge--success", "Escalated": "badge--danger", "Resolved": "badge--success",
-			"Booked": "badge--success", "High": "badge--danger", "Critical": "badge--danger",
-			"Medium": "badge--pending", "Low": "badge--soft"
+			// Job Card
+			"Draft": "badge--soft", "Open": "badge--new", "In Progress": "badge--pending",
+			"On Hold": "badge--pending", "Ready": "badge--navy", "QC Pending": "badge--pending",
+			"Completed": "badge--success", "Closed": "badge--success", "Cancelled": "badge--danger",
+			// Selling / accounts
+			"Paid": "badge--success", "Unpaid": "badge--danger", "Overdue": "badge--danger",
+			"Partly Paid": "badge--pending", "Return": "badge--soft", "Credit Note Issued": "badge--soft",
+			"To Deliver and Bill": "badge--pending", "To Bill": "badge--pending",
+			"To Deliver": "badge--pending", "Confirmed": "badge--navy", "Delivered": "badge--success",
+			// CRM (enquiry status)
+			"New": "badge--new", "Quotation": "badge--navy", "Replied": "badge--pending",
+			"Converted": "badge--success", "Lost": "badge--danger",
+			// Shared: severity / call outcome
+			"Escalated": "badge--danger", "Resolved": "badge--success", "Booked": "badge--success",
+			"Critical": "badge--danger", "High": "badge--danger", "Medium": "badge--pending",
+			"Low": "badge--soft"
 		};
 		return m[v] || "badge--soft";
 	}
@@ -239,9 +244,9 @@
 	// ---------------------------------------------------------------
 	// Middle-panel state machine.
 	// States: "view" (customer 360 / enquiry detail — uses #viewer),
-	//         "lead" (#m-lead form), "customer" (#m-customer form).
+	//         "opportunity" (#m-opportunity form), "customer" (#m-customer form).
 	// ---------------------------------------------------------------
-	var mLead = document.getElementById("m-lead");
+	var mOpportunity = document.getElementById("m-opportunity");
 	var mCustomer = document.getElementById("m-customer");
 	var viewerTag = document.getElementById("viewer-tag");
 	var viewerClose = document.getElementById("viewer-close");
@@ -249,9 +254,9 @@
 
 	function setMiddle(state, title) {
 		middleState = state;
-		var isForm = (state === "lead" || state === "customer");
+		var isForm = (state === "opportunity" || state === "customer");
 		viewer.style.display = (state === "view") ? "block" : "none";
-		mLead.style.display = (state === "lead") ? "block" : "none";
+		mOpportunity.style.display = (state === "opportunity") ? "block" : "none";
 		mCustomer.style.display = (state === "customer") ? "block" : "none";
 		viewerTag.style.display = isForm ? "none" : "";
 		viewerClose.style.display = isForm ? "" : "none";
@@ -276,10 +281,19 @@
 			return !filter || c.name.toLowerCase().indexOf(filter) >= 0 || c.phone.indexOf(filter) >= 0 || c.id.toLowerCase().indexOf(filter) >= 0;
 		});
 		dirList.innerHTML = list.length ? list.map(function (c) {
-			return '<div class="dir-item" data-id="' + c.id + '">' +
-				'<div class="list-row__avatar">' + c.name[0] + '</div>' +
-				'<div><div class="nm">' + c.name + '</div><div class="ph">' + c.phone + '</div></div></div>';
+			return '<div class="dir-item" data-id="' + esc(c.id) + '">' +
+				'<div class="list-row__avatar">' + esc(c.name[0]) + '</div>' +
+				'<div><div class="nm">' + esc(c.name) + '</div><div class="ph">' + esc(c.phone) + '</div></div></div>';
 		}).join("") : '<div class="empty">No customers found.</div>';
+	}
+
+	// Paint the section buttons. Counts read "…" until the 360 payload lands.
+	function renderSections(loading) {
+		dirSections.innerHTML = SECTIONS.map(function (s) {
+			return '<button type="button" class="sec-btn" data-key="' + s.key + '">' +
+				'<i class="fa-solid ' + s.icon + '"></i> ' + s.label +
+				'<span class="count">' + (loading ? "…" : rowsFor(s.key).length) + '</span></button>';
+		}).join("");
 	}
 
 	function selectCustomer(c) {
@@ -290,26 +304,38 @@
 		document.getElementById("sel-avatar").textContent = c.name[0];
 		document.getElementById("sel-name").textContent = c.name;
 		document.getElementById("sel-phone").textContent = c.phone + " · " + c.id;
-		dirSections.innerHTML = SECTIONS.map(function (s) {
-			return '<button type="button" class="sec-btn" data-key="' + s.key + '">' +
-				'<i class="fa-solid ' + s.icon + '"></i> ' + s.label +
-				'<span class="count">' + rowsFor(c, s.key).length + '</span></button>';
-		}).join("");
-		showSection(SECTIONS[0].key); // default to Job Cards
+
+		// Every section is live data now — load this customer's 360 before rendering.
+		sections360 = {};
+		renderSections(true);
+		viewerTitle.textContent = c.name.split(" ").slice(0, 2).join(" ") + " — " + SECTIONS[0].label;
+		viewer.innerHTML = '<div class="empty">Loading…</div>';
+		var token = ++load360Token;
+		callMethod("garagedesk.api.front_office.get_customer_360", { customer: c.id })
+			.then(function (d) {
+				if (token !== load360Token) return; // superseded by a later selection
+				sections360 = d || {};
+				renderSections(false);
+				showSection(SECTIONS[0].key); // default to Job Cards
+			}).catch(function () {
+				if (token !== load360Token) return;
+				renderSections(false);
+				viewer.innerHTML = '<div class="empty">Could not load this customer\'s history.</div>';
+			});
 	}
 
 	function showSection(key) {
 		var s = SECTIONS.find(function (x) { return x.key === key; });
 		dirSections.querySelectorAll(".sec-btn").forEach(function (b) { b.classList.toggle("is-active", b.dataset.key === key); });
 		setMiddle("view", current.name.split(" ").slice(0, 2).join(" ") + " — " + s.label);
-		var rows = rowsFor(current, key);
+		var rows = rowsFor(key);
 		if (!rows.length) { viewer.innerHTML = '<div class="empty">No ' + s.label.toLowerCase() + ' for this customer.</div>'; return; }
 		var statusCols = ["Status", "Severity"];
-		var thead = "<thead><tr>" + s.cols.map(function (c) { return "<th>" + c + "</th>"; }).join("") + "</tr></thead>";
+		var thead = "<thead><tr>" + s.cols.map(function (c) { return "<th>" + esc(c) + "</th>"; }).join("") + "</tr></thead>";
 		var tbody = "<tbody>" + rows.map(function (r) {
 			return "<tr>" + r.map(function (cell, i) {
-				if (statusCols.indexOf(s.cols[i]) >= 0) return '<td><span class="badge ' + variant(cell) + '">' + cell + "</span></td>";
-				return "<td>" + cell + "</td>";
+				if (statusCols.indexOf(s.cols[i]) >= 0) return '<td><span class="badge ' + variant(cell) + '">' + esc(cell) + "</span></td>";
+				return "<td>" + esc(cell) + "</td>";
 			}).join("") + "</tr>";
 		}).join("") + "</tbody>";
 		viewer.innerHTML = '<div style="overflow:auto"><table class="table">' + thead + tbody + "</table></div>";
@@ -331,51 +357,66 @@
 	});
 	document.getElementById("dir-search").addEventListener("input", function () { renderDirectory(this.value); });
 
-	// ---- Box 3: incoming enquiries ---------------------------------
-	var leads = [
-		{ n: "Mohammed Ali", ph: "+971 50 221 8890", i: "AC Service", s: "New", sv: "badge--new", t: "Today 10:20" },
-		{ n: "Sahir Khan", ph: "+971 55 778 1020", i: "Body Shop estimate", s: "New", sv: "badge--new", t: "Today 09:05" },
-		{ n: "Lulu Hypermarket", ph: "+971 4 880 1133", i: "Fleet — 6 vehicles", s: "Follow-up", sv: "badge--pending", t: "Yesterday" },
-		{ n: "Priya Raj", ph: "+971 52 664 7781", i: "General Service", s: "New", sv: "badge--new", t: "Yesterday" },
-		{ n: "Gulf Cargo LLC", ph: "+971 6 552 9043", i: "Inspection", s: "Quoted", sv: "badge--navy", t: "18 Jun" }
-	];
-	var leadList = document.getElementById("lead-list");
-	function renderLeads(filter) {
+	// ---- Box 3: incoming enquiries — real CRM Opportunities ---------
+	var opportunities = [];
+	var oppList = document.getElementById("opp-list");
+
+	function renderOpportunities(filter) {
 		filter = (filter || "").toLowerCase();
-		var list = leads.filter(function (l) { return !filter || l.n.toLowerCase().indexOf(filter) >= 0 || l.ph.indexOf(filter) >= 0 || l.i.toLowerCase().indexOf(filter) >= 0; });
-		leadList.innerHTML = list.length ? list.map(function (l) {
-			var idx = leads.indexOf(l);
-			return '<div class="dir-item" data-lead="' + idx + '">' +
-				'<div class="list-row__avatar" style="background:var(--navy)">' + l.n[0] + '</div>' +
-				'<div style="flex:1;min-width:0"><div class="nm">' + l.n + '</div><div class="ph">' + l.ph + ' · ' + l.i + '</div></div>' +
-				'<span class="badge ' + l.sv + '">' + l.s + '</span></div>';
+		var list = opportunities.filter(function (o) {
+			return !filter || o.customer_name.toLowerCase().indexOf(filter) >= 0 ||
+				o.mobile.indexOf(filter) >= 0 || o.interest.toLowerCase().indexOf(filter) >= 0;
+		});
+		oppList.innerHTML = list.length ? list.map(function (o) {
+			var meta = [o.mobile, o.interest].filter(Boolean).join(" · ");
+			return '<div class="dir-item" data-opp="' + esc(o.name) + '">' +
+				'<div class="list-row__avatar" style="background:var(--navy)">' + esc(o.customer_name[0] || "?") + '</div>' +
+				'<div style="flex:1;min-width:0"><div class="nm">' + esc(o.customer_name) + '</div><div class="ph">' + esc(meta) + '</div></div>' +
+				'<span class="badge ' + variant(o.status) + '">' + esc(o.status) + '</span></div>';
 		}).join("") : '<div class="empty">No enquiries found.</div>';
 	}
 
-	// STATE D — enquiry detail in the middle panel.
-	function showEnquiry(l) {
-		setMiddle("view", "Enquiry — " + l.n);
+	// STATE D — enquiry detail in the middle panel. The list row already carries
+	// every field shown here, so opening one costs no extra round-trip.
+	function showEnquiry(o) {
+		setMiddle("view", "Enquiry — " + o.customer_name);
 		var rows = [
-			["Contact", l.n], ["Phone", l.ph], ["Interest", l.i],
-			["Received", l.t], ["Status", '<span class="badge ' + l.sv + '">' + l.s + "</span>"]
+			["Enquiry", esc(o.name)],
+			["Contact", esc(o.customer_name)],
+			["Phone", esc(o.mobile) || "—"],
+			["Email", esc(o.email) || "—"],
+			["Interest", esc(o.interest)],
+			["Vehicle", esc(o.vehicle_label) || "—"],
+			["Received", esc(o.received)],
+			["Status", '<span class="badge ' + variant(o.status) + '">' + esc(o.status) + "</span>"]
 		];
 		viewer.innerHTML = '<div style="overflow:auto"><table class="table"><tbody>' +
 			rows.map(function (r) { return "<tr><th style=\"width:140px\">" + r[0] + "</th><td>" + r[1] + "</td></tr>"; }).join("") +
 			"</tbody></table></div>";
 	}
-	leadList.addEventListener("click", function (e) {
-		var item = e.target.closest("[data-lead]"); if (!item) return;
-		showEnquiry(leads[+item.dataset.lead]);
+	oppList.addEventListener("click", function (e) {
+		var item = e.target.closest("[data-opp]"); if (!item) return;
+		var o = opportunities.filter(function (x) { return x.name === item.dataset.opp; })[0];
+		if (o) showEnquiry(o);
 	});
-	document.getElementById("lead-search").addEventListener("input", function () { renderLeads(this.value); });
+	document.getElementById("opp-search").addEventListener("input", function () { renderOpportunities(this.value); });
+
+	function loadOpportunities() {
+		return callMethod("garagedesk.api.front_office.list_opportunities", {}).then(function (rows) {
+			opportunities = rows || [];
+			renderOpportunities(document.getElementById("opp-search").value);
+		}).catch(function () {
+			oppList.innerHTML = '<div class="empty">Could not load enquiries.</div>';
+		});
+	}
 
 	function val(name) { var el = document.querySelector('[name=' + name + ']'); return el ? el.value.trim() : ""; }
 	function setVal(name, value) { var el = document.querySelector('[name=' + name + ']'); if (el) el.value = value || ""; }
 
 	// ---- Trigger the two inline forms in the middle panel ----------
-	document.getElementById("create-lead").addEventListener("click", function () {
-		setMiddle("lead", "New Lead / Enquiry");
-		resetLeadVehicle();
+	document.getElementById("create-opportunity").addEventListener("click", function () {
+		setMiddle("opportunity", "New Opportunity / Enquiry");
+		resetOppVehicle();
 		// Prefill customer details + show their vehicles as cards, if a customer is selected.
 		if (current) {
 			// Instant fill from the list row (no flash) …
@@ -391,8 +432,8 @@
 					setVal("e_mobile", d.mobile_no || current.phone);
 					setVal("e_email", d.email_id || current.email);
 					setVal("e_address", d.address);
-					leadCustomerVehicles = d.vehicles || [];
-					if (!lAddVehChk.checked) renderLeadVehicleCards(leadCustomerVehicles);
+					oppCustomerVehicles = d.vehicles || [];
+					if (!oAddVehChk.checked) renderOppVehicleCards(oppCustomerVehicles);
 				}).catch(function () {});
 		}
 	});
@@ -400,71 +441,71 @@
 		setMiddle("customer", "New Customer");
 	});
 
-	// Tick the customer's existing vehicle that matches `vehId` in the lead cards.
-	function preselectLeadVehicle(vehId) {
-		if (!vehId || !leadVehCards) return;
-		var box = leadVehCards.querySelector('.veh-pick[data-veh="' + vehId + '"]');
+	// Tick the customer's existing vehicle that matches `vehId` in the enquiry cards.
+	function preselectOppVehicle(vehId) {
+		if (!vehId || !oppVehCards) return;
+		var box = oppVehCards.querySelector('.veh-pick[data-veh="' + vehId + '"]');
 		if (!box) return;
-		leadVehCards.querySelectorAll(".veh-pick").forEach(function (c) { c.checked = false; });
+		oppVehCards.querySelectorAll(".veh-pick").forEach(function (c) { c.checked = false; });
 		box.checked = true;
 		selectedVehicleName = vehId;
 	}
-	// Open the New Lead / Enquiry form straight from URL params (arriving from the
-	// Telecalling "Appointment" button). Sources customer/vehicle from the query
+	// Open the New Opportunity / Enquiry form straight from URL params (arriving from
+	// the Telecalling "Appointment" button). Sources customer/vehicle from the query
 	// string instead of a directory selection, and pre-ticks "Add appointment".
-	function openLeadFromUrl() {
+	function openOpportunityFromUrl() {
 		var p = new URLSearchParams(window.location.search);
-		if (!p.get("new_lead")) return;
-		setMiddle("lead", "New Lead / Enquiry");
-		resetLeadVehicle();
-		leadPrefillCustomer = p.get("customer") || null;
-		leadPrefillVehicle = p.get("vehicle") || null;
+		if (!p.get("new_opportunity")) return;
+		setMiddle("opportunity", "New Opportunity / Enquiry");
+		resetOppVehicle();
+		oppPrefillCustomer = p.get("customer") || null;
+		oppPrefillVehicle = p.get("vehicle") || null;
 		setVal("e_name", p.get("customer_name") || "");
 		setVal("e_mobile", p.get("mobile") || "");
 		setVal("e_email", p.get("email") || "");
 		setVal("e_address", "");
-		if (p.get("appointment") && lAddApptChk) {
-			lAddApptChk.checked = true;
-			if (leadApptFields) leadApptFields.style.display = "block";
+		if (p.get("appointment") && oAddApptChk) {
+			oAddApptChk.checked = true;
+			if (oppApptFields) oppApptFields.style.display = "block";
 		}
-		if (leadPrefillCustomer) {
-			callMethod("garagedesk.api.front_office.get_customer_prefill", { customer: leadPrefillCustomer })
+		if (oppPrefillCustomer) {
+			callMethod("garagedesk.api.front_office.get_customer_prefill", { customer: oppPrefillCustomer })
 				.then(function (d) {
 					if (!d) return;
 					setVal("e_name", d.customer_name || p.get("customer_name") || "");
 					setVal("e_mobile", d.mobile_no || p.get("mobile") || "");
 					setVal("e_email", d.email_id || p.get("email") || "");
 					setVal("e_address", d.address);
-					leadCustomerVehicles = d.vehicles || [];
-					if (!lAddVehChk.checked) {
-						renderLeadVehicleCards(leadCustomerVehicles);
-						preselectLeadVehicle(leadPrefillVehicle);
+					oppCustomerVehicles = d.vehicles || [];
+					if (!oAddVehChk.checked) {
+						renderOppVehicleCards(oppCustomerVehicles);
+						preselectOppVehicle(oppPrefillVehicle);
 					}
 				}).catch(function () {});
 		}
 	}
 
-	// ---- Vehicle grids (customer form + lead form): options, cascade, toggles ----
+	// ---- Vehicle grids (customer form + enquiry form): options, cascade, toggles ----
 	var addVehChk = document.getElementById("c_add_vehicle");
 	var vehFields = document.getElementById("vehicle-fields");
-	var lAddVehChk = document.getElementById("l_add_vehicle");
-	var leadVehFields = document.getElementById("lead-vehicle-fields");
-	var leadVehCards = document.getElementById("lead-vehicle-cards");
-	var lAddApptChk = document.getElementById("l_add_appointment");
-	var leadApptFields = document.getElementById("lead-appointment-fields");
+	var oAddVehChk = document.getElementById("o_add_vehicle");
+	var oppVehFields = document.getElementById("opp-vehicle-fields");
+	var oppVehCards = document.getElementById("opp-vehicle-cards");
+	var oAddApptChk = document.getElementById("o_add_appointment");
+	var oppApptFields = document.getElementById("opp-appointment-fields");
 	var vehModels = []; // cached [{name, make, model_name}] for the cascades
-	var leadCustomerVehicles = []; // selected customer's vehicles (for Save & Job Card)
-	var selectedVehicleName = ""; // the one vehicle ticked in the lead cards
+	var oppCustomerVehicles = []; // selected customer's vehicles (for Save & Job Card)
+	var selectedVehicleName = ""; // the one vehicle ticked in the enquiry cards
 	// Prefill carried in via URL (e.g. from Telecalling's Appointment button), used
 	// as the customer/vehicle fallback when no customer is selected in the directory.
-	var leadPrefillCustomer = null, leadPrefillVehicle = null;
+	var oppPrefillCustomer = null, oppPrefillVehicle = null;
 	function selEl(name) { return document.querySelector('select[name="' + name + '"]'); }
 	function fillSelect(sel, items, placeholder) {
 		if (!sel) return;
 		sel.innerHTML = '<option value="">' + (placeholder || "Select") + "</option>" +
 			items.map(function (it) { return '<option value="' + it.value + '">' + it.label + "</option>"; }).join("");
 	}
-	// One vehicle grid = fields prefixed "v_" (customer) or "lv_" (lead).
+	// One vehicle grid = fields prefixed "v_" (customer) or "ov_" (enquiry).
 	function fillVehicleSelects(prefix, o) {
 		var toOpt = function (x) { return { value: x, label: x }; };
 		fillSelect(selEl(prefix + "make"), (o.makes || []).map(toOpt), "Select make");
@@ -487,7 +528,7 @@
 			o = o || {};
 			vehModels = o.models || [];
 			fillVehicleSelects("v_", o);
-			fillVehicleSelects("lv_", o);
+			fillVehicleSelects("ov_", o);
 		}).catch(function () {});
 	}
 	function resetVehicleFields() { // customer form
@@ -495,43 +536,43 @@
 		if (vehFields) vehFields.style.display = "none";
 		fillSelect(selEl("v_model"), [], "Select make first");
 	}
-	function resetLeadVehicle() { // lead form
-		if (lAddVehChk) lAddVehChk.checked = false;
-		if (leadVehFields) leadVehFields.style.display = "none";
-		if (leadVehCards) { leadVehCards.style.display = ""; leadVehCards.innerHTML = ""; }
-		leadCustomerVehicles = [];
+	function resetOppVehicle() { // enquiry form
+		if (oAddVehChk) oAddVehChk.checked = false;
+		if (oppVehFields) oppVehFields.style.display = "none";
+		if (oppVehCards) { oppVehCards.style.display = ""; oppVehCards.innerHTML = ""; }
+		oppCustomerVehicles = [];
 		selectedVehicleName = "";
-		leadPrefillCustomer = null;
-		leadPrefillVehicle = null;
-		fillSelect(selEl("lv_model"), [], "Select make first");
-		resetLeadAppointment();
+		oppPrefillCustomer = null;
+		oppPrefillVehicle = null;
+		fillSelect(selEl("ov_model"), [], "Select make first");
+		resetOppAppointment();
 	}
-	function resetLeadAppointment() { // lead form: appointment sub-section
-		if (lAddApptChk) lAddApptChk.checked = false;
-		if (leadApptFields) leadApptFields.style.display = "none";
+	function resetOppAppointment() { // enquiry form: appointment sub-section
+		if (oAddApptChk) oAddApptChk.checked = false;
+		if (oppApptFields) oppApptFields.style.display = "none";
 		setVal("appt_date", "");
 		setVal("appt_time", "");
 	}
-	function renderLeadVehicleCards(vehicles) {
-		if (!leadVehCards) return;
+	function renderOppVehicleCards(vehicles) {
+		if (!oppVehCards) return;
 		selectedVehicleName = "";
 		if (!vehicles || !vehicles.length) {
-			leadVehCards.innerHTML = '<div class="empty" style="padding:10px 0">No vehicles on file for this customer.</div>';
+			oppVehCards.innerHTML = '<div class="empty" style="padding:10px 0">No vehicles on file for this customer.</div>';
 			return;
 		}
-		leadVehCards.innerHTML = vehicles.map(function (v) {
+		oppVehCards.innerHTML = vehicles.map(function (v) {
 			var meta = [v.plate, v.fuel, v.odometer].filter(Boolean).join(" · ");
 			return '<label class="dir-item" style="cursor:pointer;gap:10px">' +
-				'<input type="checkbox" class="veh-pick" data-veh="' + v.name + '">' +
+				'<input type="checkbox" class="veh-pick" data-veh="' + esc(v.name) + '">' +
 				'<div class="list-row__avatar" style="background:var(--navy)"><i class="fa-solid fa-car"></i></div>' +
-				'<div><div class="nm">' + (v.title || v.name) + '</div><div class="ph">' + meta + "</div></div></label>";
+				'<div><div class="nm">' + esc(v.title || v.name) + '</div><div class="ph">' + esc(meta) + "</div></div></label>";
 		}).join("");
 	}
 	// Single-select: ticking one vehicle unticks the rest.
-	if (leadVehCards) leadVehCards.addEventListener("change", function (e) {
+	if (oppVehCards) oppVehCards.addEventListener("change", function (e) {
 		if (!e.target.classList || !e.target.classList.contains("veh-pick")) return;
 		if (e.target.checked) {
-			leadVehCards.querySelectorAll(".veh-pick").forEach(function (c) { if (c !== e.target) c.checked = false; });
+			oppVehCards.querySelectorAll(".veh-pick").forEach(function (c) { if (c !== e.target) c.checked = false; });
 			selectedVehicleName = e.target.dataset.veh;
 		} else {
 			selectedVehicleName = "";
@@ -540,20 +581,20 @@
 	if (addVehChk) addVehChk.addEventListener("change", function () {
 		vehFields.style.display = this.checked ? "block" : "none";
 	});
-	if (lAddVehChk) lAddVehChk.addEventListener("change", function () {
+	if (oAddVehChk) oAddVehChk.addEventListener("change", function () {
 		var on = this.checked;
-		if (leadVehFields) leadVehFields.style.display = on ? "block" : "none";
-		if (leadVehCards) leadVehCards.style.display = on ? "none" : "";
+		if (oppVehFields) oppVehFields.style.display = on ? "block" : "none";
+		if (oppVehCards) oppVehCards.style.display = on ? "none" : "";
 	});
-	if (lAddApptChk) lAddApptChk.addEventListener("change", function () {
-		if (leadApptFields) leadApptFields.style.display = this.checked ? "block" : "none";
+	if (oAddApptChk) oAddApptChk.addEventListener("change", function () {
+		if (oppApptFields) oppApptFields.style.display = this.checked ? "block" : "none";
 	});
 	wireMakeCascade("v_");
-	wireMakeCascade("lv_");
+	wireMakeCascade("ov_");
 	loadVehicleOptions();
 
-	// ---- Save lead -> create ERPNext CRM Lead, refresh Box 3 -----------
-	function saveLead() {
+	// ---- Save enquiry -> create ERPNext CRM Opportunity, refresh Box 3 -----
+	function saveOpportunity() {
 		var name = val("e_name"), mobile = val("e_mobile");
 		if (!name || !mobile) {
 			alert("Customer Name and Mobile Number are required.");
@@ -561,21 +602,21 @@
 		}
 		// Optional new vehicle (only when "Add new vehicle" is ticked).
 		var vehicle = null;
-		if (lAddVehChk && lAddVehChk.checked) {
-			var vp = val("lv_plate"), ve = val("lv_emirate"), vmk = val("lv_make"),
-				vmd = val("lv_model"), vf = val("lv_fuel");
+		if (oAddVehChk && oAddVehChk.checked) {
+			var vp = val("ov_plate"), ve = val("ov_emirate"), vmk = val("ov_make"),
+				vmd = val("ov_model"), vf = val("ov_fuel");
 			if (!vp || !ve || !vmk || !vmd || !vf) {
 				alert("Vehicle: Plate Number, Emirate, Make, Model and Fuel Type are required.");
 				return Promise.reject();
 			}
 			vehicle = {
-				plate: vp, emirate: ve, plate_code: val("lv_plate_code"),
-				make: vmk, model: vmd, year: val("lv_year"),
-				odometer: val("lv_odometer"), fuel_type: vf, vin: val("lv_vin")
+				plate: vp, emirate: ve, plate_code: val("ov_plate_code"),
+				make: vmk, model: vmd, year: val("ov_year"),
+				odometer: val("ov_odometer"), fuel_type: vf, vin: val("ov_vin")
 			};
 		}
 		// Optional appointment (only when "Add appointment" is ticked).
-		var addAppt = !!(lAddApptChk && lAddApptChk.checked);
+		var addAppt = !!(oAddApptChk && oAddApptChk.checked);
 		if (addAppt) {
 			if (!val("appt_date")) {
 				alert("Appointment: please choose an appointment date.");
@@ -587,49 +628,56 @@
 				alert("Appointment date must be today or later.");
 				return Promise.reject();
 			}
-			// No existing customer? The backend will create one from the
-			// lead's name + mobile so the appointment can still be booked.
+			// No existing customer? The backend resolves one from the enquiry's
+			// name + mobile so both the opportunity and the appointment can be booked.
 		}
-		var customerId = current ? current.id : (leadPrefillCustomer || null);
-		return callMethod("garagedesk.api.front_office.create_lead", {
-			lead_name: name,
+		var customerId = current ? current.id : (oppPrefillCustomer || null);
+		return callMethod("garagedesk.api.front_office.create_opportunity", {
+			customer_name: name,
 			mobile_no: mobile,
 			email: val("e_email"),
 			address: val("e_address"),
 			customer: customerId,
 			vehicle: vehicle,
-			selected_vehicle: selectedVehicleName || leadPrefillVehicle || null,
+			selected_vehicle: selectedVehicleName || oppPrefillVehicle || null,
 			add_appointment: addAppt ? 1 : 0,
 			appointment_date: val("appt_date"),
 			appointment_time: val("appt_time")
 		}).then(function (res) {
-			leads.unshift({ n: name, ph: mobile, i: vehicle ? (vehicle.make + " enquiry") : "New enquiry", s: "New", sv: "badge--new", t: "Just now" });
 			document.getElementById("enquiry-form").reset();
-			resetLeadVehicle();
-			renderLeads(""); document.getElementById("lead-search").value = "";
+			resetOppVehicle();
+			document.getElementById("opp-search").value = "";
+			// Re-read the list so the new enquiry shows with its real name/status.
+			loadOpportunities();
+			// A brand-new customer may have been created for the enquiry — keep the
+			// left-hand directory honest about who exists.
+			loadCustomers();
 			if (res && res.appointment_error) {
-				alert("Lead saved, but the appointment could not be booked: " + res.appointment_error);
+				alert("Enquiry saved, but the appointment could not be booked: " + res.appointment_error);
 			}
 			return res;
 		});
 	}
-	document.getElementById("save-lead").addEventListener("click", function () {
-		saveLead().then(function () { restoreMiddle(); }).catch(function (err) {
-			if (err && err.message) alert("Could not create lead: " + err.message);
+	document.getElementById("save-opportunity").addEventListener("click", function () {
+		saveOpportunity().then(function () { restoreMiddle(); }).catch(function (err) {
+			if (err && err.message) alert("Could not create opportunity: " + err.message);
 		});
 	});
-	document.getElementById("save-lead-jc").addEventListener("click", function () {
-		// Capture the details BEFORE saveLead() resets the form.
-		var cid = current ? current.id : (leadPrefillCustomer || "");
+	document.getElementById("save-opportunity-jc").addEventListener("click", function () {
+		// Capture the details BEFORE saveOpportunity() resets the form.
 		var cname = val("e_name") || (current ? current.name : "");
 		var mob = val("e_mobile");
-		var addingNew = !!(lAddVehChk && lAddVehChk.checked);
-		var newPlate = addingNew ? val("lv_plate") : "";
-		var prefillVeh = leadPrefillVehicle; // saveLead() clears this on reset
+		var addingNew = !!(oAddVehChk && oAddVehChk.checked);
+		var newPlate = addingNew ? val("ov_plate") : "";
+		// saveOpportunity() clears both prefills on reset — capture them first.
+		var prefillCust = oppPrefillCustomer, prefillVeh = oppPrefillVehicle;
 		// The vehicle ticked in the cards (ignored when adding a brand-new one).
-		var selVeh = addingNew ? null : (leadCustomerVehicles.filter(function (v) { return v.name === selectedVehicleName; })[0] || null);
-		saveLead().then(function (res) {
+		var selVeh = addingNew ? null : (oppCustomerVehicles.filter(function (v) { return v.name === selectedVehicleName; })[0] || null);
+		saveOpportunity().then(function (res) {
 			var p = new URLSearchParams();
+			// res.customer is always set — the opportunity's party, whether it was the
+			// selected customer or one resolved from the typed name + mobile.
+			var cid = (res && res.customer) || (current ? current.id : (prefillCust || ""));
 			if (cid) p.set("customer", cid);
 			if (cname) p.set("customer_name", cname);
 			if (mob) p.set("mobile", mob);
@@ -640,7 +688,7 @@
 			if (vehLabel) p.set("vehicle_label", vehLabel);
 			window.location.href = "/a3-workshop/job-card/new?" + p.toString();
 		}).catch(function (err) {
-			if (err && err.message) alert("Could not create lead: " + err.message);
+			if (err && err.message) alert("Could not create opportunity: " + err.message);
 		});
 	});
 
@@ -695,15 +743,15 @@
 	function loadCustomers() {
 		return callMethod("garagedesk.api.front_office.list_customers", {}).then(function (rows) {
 			customers = (rows || []).map(toUiCustomer);
-			renderDirectory("");
+			renderDirectory(document.getElementById("dir-search").value);
 		}).catch(function () {
 			dirList.innerHTML = '<div class="empty">Could not load customers.</div>';
 		});
 	}
 
 	loadCustomers();
-	renderLeads("");
-	openLeadFromUrl();
+	loadOpportunities();
+	openOpportunityFromUrl();
 })();
 </script>
 {% endraw %}

@@ -1,4 +1,4 @@
-/* ../../../../../../../tmp/tmp-83768-gzk5JioLh542/a3_workshop_frontend/a3_workshop_frontend/public/scss/workshop.bundle.css */
+/* ../../../../../../tmp/tmp-106049-cNlg8yXq7JUH/a3_workshop_frontend/a3_workshop_frontend/public/scss/workshop.bundle.css */
 :root {
   --red: #ec2e5d;
   --red-600: #d81e4d;
@@ -308,6 +308,11 @@ h4 {
   font-size: 30px;
   font-weight: 800;
   margin-top: 8px;
+}
+.stat-card .sub {
+  font-size: 11.5px;
+  opacity: 0.8;
+  margin-top: 4px;
 }
 .stat-card.stat-card--navy {
   background: var(--navy);
@@ -1472,4 +1477,4 @@ input[type=range] {
   flex-wrap: wrap;
   gap: 6px 0;
 }
-/*# sourceMappingURL=workshop.bundle.FH6WEZ4R.css.map */
+/*# sourceMappingURL=workshop.bundle.OHJXI2U2.css.map */

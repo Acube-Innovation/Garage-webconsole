@@ -137,6 +137,26 @@
 	</div>
 </div>
 
+<!-- New Service / Task popup — opened from the "Create …" row of the Service type-ahead -->
+<div class="modal-overlay" id="svc-modal" role="dialog" aria-modal="true" aria-labelledby="svc-modal-title">
+	<div class="modal" style="max-width:460px">
+		<div class="modal__head">
+			<div><h3 id="svc-modal-title">New Service / Task</h3><div class="sub" id="svc-modal-sub">—</div></div>
+			<button type="button" class="modal__close" data-svc-close aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+		</div>
+		<div class="modal__body stack">
+			<div class="field"><label>Job Type</label><input id="svc-modal-jobtype" type="text" readonly></div>
+			<div class="field"><label>Service / Task <span class="req">*</span></label>
+				<input id="svc-modal-name" type="text" placeholder="e.g. Water Service" autocomplete="off"></div>
+			<div class="svc-modal-err" id="svc-modal-err" hidden></div>
+		</div>
+		<div class="modal__foot">
+			<button type="button" class="btn btn--outline btn--sm" data-svc-close>Cancel</button>
+			<button type="button" class="btn btn--primary btn--sm" id="svc-create-btn"><i class="fa-solid fa-plus"></i> Create Service</button>
+		</div>
+	</div>
+</div>
+
 <style>
 	.tech-cell { display:flex; align-items:center; gap:6px; }
 	.tech-cell .tech { flex:1 1 auto; min-width:0; }
@@ -157,6 +177,15 @@
 	#kit-modal-body .kit-none { color:var(--muted,#7a8598); font-size:13px; padding:6px 2px; }
 	/* Create / Update Standard button — light red, matching the active job-type card */
 	#kit-save-standard-btn { background: var(--red-soft, #fde7ee); border-color: var(--red, #ec2e5d); color: var(--red, #ec2e5d); }
+	/* Service / Task type-ahead cell — text input over a hidden Job Type Service link */
+	.svc-combo { position:relative; }
+	.svc-combo .svc-input { width:100%; }
+	.svc-combo .svc-input.is-unsaved { border-color:var(--red,#ec2e5d); }
+	/* The "Create …" row that appears when nothing matched what was typed */
+	.jc-ac-item.is-create { border-top:1px solid var(--border,#e3e8ef); color:var(--red,#ec2e5d); }
+	.jc-ac-item.is-create .jc-ac-label { display:flex; align-items:center; gap:7px; }
+	#svc-modal-jobtype { background:var(--bg,#f1f4f8); color:var(--muted,#7a8598); cursor:not-allowed; }
+	.svc-modal-err { font-size:12.5px; color:var(--red,#ec2e5d); font-weight:600; }
 	/* Kit tables under Job Details — compact so the extra columns don't feel cramped */
 	#kit-card .table.editable th, #kit-card .table.editable td { padding:5px 8px; font-size:12.5px; vertical-align:middle; }
 	#kit-card .table.editable td a { white-space:nowrap; }
@@ -413,6 +442,9 @@
 			.then(function (rows) { customerVehicles = rows || []; })
 			.catch(function () {});
 	}
+	// A row may carry `action` (e.g. the Service cell's "Create …" entry). Such a row is
+	// a command, not a value: it never writes its label into the input, it just fires
+	// onSelect so the caller can open a dialog.
 	function attachAutocomplete(input, source, onSelect) {
 		if (!input) return;
 		var wrap = input.parentNode;
@@ -422,11 +454,18 @@
 		wrap.appendChild(list);
 		var items = [], active = -1, timer = null;
 		function hide() { list.style.display = "none"; active = -1; }
+		function pick(it) {
+			if (!it) return;
+			if (!it.action) input.value = it.label;
+			hide();
+			if (onSelect) onSelect(it);
+		}
 		function render(rows) {
 			items = rows || [];
 			if (!items.length) { list.innerHTML = '<div class="jc-ac-empty">No matches</div>'; list.style.display = "block"; return; }
 			list.innerHTML = items.map(function (it, i) {
-				return '<div class="jc-ac-item" data-i="' + i + '"><div class="jc-ac-label">' + it.label + '</div>' +
+				return '<div class="jc-ac-item' + (it.action ? ' is-create' : '') + '" data-i="' + i + '">' +
+					'<div class="jc-ac-label">' + it.label + '</div>' +
 					(it.sub ? '<div class="jc-ac-sub">' + it.sub + '</div>' : '') + '</div>';
 			}).join("");
 			active = -1; list.style.display = "block";
@@ -438,15 +477,13 @@
 		list.addEventListener("mousedown", function (e) {
 			var el = e.target.closest("[data-i]"); if (!el) return;
 			e.preventDefault();
-			var it = items[+el.dataset.i];
-			input.value = it.label; hide();
-			if (onSelect) onSelect(it);
+			pick(items[+el.dataset.i]);
 		});
 		input.addEventListener("keydown", function (e) {
 			if (list.style.display === "none" || !items.length) return;
 			if (e.key === "ArrowDown") active = Math.min(items.length - 1, active + 1);
 			else if (e.key === "ArrowUp") active = Math.max(0, active - 1);
-			else if (e.key === "Enter" && active >= 0) { e.preventDefault(); var it = items[active]; input.value = it.label; hide(); if (onSelect) onSelect(it); return; }
+			else if (e.key === "Enter" && active >= 0) { e.preventDefault(); pick(items[active]); return; }
 			else if (e.key === "Escape") { hide(); return; }
 			else return;
 			e.preventDefault();
@@ -594,12 +631,102 @@
 			return '<option' + (t === val ? ' selected' : '') + '>' + t + '</option>';
 		}).join('');
 	}
-	function serviceOptions(jobtype, val) {
-		var list = JOB_SERVICES.filter(function (s) { return s.jobcard_type === jobtype; });
-		if (!list.length) return '<option value="">— pick job type —</option>';
-		return '<option value="">— select —</option>' + list.map(function (s) {
-			return '<option value="' + s.name + '"' + (s.name === val ? ' selected' : '') + '>' + s.service_name + '</option>';
-		}).join('');
+	// --- Service / Task type-ahead -------------------------------------
+	// The cell is a text input (what the user types) over a hidden input holding the
+	// Job Type Service docname — so `.svc` still reads as the row's service everywhere.
+	function serviceLabel(name) {
+		if (!name) return '';
+		var hit = JOB_SERVICES.filter(function (s) { return s.name === name; })[0];
+		return hit ? (hit.service_name || hit.name) : name;
+	}
+	// Existing services under `jobtype` whose name contains `q` (case-insensitive), so
+	// "wat" / "Wat" / "WAT" all find "Water Service".
+	function serviceMatches(jobtype, q) {
+		q = (q || '').trim().toLowerCase();
+		return JOB_SERVICES.filter(function (s) {
+			if (s.jobcard_type !== jobtype) return false;
+			return !q || (s.service_name || s.name || '').toLowerCase().indexOf(q) >= 0;
+		});
+	}
+	function svcInput(tr) { return tr && tr.querySelector('.svc-input'); }
+	function svcHidden(tr) { return tr && tr.querySelector('.svc'); }
+	// Red border while the typed text isn't a real service — the row won't save one.
+	function markSvcUnsaved(tr) {
+		var input = svcInput(tr), hidden = svcHidden(tr);
+		if (!input || !hidden) return;
+		input.classList.toggle('is-unsaved', !!input.value.trim() && !hidden.value);
+	}
+	function attachServiceAutocomplete(tr) {
+		var input = svcInput(tr);
+		if (!input || input.dataset.acset) return;
+		input.dataset.acset = '1';
+		attachAutocomplete(input, function (q) {
+			var jt = (tr.querySelector('select.jt') || {}).value || '';
+			if (!jt) return [{ label: 'Pick a job type first', action: 'noop' }];
+			var rows = serviceMatches(jt, q).slice(0, 12).map(function (s) {
+				return { label: s.service_name || s.name, value: s.name };
+			});
+			// Nothing typed yet and nothing configured, or nothing matched what was
+			// typed → offer to create it under this job type.
+			var typed = (q || '').trim();
+			var exact = rows.some(function (r) { return r.label.toLowerCase() === typed.toLowerCase(); });
+			if (typed && !exact) {
+				rows.push({
+					action: 'create', typed: typed, jobtype: jt,
+					label: '<i class="fa-solid fa-plus"></i> Create “' + esc(typed) + '”',
+					sub: 'Adds it under ' + esc(jt)
+				});
+			}
+			return rows;
+		}, function (it) {
+			if (it.action === 'noop') return;
+			if (it.action === 'create') { openServiceDialog(it.jobtype, it.typed, tr); return; }
+			setRowService(tr, it.value, it.label);
+		});
+		// Typing invalidates the previously picked service until another is chosen.
+		input.addEventListener('input', function () {
+			var hidden = svcHidden(tr);
+			if (hidden && hidden.value && input.value.trim() !== serviceLabel(hidden.value)) {
+				clearRowService(tr, { keepText: true });
+			}
+			markSvcUnsaved(tr);
+		});
+	}
+	// Clear the row's service link (and the kit rows that came with it).
+	function clearRowService(tr, opts) {
+		opts = opts || {};
+		var hidden = svcHidden(tr), input = svcInput(tr);
+		if (hidden) hidden.value = '';
+		if (input && !opts.keepText) input.value = '';
+		var prevStd = tr.dataset.labour || '';
+		setRowLaborCode(tr, '');
+		if (prevStd) cleanupKitForStandard(prevStd);
+		markSvcUnsaved(tr);
+	}
+	// Commit a service onto a row: the same duplicate / labor-standard / kit-popup
+	// behaviour the old <select> change handler had.
+	function setRowService(tr, name, label) {
+		var hidden = svcHidden(tr), input = svcInput(tr);
+		var prevStd = tr.dataset.labour || '';
+		label = label || serviceLabel(name);
+		// A service can only appear once in Job Details.
+		if (name && serviceAlreadyUsed(name, tr)) {
+			alert('“' + label + '” is already added. Each service can only be added once.');
+			if (input) input.value = '';
+			if (hidden) hidden.value = '';
+			setRowLaborCode(tr, '');
+			if (prevStd) cleanupKitForStandard(prevStd);
+			markSvcUnsaved(tr);
+			return;
+		}
+		if (hidden) hidden.value = name || '';
+		if (input) input.value = label || '';
+		markSvcUnsaved(tr);
+		var standard = name ? (LTS_BY_SERVICE[name] || '') : '';
+		setRowLaborCode(tr, standard);
+		if (prevStd && prevStd !== standard) cleanupKitForStandard(prevStd);
+		// Open the popup whenever a service is picked — even with no standard (empty tables).
+		if (name) openKitDialog(standard, name, tr, label);
 	}
 	function technicianOptions(val) {
 		return '<option value="">— technician —</option>' + EMPLOYEES.map(function (e) {
@@ -611,53 +738,27 @@
 		document.querySelectorAll('#job-detail-body tr').forEach(function (tr) {
 			var jt = tr.querySelector('select.jt'); if (!jt) return;
 			var v = jt.value; jt.innerHTML = jobTypeOptions(v);
-			if (v && selected.indexOf(v) < 0) {
-				var sv = tr.querySelector('select.svc'); if (sv) sv.innerHTML = serviceOptions('', '');
-			}
+			// Job type de-selected on the left → its service no longer applies.
+			if (v && selected.indexOf(v) < 0) clearRowService(tr);
 		});
 	}
-	// A row's Service dropdown depends on its Job Type (cascade); picking a Service
-	// auto-fetches its Labor Time Standard and opens the kit-components popup.
+	// A row's Service depends on its Job Type (cascade), so changing the type clears it.
 	jdBody.addEventListener('change', function (e) {
 		var tr = e.target.closest('tr'); if (!tr) return;
-		if (e.target.matches('select.jt')) {
-			var sv = tr.querySelector('select.svc');
-			if (sv) sv.innerHTML = serviceOptions(e.target.value, '');
-			var oldStd = tr.dataset.labour || '';
-			setRowLaborCode(tr, ''); // job type changed → service list reset, drop stale code
-			if (oldStd) cleanupKitForStandard(oldStd);
-			return;
-		}
-		if (e.target.matches('select.svc')) {
-			var prevStd = tr.dataset.labour || '';
-			var service = e.target.value;
-			// A service can only appear once in Job Details.
-			if (service && serviceAlreadyUsed(service, tr)) {
-				alert('“' + e.target.options[e.target.selectedIndex].text + '” is already added. Each service can only be added once.');
-				e.target.value = '';
-				setRowLaborCode(tr, '');
-				if (prevStd) cleanupKitForStandard(prevStd);
-				return;
-			}
-			var standard = service ? (LTS_BY_SERVICE[service] || '') : '';
-			setRowLaborCode(tr, standard);
-			if (prevStd && prevStd !== standard) cleanupKitForStandard(prevStd);
-			// Open the popup whenever a service is picked — even with no standard (empty tables).
-			if (service) openKitDialog(standard, service, tr, e.target.options[e.target.selectedIndex].text);
-		}
+		if (e.target.matches('select.jt')) clearRowService(tr);
 	});
 	// True if another Job Details row already has this service selected.
 	function serviceAlreadyUsed(service, exceptTr) {
 		if (!service) return false;
 		return Array.prototype.some.call(jdBody.children, function (tr) {
-			var sv = tr.querySelector('select.svc');
+			var sv = svcHidden(tr);
 			return tr !== exceptTr && sv && sv.value === service;
 		});
 	}
 	// Click the labor-code chip to (re)open the kit popup for that row — with or without a standard.
 	jdBody.addEventListener('click', function (e) {
 		var chip = e.target.closest('[data-labor-code]'); if (!chip) return;
-		var tr = chip.closest('tr'), svc = tr.querySelector('select.svc');
+		var tr = chip.closest('tr'), svc = svcHidden(tr);
 		var service = svc ? svc.value : '', code = tr.dataset.labour || '';
 		if (service || code) openKitDialog(code, service, tr, '');
 	});
@@ -687,7 +788,10 @@
 		tr.dataset.labour = v.labour_service_code || '';
 		tr.innerHTML =
 			'<td><select class="jt">' + jobTypeOptions(jt0) + '</select></td>' +
-			'<td><select class="svc">' + serviceOptions(jt0, v.service || '') + '</select></td>' +
+			'<td><div class="svc-combo">' +
+				'<input type="text" class="svc-input" placeholder="Type a service…" autocomplete="off" value="' + escAttr(serviceLabel(v.service || '')) + '">' +
+				'<input type="hidden" class="svc" value="' + escAttr(v.service || '') + '">' +
+			'</div></td>' +
 			'<td><span class="jc-labor-code is-empty" data-labor-code>—</span></td>' +
 			'<td><input class="desc" placeholder="Description" value="' + escAttr(v.description || '') + '"></td>' +
 			'<td><div class="tech-cell"><select class="tech">' + technicianOptions(v.technician || '') + '</select>' +
@@ -700,6 +804,7 @@
 			cleanupKitForStandard(std); // drop this service's kit rows if no other row still uses it
 		});
 		jdBody.appendChild(tr); renderLaborCodeCell(tr); toggleEmpty(jdBody, jdEmpty);
+		attachServiceAutocomplete(tr);
 	}
 	// Is a standard still referenced by any Job Details row? (kept if so.)
 	function standardStillUsed(standard) {
@@ -717,7 +822,7 @@
 	function gatherServices() {
 		var rows = [];
 		document.querySelectorAll('#job-detail-body tr').forEach(function (tr) {
-			var jt = tr.querySelector('.jt'), sv = tr.querySelector('.svc');
+			var jt = tr.querySelector('.jt'), sv = svcHidden(tr);
 			rows.push({
 				jobtype: jt ? jt.value : '',
 				service: sv ? sv.value : '',
@@ -730,6 +835,63 @@
 		});
 		return rows.filter(function (r) { return r.jobtype || r.service; });
 	}
+
+	// ---- New Service / Task popup ---------------------------------------
+	// Opened from the "Create …" row of the Service type-ahead. Creates a real Job Type
+	// Service under the row's Job Type, adds it to the in-page catalog so every other
+	// row's dropdown sees it immediately, then selects it on the row that asked.
+	var svcModal = document.getElementById('svc-modal');
+	var svcDialogRow = null;
+	var svcCreateBtn = document.getElementById('svc-create-btn');
+
+	function svcDialogError(msg) {
+		var box = document.getElementById('svc-modal-err');
+		box.textContent = msg || '';
+		box.hidden = !msg;
+	}
+	function closeServiceDialog() {
+		svcModal.classList.remove('is-open');
+		svcDialogRow = null;
+		svcDialogError('');
+	}
+	function openServiceDialog(jobtype, typed, tr) {
+		svcDialogRow = tr || null;
+		document.getElementById('svc-modal-jobtype').value = jobtype || '';
+		document.getElementById('svc-modal-name').value = typed || '';
+		document.getElementById('svc-modal-sub').textContent = 'Added under ' + (jobtype || '—');
+		svcDialogError('');
+		svcModal.classList.add('is-open');
+		var nameEl = document.getElementById('svc-modal-name');
+		nameEl.focus(); nameEl.select();
+	}
+	svcModal.addEventListener('click', function (e) {
+		if (e.target.closest('[data-svc-close]') || e.target === svcModal) closeServiceDialog();
+	});
+	document.getElementById('svc-modal-name').addEventListener('keydown', function (e) {
+		if (e.key === 'Enter') { e.preventDefault(); svcCreateBtn.click(); }
+	});
+	svcCreateBtn.addEventListener('click', function () {
+		var jobtype = document.getElementById('svc-modal-jobtype').value;
+		var name = document.getElementById('svc-modal-name').value.trim();
+		if (!name) { svcDialogError('Enter a service / task name.'); return; }
+		var tr = svcDialogRow;
+		svcCreateBtn.disabled = true;
+		callMethod('garagedesk.api.front_office.create_job_type_service', {
+			jobcard_type: jobtype, service_name: name
+		}).then(function (res) {
+			if (!res || !res.name) throw new Error('No service returned.');
+			// Add to the catalog unless the server matched an existing one.
+			if (!JOB_SERVICES.some(function (s) { return s.name === res.name; })) {
+				JOB_SERVICES.push({ name: res.name, jobcard_type: res.jobcard_type, service_name: res.service_name });
+			}
+			closeServiceDialog();
+			if (tr && tr.isConnected) setRowService(tr, res.name, res.service_name);
+		}).catch(function (err) {
+			svcDialogError('Could not create the service: ' + ((err && err.message) || err));
+		}).then(function () {
+			svcCreateBtn.disabled = false;
+		});
+	});
 
 	// ---- Kit Components: popup picker + three tables under Job Details ----
 	function esc(s) { var d = document.createElement('div'); d.textContent = (s == null ? '' : s); return d.innerHTML; }
@@ -869,8 +1031,8 @@
 			.catch(function () { body.innerHTML = '<div class="kit-none">Could not load kit components.</div>'; });
 	}
 	function __svcLabelForRow(row) {
-		var svc = row && row.querySelector('select.svc');
-		return svc && svc.options[svc.selectedIndex] ? svc.options[svc.selectedIndex].text : '';
+		var input = svcInput(row);
+		return input ? input.value.trim() : '';
 	}
 	// One editable <tr> for a kit group (auto-filled from the standard, or blank via Add row).
 	function kitEditRow(group, r) {
