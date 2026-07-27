@@ -294,13 +294,13 @@
 		}).catch(function () {});
 	}
 
-	// Navigate to the Front Office "New Lead / Enquiry" form, prefilled from this
-	// call, with the Add-appointment box pre-ticked.
+	// Navigate to the Front Office "New Opportunity / Enquiry" form, prefilled from
+	// this call, with the Add-appointment box pre-ticked.
 	function goToAppointment(id) {
 		var q = byId(id);
 		if (!q) return;
 		var p = new URLSearchParams();
-		p.set("new_lead", "1");
+		p.set("new_opportunity", "1");
 		p.set("appointment", "1");
 		if (q.customer) p.set("customer", q.customer);
 		if (q.name) p.set("customer_name", q.name);

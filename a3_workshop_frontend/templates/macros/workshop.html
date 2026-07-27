@@ -1,10 +1,13 @@
 {# Reusable Workshop CRM UI components. Import in a page with:
    {% from "templates/macros/workshop.html" import statcard, badge, typecard, field, qr %} #}
 
-{%- macro statcard(label, value, variant="") -%}
+{# `sub` captions the period a figure covers (e.g. "Last 30 days"), so a tile is
+   never a bare unqualified number. Omit it and the card renders exactly as before. #}
+{%- macro statcard(label, value, variant="", sub="") -%}
 <div class="stat-card {{ variant }}">
 	<div class="label">{{ label }}</div>
 	<div class="value">{{ value }}</div>
+	{%- if sub %}<div class="sub">{{ sub }}</div>{% endif -%}
 </div>
 {%- endmacro -%}
 

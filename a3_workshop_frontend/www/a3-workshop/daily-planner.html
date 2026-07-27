@@ -2,38 +2,19 @@
 {% from "templates/macros/workshop.html" import badge, field %}
 
 {% block page_content %}
-{%- set pipeline = [
-  {"stage":"Reception","n":4,"sub":["Vehicle arrived","Awaiting inspection"]},
-  {"stage":"Estimation","n":8,"sub":["Estimate pending approval","Waiting customer confirmation"]},
-  {"stage":"Workshop","n":21,"sub":["Repair in progress","Parts replacement"]},
-  {"stage":"QC","n":5,"sub":["Final inspection","Road test"]},
-  {"stage":"Ready Delivery","n":3,"sub":["Ready for delivery","Customer informed"]}
-] -%}
-{%- set followups = [
-  {"icon":"fa-file-circle-check","reason":"Pending Approval","sub":"Estimate approval","n":6},
-  {"icon":"fa-car-side","reason":"Vehicle Ready","sub":"Delivery reminder","n":3},
-  {"icon":"fa-rotate","reason":"Service Reminder","sub":"Periodic maintenance","n":12},
-  {"icon":"fa-triangle-exclamation","reason":"Complaint Follow-Up","sub":"Open complaints","n":4}
-] -%}
-{%- set techs = [
-  {"name":"Technician A — Arun Kumar","jobs":["JC-0011 · Brake pads","JC-0007 · Oil change"],"hours":"6.5","prod":86},
-  {"name":"Technician B — Rajesh Nair","jobs":["JC-0010 · Bodywork","JC-0009 · AC service"],"hours":"5.0","prod":72},
-  {"name":"Technician C — Suresh Babu","jobs":["JC-0008 · Inspection"],"hours":"3.5","prod":64}
-] -%}
+{#- pipeline / followups / techs / bills all arrive live from the page controller
+    (www/a3-workshop/daily_planner.py -> garagedesk.api.daily_planner).
+
+    `advances` is still hardcoded: Customer and Supplier advances have no records
+    to read on this bench, and Employee Advances cannot be computed at all — that
+    doctype ships with Frappe HR (hrms), which is not installed here. -#}
 {%- set advances = [
   {"type":"Customer Advances","sub":"Awaiting service completion","count":7,"amt":"₹1,20,000"},
   {"type":"Supplier Advances","sub":"Pending material delivery","count":3,"amt":"₹45,000"},
   {"type":"Employee Advances","sub":"Pending settlement","count":5,"amt":"₹18,500"}
 ] -%}
-{%- set receivables = [
-  {"label":"Overdue","amt":"₹2,40,000","light":"light--r"},
-  {"label":"Due Today","amt":"₹65,000","light":"light--y"},
-  {"label":"Due This Week","amt":"₹1,10,000","light":"light--g"}
-] -%}
-{%- set payables = [
-  {"label":"Due Today","amt":"₹30,000","light":"light--y"},
-  {"label":"Due This Week","amt":"₹85,000","light":"light--g"}
-] -%}
+{%- set receivables = bills.receivables -%}
+{%- set payables = bills.payables -%}
 
 <div class="toolbar">
 	<div class="section-title" style="margin:0">Today &middot; {{ frappe.utils.formatdate(frappe.utils.nowdate(), "dd MMM yyyy") }}</div>
@@ -93,8 +74,8 @@
 			</div>
 		</div>
 
-		<!-- 3. Today's Bookings — real Leads (input time · customer — vehicle) -->
-		<div class="card"><div class="card__head"><h3>Today's Bookings</h3><span class="muted">Leads by time slot</span></div>
+		<!-- 3. Today's Bookings — real Opportunities (input time · customer — vehicle) -->
+		<div class="card"><div class="card__head"><h3>Today's Bookings</h3><span class="muted">Enquiries by time slot</span></div>
 			<div class="card__body">
 				{%- for s in booking_slots %}
 				<div class="group-head"><i class="fa-regular fa-clock" style="color:var(--navy)"></i>{{ s.slot }}<span class="count">{{ s.rows|length }}</span></div>
@@ -110,7 +91,7 @@
 				</div>
 				{%- endfor %}
 				{%- else %}
-				<div class="empty" style="padding:14px 0">No leads yet.</div>
+				<div class="empty" style="padding:14px 0">No enquiries yet.</div>
 				{%- endfor %}
 			</div>
 		</div>
@@ -128,16 +109,18 @@
 			</div>
 		</div>
 
-		<!-- 5. Technician Activity Board -->
+		<!-- 5. Technician Activity Board — live, from the open job-card service rows -->
 		<div class="card"><div class="card__head"><h3>Technician Activity Board</h3><span class="muted">By technician</span></div>
 			<div class="card__body stack">
 				{%- for t in techs %}
 				<div class="tech-card">
-					<div class="row-between"><b>{{ t.name }}</b><span class="muted" style="font-size:12px">{{ t.jobs|length }} jobs · {{ t.hours }} hrs</span></div>
-					<div class="muted" style="font-size:12px;margin:6px 0">{% for j in t.jobs %}{{ j }}{% if not loop.last %} &nbsp;·&nbsp; {% endif %}{% endfor %}</div>
+					<div class="row-between"><b>{{ t.employee_name }}</b><span class="muted" style="font-size:12px">{{ t.jobs|length }} job{{ "" if t.jobs|length == 1 else "s" }} · {{ t.hours }} hrs</span></div>
+					<div class="muted" style="font-size:12px;margin:6px 0">{% for j in t.jobs %}{{ j }}{% if not loop.last %} &nbsp;·&nbsp; {% endif %}{% else %}No open jobs assigned{% endfor %}</div>
 					<div class="row-between" style="font-size:12px;margin-bottom:4px"><span class="muted">Productivity</span><b>{{ t.prod }}%</b></div>
 					<div class="bar"><span style="width:{{ t.prod }}%"></span></div>
 				</div>
+				{%- else %}
+				<div class="empty" style="padding:14px 0">No technicians on the board yet.</div>
 				{%- endfor %}
 			</div>
 		</div>
@@ -173,10 +156,14 @@
 				<div class="fieldset-title" style="margin-top:0">Customer Receivables</div>
 				{%- for r in receivables %}
 				<div class="kv-row"><span class="k"><span class="light {{ r.light }}"></span>{{ r.label }}</span><b>{{ r.amt }}</b></div>
+				{%- else %}
+				<div class="empty" style="padding:8px 0">Nothing outstanding from customers.</div>
 				{%- endfor %}
 				<div class="fieldset-title">Supplier Payables</div>
 				{%- for p in payables %}
 				<div class="kv-row"><span class="k"><span class="light {{ p.light }}"></span>{{ p.label }}</span><b>{{ p.amt }}</b></div>
+				{%- else %}
+				<div class="empty" style="padding:8px 0">Nothing owed to suppliers.</div>
 				{%- endfor %}
 				<div class="muted" style="font-size:12px;margin-top:10px"><span class="light light--g"></span> Good &nbsp; <span class="light light--y"></span> Attention &nbsp; <span class="light light--r"></span> Urgent</div>
 			</div>

@@ -14,17 +14,29 @@ def get_context(context):
 	# Section 1 — Today's Tasks & To-Do (real ERPNext Tasks, grouped by priority).
 	from garagedesk.api.daily_planner import (
 		get_assignee_options,
+		get_bills_and_collections,
 		get_cash_summary,
+		get_followup_queue,
+		get_job_card_pipeline,
 		get_lead_bookings,
+		get_technician_activity,
 		get_today_task_groups,
 	)
 
 	context.task_groups = get_today_task_groups()
 	context.assignees = get_assignee_options()
-	# Section 3 — Today's Bookings (real Leads: input time, customer, vehicle model).
+	# Section 2 — Job Cards In Progress (live cards bucketed into the five stages).
+	context.pipeline = get_job_card_pipeline()
+	# Section 3 — Today's Bookings (real Opportunities: input time, customer, vehicle).
 	context.booking_slots = get_lead_bookings()
+	# Section 4 — Customer Follow-Up Queue (approvals, ready vehicles, service dues, complaints).
+	context.followups = get_followup_queue()
+	# Section 5 — Technician Activity Board (same board as the Create Job Card page).
+	context.techs = get_technician_activity()
 	# Section 6 — Cash & Bills Summary (real accounting).
 	context.cash = get_cash_summary()
+	# Section 8 — Pending Bills & Collections (aged receivables / payables).
+	context.bills = get_bills_and_collections()
 	# Section 9 — Purchase Requirements: Critical Stock (job-card parts short/below reorder)
 	# and Reorder Level Reached (items at/below reorder level).
 	from garagedesk.api.workshop import get_purchase_requirements
