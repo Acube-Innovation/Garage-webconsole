@@ -13,7 +13,7 @@
 		</div>
 		<div class="stack" style="align-items:flex-end;gap:8px">
 			{%- if card %}{{ badge(card.status, card.status_badge) }}{%- else %}{{ badge("QC Pending","badge--pending") }}{%- endif %}
-			<div class="row"><a class="btn btn--purple btn--sm">Update QC</a><a class="btn btn--primary btn--sm">Mark Ready</a></div>
+			<div class="row">{%- if card %}<a class="btn btn--outline btn--sm" href="/a3-workshop/workshop-print?jobcard={{ card.name }}" target="_blank" rel="noopener"><i class="fa-solid fa-print"></i> Print</a>{%- endif %}<a class="btn btn--purple btn--sm">Update QC</a><a class="btn btn--primary btn--sm">Mark Ready</a></div>
 		</div>
 	</div>
 </div>

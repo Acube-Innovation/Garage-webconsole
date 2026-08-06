@@ -1,0 +1,444 @@
+{% extends "templates/workshop_base.html" %}
+
+{% block page_content %}
+
+{% if not customer %}
+<!-- ============================================= Customer picker -->
+<div class="toolbar">
+	<form method="get" style="margin:0;max-width:340px;flex:1" id="vh-search-form">
+		<div class="field"><input name="q" value="{{ search or '' }}" placeholder="Search customers..." autocomplete="off"></div>
+	</form>
+	<div class="toolbar__right" id="vh-type-chips" role="group" aria-label="Filter by customer type">
+		<button type="button" class="vh-chip" data-type="all">All</button>
+		<button type="button" class="vh-chip" data-type="fleet"><i class="fa-solid fa-truck"></i> Own Fleet</button>
+		<button type="button" class="vh-chip" data-type="outside"><i class="fa-solid fa-user"></i> Outside Customers</button>
+	</div>
+</div>
+<div id="vh-picker" class="type-grid" style="grid-template-columns:repeat(3,1fr)">
+	<div class="empty">Loading customers…</div>
+</div>
+{% else %}
+<!-- ============================================= Customer dashboard -->
+<div class="toolbar">
+	<a class="btn btn--outline btn--sm" href="/a3-workshop/vehicle-history"><i class="fa-solid fa-arrow-left"></i> All Customers</a>
+	<div class="toolbar__right">
+		<a class="btn btn--outline" href="/a3-workshop/vehicle-history-print?customer={{ customer | urlencode }}" target="_blank" rel="noopener"><i class="fa-solid fa-print"></i> Print Summary</a>
+		<button type="button" class="btn btn--primary" id="vh-register"><i class="fa-solid fa-plus"></i> Register Vehicle</button>
+	</div>
+</div>
+
+<div id="vh-stats" class="stat-grid" style="margin-bottom:18px"></div>
+
+<div class="card" style="margin-bottom:18px">
+	<div class="card__head"><h3><i class="fa-solid fa-car"></i> Vehicles — {{ customer_label }}</h3></div>
+	<div class="card__body"><div id="vh-vehicles" class="list-rows"><div class="empty">Loading…</div></div></div>
+</div>
+
+<div class="card" id="vh-kpi-card" style="display:none;margin-bottom:18px">
+	<div class="card__head"><h3><i class="fa-solid fa-ranking-star"></i> Driver Performance</h3></div>
+	<div class="card__body">
+		<div id="vh-rankings" class="vh-rank-grid"></div>
+		<div style="overflow-x:auto"><table class="table" id="vh-kpi-table">
+			<thead><tr>
+				<th>Driver</th><th>Score</th><th>Grade</th><th>KM</th><th>New Damages</th>
+				<th>Preventive</th><th>Cost / km</th><th></th>
+			</tr></thead>
+			<tbody></tbody>
+		</table></div>
+	</div>
+</div>
+
+<!-- Register Vehicle modal -->
+<div class="modal-overlay" id="vh-reg-modal" role="dialog" aria-modal="true">
+	<div class="modal">
+		<div class="modal__head">
+			<div><h3>Register Vehicle</h3><div class="sub">Owner: {{ customer_label }}</div></div>
+			<button type="button" class="modal__close" data-close aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+		</div>
+		<div class="modal__body">
+			<form class="form-grid" id="vh-reg-form" onsubmit="return false">
+				<div class="field"><label>Plate Number <span class="req">*</span></label><input name="plate"></div>
+				<div class="field"><label>Make / Model <span class="req">*</span></label><input name="model" placeholder="e.g. Toyota Fortuner"></div>
+				<div class="field"><label>Chassis Number</label><input name="chassis"></div>
+				<div class="field"><label>Engine Number</label><input name="engine"></div>
+				<div class="field"><label>Odometer Reading</label><input name="odo" type="number" placeholder="0"></div>
+				<div class="field"><label>Fuel Type</label><select name="fuel">
+					<option value="">Select</option><option>Petrol</option><option>Diesel</option>
+					<option>Electric</option><option>Hybrid</option>
+				</select></div>
+				<div class="field"><label>Transmission</label><select name="trans">
+					<option value="">Select</option><option>Automatic</option><option>Manual</option>
+				</select></div>
+			</form>
+		</div>
+		<div class="modal__foot">
+			<button type="button" class="btn btn--outline btn--sm" data-close>Cancel</button>
+			<button type="button" class="btn btn--primary btn--sm" id="vh-reg-save"><i class="fa-solid fa-floppy-disk"></i> Save Vehicle</button>
+		</div>
+	</div>
+</div>
+
+<!-- Driver scorecard modal -->
+<div class="modal-overlay" id="vh-score-modal" role="dialog" aria-modal="true">
+	<div class="modal">
+		<div class="modal__head">
+			<div><h3>Driver Scorecard</h3><div class="sub" id="vh-score-sub">—</div></div>
+			<button type="button" class="modal__close" data-close aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+		</div>
+		<div class="modal__body" id="vh-score-body"><div class="empty">Loading…</div></div>
+		<div class="modal__foot">
+			<a class="btn btn--outline btn--sm" id="vh-score-print" href="#" target="_blank" rel="noopener"><i class="fa-solid fa-print"></i> Print Report</a>
+			<button type="button" class="btn btn--primary btn--sm" data-close>Close</button>
+		</div>
+	</div>
+</div>
+{% endif %}
+
+<style>
+	.vh-chip { border:1px solid var(--border); background:var(--surface); border-radius:999px;
+		padding:8px 16px; font-size:13px; font-weight:600; color:var(--muted); cursor:pointer;
+		font-family:var(--font); display:inline-flex; align-items:center; gap:7px; }
+	.vh-chip:hover { color:var(--text); }
+	.vh-chip.is-active { background:var(--red); border-color:var(--red); color:#fff; }
+	.vh-fleet-toggle { background:none; border:none; cursor:pointer; font-size:12px; color:var(--muted); padding:0; }
+	.vh-fleet-toggle:hover { color:var(--navy); }
+	.vh-rank-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:18px; }
+	@media (max-width:900px){ .vh-rank-grid { grid-template-columns:repeat(2,1fr); } }
+	.vh-rank { border:1px solid var(--border); border-radius:var(--radius-sm,9px); padding:12px 14px; background:var(--bg); }
+	.vh-rank .k { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); }
+	.vh-rank .v { font-weight:800; margin-top:6px; }
+	.vh-rank .s { font-size:12px; color:var(--muted); margin-top:2px; }
+	.vh-score-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+	.vh-score-item { border:1px solid var(--border); border-radius:var(--radius-sm,9px); padding:10px 12px; }
+	.vh-score-item .k { font-size:11px; color:var(--muted); font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
+	.vh-score-item .v { font-weight:800; font-size:18px; margin-top:4px; }
+	.vh-bar { height:6px; border-radius:3px; background:var(--border); margin-top:8px; overflow:hidden; }
+	.vh-bar i { display:block; height:100%; background:var(--red); border-radius:3px; }
+</style>
+
+<script>
+	window.csrf_token = "{{ frappe.session.csrf_token }}";
+	window.vh_customer = "{{ customer or '' }}";
+	window.vh_search = {{ (search or '') | tojson }};
+	window.vh_can_toggle = {{ 'true' if can_toggle_fleet else 'false' }};
+</script>
+{% raw %}
+<script>
+(function () {
+	function callMethod(method, args) {
+		return fetch("/api/method/" + method, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"X-Frappe-CSRF-Token": window.csrf_token || "",
+				"Accept": "application/json"
+			},
+			body: JSON.stringify(args || {})
+		}).then(function (r) {
+			return r.json().then(function (data) {
+				if (!r.ok) {
+					var msg = (data && data._server_messages) || (data && data.exc) || r.statusText;
+					throw new Error(cleanError(msg));
+				}
+				return data.message;
+			});
+		});
+	}
+	function cleanError(msg) {
+		try {
+			var arr = JSON.parse(msg);
+			if (Array.isArray(arr) && arr.length) {
+				return arr.map(function (m) { try { return JSON.parse(m).message; } catch (e) { return m; } }).join(" ");
+			}
+		} catch (e) {}
+		return String(msg).replace(/<[^>]+>/g, "");
+	}
+	function esc(s) {
+		return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+			return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+		});
+	}
+	function money(n) { return "AED " + Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 0 }); }
+
+	// ---------------------------------------------------------- customer picker
+	var picker = document.getElementById("vh-picker");
+	if (picker) {
+		var searchInput = document.querySelector('#vh-search-form [name="q"]');
+		var chips = document.getElementById("vh-type-chips");
+		var TYPE_LABEL = { fleet: "own-fleet ", outside: "outside " };
+		// Initial type from ?type=, so filtered views survive refresh / can be linked.
+		var typeFilter = new URLSearchParams(window.location.search).get("type") || "all";
+		if (!/^(all|fleet|outside)$/.test(typeFilter)) typeFilter = "all";
+		var loadSeq = 0;
+
+		function markActiveChip() {
+			chips.querySelectorAll(".vh-chip").forEach(function (c) {
+				c.classList.toggle("is-active", c.getAttribute("data-type") === typeFilter);
+			});
+		}
+
+		function syncUrl() {
+			var params = new URLSearchParams();
+			var q = searchInput.value.trim();
+			if (q) params.set("q", q);
+			if (typeFilter !== "all") params.set("type", typeFilter);
+			var qs = params.toString();
+			window.history.replaceState(null, "", window.location.pathname + (qs ? "?" + qs : ""));
+		}
+
+		function renderCustomers(rows, q) {
+			if (!rows || !rows.length) {
+				var kind = TYPE_LABEL[typeFilter] || "";
+				picker.innerHTML = '<div class="empty" style="grid-column:1/-1">' +
+					(q ? "No " + kind + 'customers match "' + esc(q) + '".'
+						: (kind ? "No " + kind + "customers yet." : "No customers yet.")) + "</div>";
+				return;
+			}
+			picker.innerHTML = rows.map(function (c) {
+				var initial = (c.customer_name || "?").charAt(0).toUpperCase();
+				return '<div class="card"><div class="card__body">' +
+					'<div class="row" style="display:flex;gap:12px;align-items:center">' +
+					'<div class="list-row__avatar">' + esc(initial) + "</div>" +
+					'<div style="min-width:0"><div style="font-weight:700">' + esc(c.customer_name) +
+					(c.is_own_fleet ? ' <span class="badge badge--navy">Own Fleet</span>' : "") + "</div>" +
+					'<div class="muted" style="font-size:12px">' + esc(c.mobile_no || c.email_id || "—") + "</div></div></div>" +
+					'<div class="row-between" style="margin-top:16px"><span class="muted">Vehicles</span><b>' + c.vehicle_count + "</b></div>" +
+					(window.vh_can_toggle
+						? '<div class="row-between" style="margin-top:6px"><span class="muted">Own fleet</span>' +
+						  '<button type="button" class="vh-fleet-toggle" data-toggle="' + esc(c.name) + '" data-state="' + (c.is_own_fleet ? 1 : 0) + '">' +
+						  (c.is_own_fleet ? '<i class="fa-solid fa-toggle-on" style="color:var(--navy);font-size:18px"></i>' : '<i class="fa-solid fa-toggle-off" style="font-size:18px"></i>') +
+						  "</button></div>"
+						: "") +
+					'<a class="btn btn--primary btn--sm" style="margin-top:14px;width:100%;justify-content:center" ' +
+					'href="/a3-workshop/vehicle-history?customer=' + encodeURIComponent(c.name) + '">' +
+					'<i class="fa-solid fa-clock-rotate-left"></i> View History</a>' +
+					"</div></div>";
+			}).join("");
+		}
+
+		function loadCustomers() {
+			var q = searchInput.value.trim();
+			var seq = ++loadSeq; // drop stale responses from fast typing
+			picker.innerHTML = '<div class="empty" style="grid-column:1/-1">Loading customers…</div>';
+			callMethod("garagedesk.api.fleet.list_history_customers", { search: q, limit: 60, fleet: typeFilter })
+				.then(function (rows) { if (seq === loadSeq) renderCustomers(rows, q); })
+				.catch(function (err) {
+					if (seq !== loadSeq) return;
+					picker.innerHTML = '<div class="empty" style="grid-column:1/-1">Could not load customers.<br><span class="muted">' + esc(err.message || err) + "</span></div>";
+				});
+		}
+
+		// Type chips: one active at a time, combined with the search text.
+		chips.addEventListener("click", function (e) {
+			var b = e.target.closest(".vh-chip");
+			if (!b) return;
+			typeFilter = b.getAttribute("data-type");
+			markActiveChip();
+			syncUrl();
+			loadCustomers();
+		});
+
+		// Live search (debounced); Enter also just re-filters instead of reloading.
+		var searchTimer = null;
+		searchInput.addEventListener("input", function () {
+			clearTimeout(searchTimer);
+			searchTimer = setTimeout(function () { syncUrl(); loadCustomers(); }, 250);
+		});
+		document.getElementById("vh-search-form").addEventListener("submit", function (e) {
+			e.preventDefault();
+			clearTimeout(searchTimer);
+			syncUrl();
+			loadCustomers();
+		});
+
+		picker.addEventListener("click", function (e) {
+			var b = e.target.closest("[data-toggle]");
+			if (!b) return;
+			var next = b.getAttribute("data-state") === "1" ? 0 : 1;
+			callMethod("garagedesk.api.fleet.set_customer_fleet_flag", { customer: b.getAttribute("data-toggle"), is_own_fleet: next })
+				.then(loadCustomers)
+				.catch(function (err) { alert("Could not update: " + (err.message || err)); });
+		});
+
+		markActiveChip();
+		loadCustomers();
+		return; // picker mode: nothing below applies
+	}
+
+	// ------------------------------------------------------- customer dashboard
+	var statsEl = document.getElementById("vh-stats");
+	var vehiclesEl = document.getElementById("vh-vehicles");
+	var kpiCard = document.getElementById("vh-kpi-card");
+
+	function statcard(label, value, variant, sub) {
+		return '<div class="stat-card ' + (variant || "") + '"><div class="label">' + esc(label) +
+			'</div><div class="value">' + esc(value) + "</div>" +
+			(sub ? '<div class="sub">' + esc(sub) + "</div>" : "") + "</div>";
+	}
+
+	function renderDashboard(d) {
+		var s = d.stats || {};
+		var tiles = "";
+		tiles += statcard("Vehicles", s.vehicles || 0, "");
+		tiles += statcard("Distance", (s.total_km_12m || 0).toLocaleString() + " km", "stat-card--navy", "Last 12 months");
+		tiles += statcard("Service Visits", s.service_visits || 0, "stat-card--purple", "All time");
+		tiles += statcard("Open Handover Issues", s.open_handover_issues || 0, "");
+		tiles += statcard("Maintenance Cost", money(s.maintenance_cost), "stat-card--navy", "All time");
+		if (d.is_own_fleet) {
+			tiles += statcard("Active Drivers", s.active_drivers || 0, "stat-card--purple");
+			tiles += statcard("Needs Improvement", s.needs_improvement || 0, "");
+		}
+		statsEl.innerHTML = tiles;
+
+		if (!d.vehicles || !d.vehicles.length) {
+			vehiclesEl.innerHTML = '<div class="empty">No vehicles yet for this customer. Use Register Vehicle to add one.</div>';
+		} else {
+			vehiclesEl.innerHTML = d.vehicles.map(function (v) {
+				return '<div class="list-row" style="grid-template-columns:2fr 1.4fr 1.4fr auto">' +
+					'<div class="list-row__party">' +
+					'<div class="list-row__avatar" style="background:var(--navy)"><i class="fa-solid fa-car"></i></div>' +
+					'<div><div class="list-row__title">' + esc(v.model) + "</div>" +
+					'<div class="list-row__meta">Plate: ' + esc(v.plate) + "<br>Chassis: " + esc(v.chassis) + "</div></div></div>" +
+					'<div class="list-row__col"><div class="k">Odometer</div><div style="font-weight:600">' + esc(v.odometer) +
+					'</div><div class="muted">' + esc(v.fuel) + "</div></div>" +
+					'<div class="list-row__col"><div class="k">' + (d.is_own_fleet ? "Current Driver" : "Owner") + "</div>" +
+					'<div style="font-weight:600">' + esc(d.is_own_fleet ? (v.current_driver || "Unassigned") : d.customer_name) + "</div></div>" +
+					'<a class="btn btn--primary btn--sm" href="/a3-workshop/vehicle-history-detail?vehicle=' + encodeURIComponent(v.name) + '">View History</a>' +
+					"</div>";
+			}).join("");
+		}
+
+		if (d.is_own_fleet && d.kpi) renderKpi(d.kpi);
+	}
+
+	function gradeBadge(g) {
+		if (!g) return '<span class="muted">—</span>';
+		var cls = { A: "badge--success", B: "badge--new", C: "badge--pending", D: "badge--danger" }[g] || "badge--soft";
+		return '<span class="badge ' + cls + '">' + esc(g) + "</span>";
+	}
+
+	function renderKpi(kpi) {
+		kpiCard.style.display = "";
+		var r = kpi.rankings || {};
+		function rank(label, row, valueFn) {
+			return '<div class="vh-rank"><div class="k">' + esc(label) + '</div><div class="v">' +
+				(row ? esc(row.driver_name || row.driver) : "—") + '</div><div class="s">' +
+				(row ? esc(valueFn(row)) : "No data yet") + "</div></div>";
+		}
+		var needs = (r.needs_improvement || []);
+		document.getElementById("vh-rankings").innerHTML =
+			rank("Most Efficient Driver", r.most_efficient, function (x) { return "Score " + x.overall_score; }) +
+			rank("Best-Maintained Vehicles", r.best_maintained, function (x) { return "Condition " + x.condition_score; }) +
+			rank("Least Maintenance Issues", r.least_issues, function (x) { return x.new_damage_count + " new damages"; }) +
+			'<div class="vh-rank"><div class="k">Needs Improvement</div><div class="v">' +
+			(needs.length ? esc(needs.map(function (x) { return x.driver_name || x.driver; }).join(", ")) : "None") +
+			'</div><div class="s">' + (needs.length ? "Score below threshold" : "All drivers on track") + "</div></div>";
+
+		var tbody = document.querySelector("#vh-kpi-table tbody");
+		if (!kpi.rows || !kpi.rows.length) {
+			tbody.innerHTML = '<tr><td colspan="8" class="muted" style="text-align:center;padding:24px">No driver activity in the last 12 months.</td></tr>';
+			return;
+		}
+		tbody.innerHTML = kpi.rows.map(function (x) {
+			return "<tr>" +
+				'<td style="font-weight:600">' + esc(x.driver_name || x.driver) + "</td>" +
+				"<td>" + (x.overall_score == null ? '<span class="muted">—</span>' : "<b>" + x.overall_score + "</b>") + "</td>" +
+				"<td>" + gradeBadge(x.grade) + "</td>" +
+				"<td>" + (x.total_km || 0).toLocaleString() + "</td>" +
+				"<td>" + (x.new_damage_count || 0) + (x.severe_damage_count ? ' <span class="badge badge--danger">' + x.severe_damage_count + " severe</span>" : "") + "</td>" +
+				"<td>" + (x.preventive_activities || 0) + "</td>" +
+				"<td>" + (x.cost_per_km ? x.cost_per_km.toFixed(2) : "—") + "</td>" +
+				'<td><button type="button" class="btn btn--outline btn--sm" data-driver="' + esc(x.driver) + '" data-dname="' + esc(x.driver_name || x.driver) + '">Scorecard</button></td>' +
+				"</tr>";
+		}).join("");
+	}
+
+	callMethod("garagedesk.api.fleet.get_customer_dashboard", { customer: window.vh_customer })
+		.then(renderDashboard)
+		.catch(function (err) {
+			statsEl.innerHTML = "";
+			vehiclesEl.innerHTML = '<div class="empty">Could not load dashboard.<br><span class="muted">' + esc(err.message || err) + "</span></div>";
+		});
+
+	// ---------------------------------------------------------------- modals
+	function wireModal(overlay) {
+		function close() { overlay.classList.remove("is-open"); }
+		overlay.querySelectorAll("[data-close]").forEach(function (b) { b.addEventListener("click", close); });
+		overlay.addEventListener("click", function (e) { if (e.target === overlay) close(); });
+		document.addEventListener("keydown", function (e) { if (e.key === "Escape") close(); });
+		return { open: function () { overlay.classList.add("is-open"); }, close: close };
+	}
+	var regModal = wireModal(document.getElementById("vh-reg-modal"));
+	var scoreModal = wireModal(document.getElementById("vh-score-modal"));
+
+	document.getElementById("vh-register").addEventListener("click", regModal.open);
+
+	function val(name) { var el = document.querySelector('#vh-reg-form [name="' + name + '"]'); return el ? el.value.trim() : ""; }
+	var regSave = document.getElementById("vh-reg-save");
+	regSave.addEventListener("click", function () {
+		var plate = val("plate"), model = val("model");
+		if (!plate || !model) { alert("Please fill the required fields: Plate Number and Make / Model."); return; }
+		var original = regSave.innerHTML;
+		regSave.disabled = true;
+		regSave.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving…';
+		callMethod("garagedesk.api.vehicle.create_vehicle", {
+			plate: plate, model: model, chassis: val("chassis"), engine: val("engine"),
+			odometer: val("odo"), fuel_type: val("fuel"), transmission: val("trans"),
+			customer: window.vh_customer
+		}).then(function () {
+			window.location.reload();
+		}).catch(function (err) {
+			regSave.disabled = false;
+			regSave.innerHTML = original;
+			alert("Could not save vehicle: " + (err.message || err));
+		});
+	});
+
+	document.getElementById("vh-kpi-table").addEventListener("click", function (e) {
+		var b = e.target.closest("[data-driver]");
+		if (!b) return;
+		var body = document.getElementById("vh-score-body");
+		document.getElementById("vh-score-sub").textContent = b.getAttribute("data-dname");
+		document.getElementById("vh-score-print").href =
+			"/a3-workshop/vehicle-history-print?driver=" + encodeURIComponent(b.getAttribute("data-driver"));
+		body.innerHTML = '<div class="empty">Loading…</div>';
+		scoreModal.open();
+		callMethod("garagedesk.api.fleet.get_driver_scorecard", { driver: b.getAttribute("data-driver") })
+			.then(function (d) {
+				var c = d.current || {};
+				function scoreItem(label, value) {
+					var v = value == null ? null : Number(value);
+					return '<div class="vh-score-item"><div class="k">' + esc(label) + '</div><div class="v">' +
+						(v == null ? "—" : v) + '</div><div class="vh-bar"><i style="width:' + (v || 0) + '%"></i></div></div>';
+				}
+				var html = '<div class="vh-score-grid">' +
+					scoreItem("Condition", c.condition_score) +
+					scoreItem("Preventive", c.preventive_score) +
+					scoreItem("Adherence", c.adherence_score) +
+					scoreItem("Damage", c.damage_score) +
+					scoreItem("Cost", c.cost_score) +
+					scoreItem("Care", c.care_score) +
+					"</div>" +
+					'<div class="row-between" style="margin-top:16px"><span class="muted">Overall (last 12 months)</span><b style="font-size:18px">' +
+					(c.overall_score == null ? "—" : c.overall_score) + " " + gradeBadge(c.grade) + "</b></div>" +
+					'<div class="row-between" style="margin-top:6px"><span class="muted">Distance / Damages / Cost</span><span>' +
+					(c.total_km || 0).toLocaleString() + " km · " + (c.new_damage_count || 0) + " · " + money(c.maintenance_cost) + "</span></div>";
+				if (d.trend && d.trend.length) {
+					html += '<div class="vd-section-title" style="font-size:12px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin:20px 0 12px">Monthly Trend</div>';
+					html += '<div style="overflow-x:auto"><table class="table"><thead><tr><th>Month</th><th>Score</th><th>Grade</th><th>KM</th><th>Damages</th></tr></thead><tbody>' +
+						d.trend.map(function (t) {
+							return "<tr><td>" + esc(t.label) + "</td><td>" + (t.overall_score == null ? "—" : t.overall_score) +
+								"</td><td>" + gradeBadge(t.grade) + "</td><td>" + (t.total_km || 0).toLocaleString() +
+								"</td><td>" + (t.new_damage_count || 0) + "</td></tr>";
+						}).join("") + "</tbody></table></div>";
+				}
+				body.innerHTML = html;
+			})
+			.catch(function (err) {
+				body.innerHTML = '<div class="empty">Could not load scorecard.<br><span class="muted">' + esc(err.message || err) + "</span></div>";
+			});
+	});
+})();
+</script>
+{% endraw %}
+{% endblock %}

@@ -1,0 +1,333 @@
+{% extends "templates/print_base.html" %}
+
+{%- macro money(x) -%}AED {{ "{:,.0f}".format(x or 0) }}{%- endmacro -%}
+{%- macro num(x) -%}{{ "{:,}".format(x or 0) }}{%- endmacro -%}
+{%- macro sevpill(s) -%}
+<span class="pill {{ 'pill--red' if s == 'Severe' else ('pill--amber' if s == 'Moderate' else '') }}">{{ s or "—" }}</span>
+{%- endmacro -%}
+{%- macro gradepill(g) -%}
+{%- if g -%}<span class="pill {{ 'pill--green' if g == 'A' else ('pill--navy' if g == 'B' else ('pill--amber' if g == 'C' else 'pill--red')) }}">{{ g }}</span>{%- else -%}<span class="muted">—</span>{%- endif -%}
+{%- endmacro -%}
+{%- macro rectpill(s) -%}
+<span class="pill {{ 'pill--green' if s == 'Rectified' else ('pill--amber' if s in ('Pending', 'In Progress') else '') }}">{{ s }}</span>
+{%- endmacro -%}
+
+{% block doc_title -%}
+{%- if mode == "vehicle" %}Vehicle History Report
+{%- elif mode == "customer" %}Customer Fleet Summary
+{%- elif mode == "handover" %}Vehicle Handover Inspection
+{%- elif mode == "driver" %}Driver Performance Report
+{%- else %}Print{% endif -%}
+{%- endblock %}
+
+{% block doc_subtitle -%}
+{%- if mode == "vehicle" %}{{ d.vehicle.model }} · Plate {{ d.vehicle.plate }} · {{ d.vehicle.customer_name }}
+{%- elif mode == "customer" %}{{ d.customer_name }}{% if d.mobile_no %} · {{ d.mobile_no }}{% endif %}{% if d.is_own_fleet %} · Own Fleet{% endif %}
+{%- elif mode == "handover" %}{{ h.name }} · {{ h_meta.model }} ({{ h_meta.plate }}) · {{ h.date }}
+{%- elif mode == "driver" %}{{ s.current.driver_name }} · Last 12 months
+{%- endif -%}
+{%- endblock %}
+
+{% block content %}
+
+{% if mode == "none" %}
+<p class="muted">Nothing to print — open this page with ?vehicle=, ?customer=, ?handover= or ?driver=.</p>
+
+{# ================================================================ VEHICLE #}
+{% elif mode == "vehicle" %}
+<h2 class="sec">Vehicle</h2>
+<div class="kv">
+	<div><div class="k">Make / Model</div><div class="v">{{ d.vehicle.model }}</div></div>
+	<div><div class="k">Plate</div><div class="v">{{ d.vehicle.plate }}</div></div>
+	<div><div class="k">Chassis / VIN</div><div class="v">{{ d.vehicle.chassis }}</div></div>
+	<div><div class="k">Odometer</div><div class="v">{{ num(d.vehicle.odometer) }} km</div></div>
+	<div><div class="k">Fuel</div><div class="v">{{ d.vehicle.fuel }}</div></div>
+	<div><div class="k">Owner</div><div class="v">{{ d.vehicle.customer_name }} {% if d.is_own_fleet %}<span class="pill pill--navy">Own Fleet</span>{% endif %}</div></div>
+	{% if d.is_own_fleet %}<div><div class="k">Current Driver</div><div class="v">{{ d.current_driver or "Unassigned" }}</div></div>{% endif %}
+	{% if d.vehicle.year %}<div><div class="k">Year</div><div class="v">{{ d.vehicle.year }}</div></div>{% endif %}
+</div>
+
+{% if d.is_own_fleet %}
+<h2 class="sec">Driver Assignment History</h2>
+{% if d.assignments %}
+<table class="t"><thead><tr><th>Driver</th><th>From</th><th>To</th><th class="right">Start Odo</th><th class="right">End Odo</th><th class="right">Distance</th><th>Status</th></tr></thead><tbody>
+	{% for a in d.assignments %}
+	<tr>
+		<td><b>{{ a.driver_name or a.driver }}</b></td>
+		<td>{{ a.from_date.strftime("%d %b %Y") if a.from_date else "—" }}</td>
+		<td>{{ a.to_date.strftime("%d %b %Y") if a.to_date else "Present" }}</td>
+		<td class="right">{{ num(a.start_odometer) }}</td>
+		<td class="right">{{ num(a.end_odometer) if a.end_odometer else "—" }}</td>
+		<td class="right">{{ num(a.distance_km) }} km</td>
+		<td>{% if a.status == "Active" %}<span class="pill pill--green">Active</span>{% else %}<span class="pill">Ended</span>{% endif %}</td>
+	</tr>
+	{% endfor %}
+</tbody></table>
+{% else %}<p class="muted">No driver assignments recorded.</p>{% endif %}
+{% endif %}
+
+<h2 class="sec">Service History</h2>
+{% if d.service_history %}
+<table class="t"><thead><tr><th>Job Card</th><th>Date</th><th>Job Type</th><th>Service</th><th>Status</th><th class="right">Amount</th></tr></thead><tbody>
+	{% for r in d.service_history %}
+	<tr><td>{{ r.name }}</td><td>{{ r.date }}</td><td>{{ r.jobtype }}</td><td>{{ r.service }}</td><td>{{ r.status }}</td><td class="right">{{ money(r.amount) }}</td></tr>
+	{% endfor %}
+	<tr><td colspan="5"><b>Total</b></td><td class="right"><b>{{ money(d.service_history | sum(attribute="amount")) }}</b></td></tr>
+</tbody></table>
+{% else %}<p class="muted">No service history.</p>{% endif %}
+
+<h2 class="sec">Mechanical Repair History</h2>
+{% if d.repair_history %}
+<table class="t"><thead><tr><th>Job Card</th><th>Date</th><th>Job Type</th><th>Work</th><th>Status</th><th class="right">Amount</th></tr></thead><tbody>
+	{% for r in d.repair_history %}
+	<tr><td>{{ r.name }}</td><td>{{ r.date }}</td><td>{{ r.jobtype }}</td><td>{{ r.service }}</td><td>{{ r.status }}</td><td class="right">{{ money(r.amount) }}</td></tr>
+	{% endfor %}
+	<tr><td colspan="5"><b>Total</b></td><td class="right"><b>{{ money(d.repair_history | sum(attribute="amount")) }}</b></td></tr>
+</tbody></table>
+{% else %}<p class="muted">No mechanical repair history.</p>{% endif %}
+
+<h2 class="sec">Monthly Travel Summary (12 months)</h2>
+<table class="t"><thead><tr><th>Month</th><th class="right">Distance</th><th class="right">Utilisation</th><th class="right">Handovers</th><th class="right">Service Visits</th><th class="right">Cost</th></tr></thead><tbody>
+	{% for m in d.monthly %}
+	<tr><td>{{ m.month }}</td><td class="right">{{ num(m.distance_km) }} km</td><td class="right">{{ m.utilisation_pct }}%</td><td class="right">{{ m.handovers }}</td><td class="right">{{ m.service_visits }}</td><td class="right">{{ money(m.cost) }}</td></tr>
+	{% endfor %}
+	<tr>
+		<td><b>Total</b></td>
+		<td class="right"><b>{{ num(d.monthly | sum(attribute="distance_km")) }} km</b></td>
+		<td></td>
+		<td class="right"><b>{{ d.monthly | sum(attribute="handovers") }}</b></td>
+		<td class="right"><b>{{ d.monthly | sum(attribute="service_visits") }}</b></td>
+		<td class="right"><b>{{ money(d.monthly | sum(attribute="cost")) }}</b></td>
+	</tr>
+</tbody></table>
+
+{% if d.is_own_fleet %}
+<h2 class="sec">Handover Inspections</h2>
+{% if d.handovers %}
+<table class="t"><thead><tr><th>Date</th><th>Type</th><th>From</th><th>To</th><th class="right">Odometer</th><th>New Damages</th><th>Responsible</th><th>Rectification</th></tr></thead><tbody>
+	{% for x in d.handovers %}
+	<tr>
+		<td>{{ x.handover_date_fmt }}</td><td>{{ x.handover_type or "—" }}</td>
+		<td>{{ x.from_driver_name or "—" }}</td><td>{{ x.to_driver_name or "—" }}</td>
+		<td class="right">{{ num(x.odometer) }}</td>
+		<td>{% if x.discrepancy_found %}<span class="pill pill--red">{{ x.new_damage_count }} new</span>{% else %}<span class="pill pill--green">None</span>{% endif %}</td>
+		<td>{{ x.responsible_driver_name or "—" }}</td>
+		<td>{% if x.discrepancy_found %}{{ rectpill(x.rectification_status or "Pending") }}{% else %}—{% endif %}</td>
+	</tr>
+	{% endfor %}
+</tbody></table>
+{% else %}<p class="muted">No handover inspections recorded.</p>{% endif %}
+
+<h2 class="sec">Driver Maintenance Activities</h2>
+{% if d.activities %}
+<table class="t"><thead><tr><th>Date</th><th>Driver</th><th>Activity</th><th class="right">Odometer</th><th>By</th><th>Preventive</th><th class="right">Cost</th></tr></thead><tbody>
+	{% for a in d.activities %}
+	<tr>
+		<td>{{ a.activity_date_fmt }}</td><td>{{ a.driver_name or "—" }}</td><td><b>{{ a.activity_type }}</b></td>
+		<td class="right">{{ num(a.odometer) if a.odometer else "—" }}</td><td>{{ a.performed_by or "—" }}</td>
+		<td>{% if a.is_preventive %}<span class="pill {{ 'pill--green' if a.was_on_schedule else 'pill--amber' }}">{{ "On schedule" if a.was_on_schedule else "Preventive" }}</span>{% else %}—{% endif %}</td>
+		<td class="right">{{ money(a.cost) }}</td>
+	</tr>
+	{% endfor %}
+	<tr><td colspan="6"><b>Total</b></td><td class="right"><b>{{ money(d.activities | sum(attribute="cost")) }}</b></td></tr>
+</tbody></table>
+{% else %}<p class="muted">No driver maintenance activities recorded.</p>{% endif %}
+{% endif %}
+
+{# ================================================================ CUSTOMER #}
+{% elif mode == "customer" %}
+<h2 class="sec">Summary</h2>
+<div class="stat-row">
+	<div class="stat"><div class="l">Vehicles</div><div class="n">{{ d.stats.vehicles }}</div></div>
+	<div class="stat"><div class="l">Distance (12 mo)</div><div class="n">{{ num(d.stats.total_km_12m) }} km</div></div>
+	<div class="stat"><div class="l">Service Visits</div><div class="n">{{ d.stats.service_visits }}</div></div>
+	<div class="stat"><div class="l">Maintenance Cost</div><div class="n">{{ money(d.stats.maintenance_cost) }}</div></div>
+</div>
+{% if d.is_own_fleet %}
+<div class="stat-row" style="margin-top:10px">
+	<div class="stat"><div class="l">Active Drivers</div><div class="n">{{ d.stats.active_drivers }}</div></div>
+	<div class="stat"><div class="l">Open Handover Issues</div><div class="n">{{ d.stats.open_handover_issues }}</div></div>
+	<div class="stat"><div class="l">Needs Improvement</div><div class="n">{{ d.stats.needs_improvement }}</div></div>
+	<div class="stat"><div class="l">Fleet Type</div><div class="n" style="font-size:13px">Own Fleet</div></div>
+</div>
+{% endif %}
+
+<h2 class="sec">Vehicles</h2>
+{% if d.vehicles %}
+<table class="t"><thead><tr><th>Model</th><th>Plate</th><th>Chassis</th><th class="right">Odometer</th><th>Fuel</th><th>{{ "Current Driver" if d.is_own_fleet else "Owner" }}</th></tr></thead><tbody>
+	{% for v in d.vehicles %}
+	<tr>
+		<td><b>{{ v.model }}</b></td><td>{{ v.plate }}</td><td>{{ v.chassis }}</td>
+		<td class="right">{{ v.odometer }}</td><td>{{ v.fuel }}</td>
+		<td>{{ (v.current_driver or "Unassigned") if d.is_own_fleet else d.customer_name }}</td>
+	</tr>
+	{% endfor %}
+</tbody></table>
+{% else %}<p class="muted">No vehicles registered.</p>{% endif %}
+
+{% if d.is_own_fleet and d.kpi %}
+<h2 class="sec">Driver Rankings ({{ d.kpi.from_date }} → {{ d.kpi.to_date }})</h2>
+<div class="kv">
+	<div><div class="k">Most Efficient</div><div class="v">{{ d.kpi.rankings.most_efficient.driver_name if d.kpi.rankings.most_efficient else "—" }}</div></div>
+	<div><div class="k">Best-Maintained Vehicles</div><div class="v">{{ d.kpi.rankings.best_maintained.driver_name if d.kpi.rankings.best_maintained else "—" }}</div></div>
+	<div><div class="k">Least Issues</div><div class="v">{{ d.kpi.rankings.least_issues.driver_name if d.kpi.rankings.least_issues else "—" }}</div></div>
+	<div><div class="k">Needs Improvement</div><div class="v">{{ d.kpi.rankings.needs_improvement | map(attribute="driver_name") | join(", ") or "None" }}</div></div>
+</div>
+
+<h2 class="sec">Driver Performance Leaderboard</h2>
+<table class="t"><thead><tr><th>Driver</th><th class="right">Score</th><th>Grade</th><th class="right">KM</th><th class="right">New Damages</th><th class="right">Preventive</th><th class="right">Adherence</th><th class="right">Cost / km</th><th class="right">Cost</th></tr></thead><tbody>
+	{% for r in d.kpi.rows %}
+	<tr>
+		<td><b>{{ r.driver_name }}</b></td>
+		<td class="right">{{ r.overall_score if r.overall_score is not none else "—" }}</td>
+		<td>{{ gradepill(r.grade) }}</td>
+		<td class="right">{{ num(r.total_km) }}</td>
+		<td class="right">{{ r.new_damage_count }}{% if r.severe_damage_count %} ({{ r.severe_damage_count }} severe){% endif %}</td>
+		<td class="right">{{ r.preventive_activities }}</td>
+		<td class="right">{{ r.services_on_time }}/{{ r.services_due }}</td>
+		<td class="right">{{ "%.2f" | format(r.cost_per_km) if r.cost_per_km else "—" }}</td>
+		<td class="right">{{ money(r.maintenance_cost) }}</td>
+	</tr>
+	{% endfor %}
+</tbody></table>
+{% endif %}
+
+{# ================================================================ HANDOVER #}
+{% elif mode == "handover" %}
+<h2 class="sec">Handover Details</h2>
+<div class="kv">
+	<div><div class="k">Vehicle</div><div class="v">{{ h_meta.model }}</div></div>
+	<div><div class="k">Plate</div><div class="v">{{ h_meta.plate }}</div></div>
+	<div><div class="k">Chassis / VIN</div><div class="v">{{ h_meta.chassis }}</div></div>
+	<div><div class="k">Owner</div><div class="v">{{ h_meta.customer }}</div></div>
+	<div><div class="k">Date &amp; Time</div><div class="v">{{ h.date }}</div></div>
+	<div><div class="k">Type</div><div class="v">{{ h.handover_type }}</div></div>
+	<div><div class="k">Branch</div><div class="v">{{ h_meta.branch }}</div></div>
+	<div><div class="k">Inspected By</div><div class="v">{{ h_meta.inspected_by }}</div></div>
+	<div><div class="k">From Driver (returning)</div><div class="v">{{ h.from_driver }}</div></div>
+	<div><div class="k">To Driver (receiving)</div><div class="v">{{ h.to_driver }}</div></div>
+	<div><div class="k">Odometer</div><div class="v">{{ num(h.odometer) }} km</div></div>
+	<div><div class="k">KM Since Previous</div><div class="v">{{ num(h.km_since_previous) }}</div></div>
+</div>
+
+<h2 class="sec">Condition Checklist</h2>
+<div class="kv">
+	<div><div class="k">Fuel Level</div><div class="v">{{ h.fuel_level }}</div></div>
+	<div><div class="k">Overall Condition</div><div class="v">{{ h.overall_condition }}</div></div>
+	<div><div class="k">Tyre Condition</div><div class="v">{{ h.tyre_condition }}</div></div>
+	<div></div>
+	{% if h.checklist_items %}
+	{% for c in h.checklist_items %}
+	<div><div class="k">{{ c.item }}</div><div class="v">{{ "✔" if c.checked else "✘" }}{% if c.value %} {{ c.value }}{% endif %}</div></div>
+	{% endfor %}
+	{% else %}
+	<div><div class="k">Spare Tyre</div><div class="v">{{ "✔ Present" if h.checklist.spare_tyre else "✘ Missing" }}</div></div>
+	<div><div class="k">Tools / Jack</div><div class="v">{{ "✔ Present" if h.checklist.tools_present else "✘ Missing" }}</div></div>
+	<div><div class="k">Documents</div><div class="v">{{ "✔ Present" if h.checklist.documents_present else "✘ Missing" }}</div></div>
+	<div><div class="k">First Aid Kit</div><div class="v">{{ "✔ Present" if h.checklist.first_aid_kit else "✘ Missing" }}</div></div>
+	{% endif %}
+</div>
+{% if h.observations %}<p style="margin-top:8px"><span class="k" style="font-size:10px;text-transform:uppercase;color:#8a94a6;font-weight:700">Observations:</span> {{ h.observations }}</p>{% endif %}
+
+<h2 class="sec">Recorded Vehicle Condition ({{ h.damages | length }} damages)</h2>
+{% if h.damages %}
+<table class="t"><thead><tr><th>#</th><th>Area</th><th>Damage Type</th><th>Severity</th><th>Description</th></tr></thead><tbody>
+	{% for x in h.damages %}
+	<tr{% if x.is_new %} class="newdmg"{% endif %}>
+		<td>{{ loop.index }}</td><td><b>{{ x.area }}</b></td><td>{{ x.damage_type }}</td>
+		<td>{{ sevpill(x.severity) }}</td><td>{{ x.description or "—" }}</td>
+	</tr>
+	{% endfor %}
+</tbody></table>
+{% else %}<p class="muted">No damages — vehicle recorded clean.</p>{% endif %}
+
+<h2 class="sec">Comparison With Previous Handover {% if h.previous_handover %}({{ h.previous_handover }}){% endif %}</h2>
+{% if h.new_damages %}
+<table class="t"><thead><tr><th>#</th><th>Area</th><th>Damage Type</th><th>Severity</th><th>Finding</th></tr></thead><tbody>
+	{% for x in h.new_damages %}
+	<tr class="newdmg">
+		<td>{{ loop.index }}</td><td><b>{{ x.area }}</b></td><td>{{ x.damage_type }}</td><td>{{ sevpill(x.severity) }}</td>
+		<td>{% if x.previous_severity %}Worsened — was {{ x.previous_severity }}{% else %}New since previous handover{% endif %}</td>
+	</tr>
+	{% endfor %}
+</tbody></table>
+<div class="kv" style="margin-top:10px">
+	<div><div class="k">Responsible Driver</div><div class="v" style="color:#c01643">{{ h.responsible_driver or "—" }}</div></div>
+	<div><div class="k">Rectification</div><div class="v">{{ rectpill(h.rectification_status) }}</div></div>
+	{% if h.rectification_job_card %}<div><div class="k">Repair Job Card</div><div class="v">{{ h.rectification_job_card }}</div></div>{% endif %}
+	{% if h.rectification_notes %}<div style="grid-column:span 2"><div class="k">Notes</div><div class="v">{{ h.rectification_notes }}</div></div>{% endif %}
+</div>
+{% elif h.previous_handover %}
+<p class="muted">No new damage — vehicle condition matches the previous handover record.</p>
+{% else %}
+<p class="muted">First handover for this vehicle — nothing to compare against.</p>
+{% endif %}
+
+{% if h.attachments %}
+<h2 class="sec">Photo Evidence ({{ h.attachments | length }})</h2>
+<div class="photos">
+	{% for a in h.attachments %}
+	<figure><img src="{{ a.file_url }}" alt="{{ a.file_name }}"><figcaption>{{ a.file_name }}</figcaption></figure>
+	{% endfor %}
+</div>
+{% endif %}
+
+<div class="sigs">
+	<div class="sig"><b>{{ h.from_driver if h.from_driver != "—" else "Returning Driver" }}</b>From Driver — signature &amp; date</div>
+	<div class="sig"><b>{{ h.to_driver if h.to_driver != "—" else "Receiving Driver" }}</b>To Driver — signature &amp; date</div>
+	<div class="sig"><b>{{ h_meta.inspected_by }}</b>Inspector — signature &amp; date</div>
+</div>
+
+{# ================================================================ DRIVER #}
+{% elif mode == "driver" %}
+<h2 class="sec">Driver</h2>
+<div class="kv">
+	<div><div class="k">Name</div><div class="v">{{ driver_info.full_name }}</div></div>
+	<div><div class="k">Phone</div><div class="v">{{ driver_info.cell_number or "—" }}</div></div>
+	<div><div class="k">License No.</div><div class="v">{{ driver_info.license_number or "—" }}</div></div>
+	<div><div class="k">License Expiry</div><div class="v">{{ driver_info.expiry_date.strftime("%d %b %Y") if driver_info.expiry_date else "—" }}</div></div>
+</div>
+
+{% set c = s.current %}
+<h2 class="sec">Overall Result (last 12 months)</h2>
+<div class="stat-row">
+	<div class="stat"><div class="l">Overall Score</div><div class="n">{{ c.overall_score if c.overall_score is not none else "—" }} {{ gradepill(c.grade) }}</div></div>
+	<div class="stat"><div class="l">Distance</div><div class="n">{{ num(c.total_km) }} km</div></div>
+	<div class="stat"><div class="l">New Damages</div><div class="n">{{ c.new_damage_count }}{% if c.severe_damage_count %} <span class="pill pill--red">{{ c.severe_damage_count }} severe</span>{% endif %}</div></div>
+	<div class="stat"><div class="l">Maintenance Cost</div><div class="n">{{ money(c.maintenance_cost) }}</div></div>
+</div>
+
+<h2 class="sec">Score Components</h2>
+<table class="t"><thead><tr><th>Component</th><th>Weight</th><th class="right">Score (0–100)</th><th>Basis</th></tr></thead><tbody>
+	<tr><td><b>Vehicle Condition at Handover</b></td><td>25%</td><td class="right">{{ c.condition_score if c.condition_score is not none else "—" }}</td><td>New damages attributed at handovers</td></tr>
+	<tr><td><b>Preventive Maintenance</b></td><td>20%</td><td class="right">{{ c.preventive_score if c.preventive_score is not none else "—" }}</td><td>{{ c.preventive_activities }} preventive activities logged</td></tr>
+	<tr><td><b>Service Adherence</b></td><td>20%</td><td class="right">{{ c.adherence_score if c.adherence_score is not none else "—" }}</td><td>{{ c.services_on_time }}/{{ c.services_due }} services closed on time</td></tr>
+	<tr><td><b>Damage Frequency</b></td><td>15%</td><td class="right">{{ c.damage_score if c.damage_score is not none else "—" }}</td><td>{{ c.new_damage_count }} damages / {{ num(c.total_km) }} km</td></tr>
+	<tr><td><b>Cost Efficiency</b></td><td>10%</td><td class="right">{{ c.cost_score if c.cost_score is not none else "—" }}</td><td>{{ "%.2f" | format(c.cost_per_km) if c.cost_per_km else "—" }} AED/km vs fleet median</td></tr>
+	<tr><td><b>Overall Vehicle Care</b></td><td>10%</td><td class="right">{{ c.care_score if c.care_score is not none else "—" }}</td><td>Handover condition + rectification closure</td></tr>
+</tbody></table>
+
+<h2 class="sec">Monthly Trend</h2>
+{% if s.trend %}
+<table class="t"><thead><tr><th>Month</th><th class="right">Score</th><th>Grade</th><th class="right">KM</th><th class="right">New Damages</th><th class="right">Cost</th></tr></thead><tbody>
+	{% for t in s.trend %}
+	<tr>
+		<td>{{ t.label }}</td>
+		<td class="right">{{ t.overall_score if t.overall_score is not none else "—" }}</td>
+		<td>{{ gradepill(t.grade) }}</td>
+		<td class="right">{{ num(t.total_km) }}</td>
+		<td class="right">{{ t.new_damage_count }}</td>
+		<td class="right">{{ money(t.maintenance_cost) }}</td>
+	</tr>
+	{% endfor %}
+</tbody></table>
+{% else %}<p class="muted">No monthly snapshots yet — the trend fills in as the monthly job runs.</p>{% endif %}
+
+<div class="sigs">
+	<div class="sig"><b>{{ driver_info.full_name }}</b>Driver — signature &amp; date</div>
+	<div class="sig"><b>&nbsp;</b>Fleet Manager — signature &amp; date</div>
+	<div class="sig"><b>&nbsp;</b>HR / Management — signature &amp; date</div>
+</div>
+{% endif %}
+
+{% endblock %}

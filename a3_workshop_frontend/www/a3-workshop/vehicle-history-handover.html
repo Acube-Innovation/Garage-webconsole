@@ -1,0 +1,419 @@
+{% extends "templates/workshop_base.html" %}
+{% from "templates/macros/workshop.html" import field %}
+
+{% block page_content %}
+{% if not vehicle %}
+<div class="empty">No vehicle selected. <a href="/a3-workshop/vehicle-history" style="color:var(--red);font-weight:600">Choose a customer</a> and pick a vehicle first.</div>
+{% else %}
+
+<div class="toolbar">
+	<a class="btn btn--outline btn--sm" href="/a3-workshop/vehicle-history-detail?vehicle={{ vehicle | urlencode }}"><i class="fa-solid fa-arrow-left"></i> Back to Vehicle</a>
+</div>
+
+<div class="card" style="margin-bottom:18px">
+	<div class="card__head"><h3><i class="fa-solid fa-right-left"></i> Handover</h3></div>
+	<div class="card__body">
+		<div id="ho-context" class="muted" style="margin-bottom:16px">Loading vehicle…</div>
+		<form class="form-grid" id="ho-form" onsubmit="return false">
+			{{ field("Handover Type","handover_type",type="select",options=["Issue","Return","Driver Change"]) }}
+			<div class="field"><label>Odometer (km) <span class="req">*</span></label><input name="odometer" type="number" placeholder="0"></div>
+			<div class="field"><label>From Driver (returning)</label><input name="from_driver_label" placeholder="Search driver..." autocomplete="off"><input type="hidden" name="from_driver"></div>
+			<div class="field"><label>To Driver (receiving)</label><input name="to_driver_label" placeholder="Search driver..." autocomplete="off"><input type="hidden" name="to_driver"></div>
+			{{ field("Fuel Level","fuel_level",type="select",options=["Empty","Quarter","Half","Three-Quarter","Full"]) }}
+			{{ field("Overall Condition","overall_condition",type="select",options=["Excellent","Good","Fair","Poor"]) }}
+			{{ field("Tyre Condition","tyre_condition",type="select",options=["Good","Worn","Replace"]) }}
+			{{ field("Other Observations","observations",type="textarea") }}
+		</form>
+	</div>
+</div>
+
+<div class="card" style="margin-bottom:18px">
+	<div class="card__head"><h3><i class="fa-solid fa-list-check"></i> Inspection Checklist</h3></div>
+	<div class="card__body">
+		<div id="ho-checklist" class="ho-checklist"><div class="muted">Loading checklist…</div></div>
+	</div>
+</div>
+
+<div class="card" style="margin-bottom:18px">
+	<div class="card__head"><h3><i class="fa-solid fa-car-burst"></i> Vehicle Condition — Damages</h3></div>
+	<div class="card__body">
+		<div id="ho-prev-note" class="muted" style="font-size:13px;margin-bottom:12px;display:none"></div>
+		<div style="overflow-x:auto"><table class="table editable" id="ho-dmg-table">
+			<thead><tr><th style="min-width:150px">Area</th><th style="min-width:130px">Damage Type</th><th>Severity</th><th style="min-width:180px">Description</th><th></th></tr></thead>
+			<tbody></tbody>
+		</table></div>
+		<div class="table-actions">
+			<button type="button" class="btn btn--outline btn--sm" id="ho-add-dmg"><i class="fa-solid fa-plus"></i> Add Damage</button>
+		</div>
+	</div>
+</div>
+
+<div class="card" style="margin-bottom:18px">
+	<div class="card__head"><h3><i class="fa-solid fa-camera"></i> Photo Evidence</h3></div>
+	<div class="card__body">
+		<div class="empty" id="file-dropzone" style="border:2px dashed var(--border);border-radius:var(--radius)">
+			<i class="fa-solid fa-cloud-arrow-up" style="font-size:28px;color:var(--muted)"></i>
+			<div style="margin-top:10px">Upload photos of the vehicle condition (front, rear, sides, odometer)</div>
+			<input type="file" id="file-input" multiple accept="image/*" style="display:none">
+			<button type="button" class="btn btn--outline btn--sm" id="choose-files" style="margin-top:12px"><i class="fa-solid fa-image"></i> Choose Files</button>
+		</div>
+		<div id="file-list" style="margin-top:14px;display:none"></div>
+	</div>
+</div>
+
+<div class="form-actions">
+	<span></span>
+	<button type="button" class="btn btn--primary" id="ho-save"><i class="fa-solid fa-floppy-disk"></i> Complete Handover</button>
+</div>
+
+<!-- Result modal: the auto-diff outcome -->
+<div class="modal-overlay" id="ho-result-modal" role="dialog" aria-modal="true">
+	<div class="modal">
+		<div class="modal__head">
+			<div><h3>Handover Recorded</h3><div class="sub" id="ho-result-sub">—</div></div>
+		</div>
+		<div class="modal__body" id="ho-result-body"></div>
+		<div class="modal__foot">
+			<a class="btn btn--outline btn--sm" id="ho-result-print" href="#" target="_blank" rel="noopener"><i class="fa-solid fa-print"></i> Print Inspection</a>
+			<a class="btn btn--primary btn--sm" id="ho-result-done" href="#">Go to Vehicle History <i class="fa-solid fa-arrow-right"></i></a>
+		</div>
+	</div>
+</div>
+
+<style>
+	.jc-ac { position:absolute; left:0; right:0; top:100%; z-index:60; margin-top:2px; background:var(--surface,#fff);
+		border:1px solid var(--border,#d8dde6); border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.12);
+		max-height:240px; overflow:auto; }
+	.jc-ac-item { padding:8px 12px; cursor:pointer; }
+	.jc-ac-item:hover, .jc-ac-item.is-active { background:var(--bg,#f1f4f8); }
+	.jc-ac-label { font-weight:600; font-size:13px; }
+	.jc-ac-sub { font-size:12px; color:var(--muted,#7a8598); }
+	.jc-ac-empty { padding:8px 12px; font-size:12px; color:var(--muted,#7a8598); }
+	.file-chip { display:flex; align-items:center; gap:10px; padding:8px 12px; border:1px solid var(--border);
+		border-radius:var(--radius-sm,8px); background:var(--surface); margin-bottom:8px; font-size:13px; }
+	.file-chip i.type { color:var(--muted); }
+	.file-chip .name { font-weight:600; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+	.file-chip .size { color:var(--muted); font-size:12px; }
+	.file-chip .rm { background:none; border:none; color:var(--muted); cursor:pointer; font-size:14px; }
+	.file-chip .rm:hover { color:var(--red); }
+	.ho-prev-row td { background:var(--bg); }
+	.ho-checklist { display:grid; grid-template-columns:repeat(2,1fr); gap:10px 18px; }
+	@media (max-width:900px){ .ho-checklist { grid-template-columns:1fr; } }
+	.ho-chk-row { display:flex; align-items:center; gap:10px; padding:9px 14px;
+		border:1px solid var(--border); border-radius:var(--radius-sm,9px); background:var(--surface); }
+	.ho-chk-row label.check { flex:1; margin:0; font-weight:600; font-size:13px; }
+	.ho-chk-row input[data-val] { width:170px; display:none; border:1px solid var(--border);
+		border-radius:8px; padding:6px 10px; font:inherit; font-size:13px; }
+	.ho-chk-row.is-checked { border-color:var(--green); background:#f3fbf6; }
+	.vh-dmg { border:1px solid var(--border); border-radius:var(--radius-sm,9px); padding:8px 12px; margin-bottom:8px; font-size:13px; }
+	.vh-dmg.is-new { border-color:var(--red); background:var(--red-soft); }
+	.vh-dmg .t { font-weight:700; }
+</style>
+
+<script>
+	window.csrf_token = "{{ frappe.session.csrf_token }}";
+	window.ho_vehicle = "{{ vehicle }}";
+</script>
+{% raw %}
+<script>
+(function () {
+	var AREAS = ["Front Bumper","Rear Bumper","Bonnet","Roof","Boot","Windscreen","Rear Glass","LH Front Door","LH Rear Door","RH Front Door","RH Rear Door","LH Fender","RH Fender","LH Quarter Panel","RH Quarter Panel","Wheels & Tyres","Interior","Undercarriage","Other"];
+	var TYPES = ["Scratch","Dent","Bend","Crack","Chip","Rust","Missing Part","Other"];
+	var SEVERITIES = ["Minor","Moderate","Severe"];
+
+	function callMethod(method, args) {
+		return fetch("/api/method/" + method, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"X-Frappe-CSRF-Token": window.csrf_token || "",
+				"Accept": "application/json"
+			},
+			body: JSON.stringify(args || {})
+		}).then(function (r) {
+			return r.json().then(function (data) {
+				if (!r.ok) {
+					var msg = (data && data._server_messages) || (data && data.exc) || r.statusText;
+					throw new Error(cleanError(msg));
+				}
+				return data.message;
+			});
+		});
+	}
+	function cleanError(msg) {
+		try {
+			var arr = JSON.parse(msg);
+			if (Array.isArray(arr) && arr.length) {
+				return arr.map(function (m) { try { return JSON.parse(m).message; } catch (e) { return m; } }).join(" ");
+			}
+		} catch (e) {}
+		return String(msg).replace(/<[^>]+>/g, "");
+	}
+	function esc(s) {
+		return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+			return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+		});
+	}
+	function val(name) { var el = document.querySelector('#ho-form [name="' + name + '"]'); return el ? el.value.trim() : ""; }
+	function checked(name) { var el = document.querySelector('#ho-form [name="' + name + '"]'); return el && el.checked ? 1 : 0; }
+
+	// -------------------------------------------------- driver autocomplete
+	function attachAutocomplete(input, hiddenName, source) {
+		if (!input) return;
+		var wrap = input.parentNode;
+		wrap.style.position = "relative";
+		var list = document.createElement("div");
+		list.className = "jc-ac"; list.style.display = "none";
+		wrap.appendChild(list);
+		var items = [], timer = null;
+		function hide() { list.style.display = "none"; }
+		function setHidden(v) { document.querySelector('#ho-form [name="' + hiddenName + '"]').value = v || ""; }
+		function render(rows) {
+			items = rows || [];
+			if (!items.length) { list.innerHTML = '<div class="jc-ac-empty">No matches</div>'; list.style.display = "block"; return; }
+			list.innerHTML = items.map(function (it, i) {
+				return '<div class="jc-ac-item" data-i="' + i + '"><div class="jc-ac-label">' + esc(it.label) + "</div>" +
+					(it.sub ? '<div class="jc-ac-sub">' + esc(it.sub) + "</div>" : "") + "</div>";
+			}).join("");
+			list.style.display = "block";
+		}
+		function run() { Promise.resolve(source(input.value.trim())).then(render).catch(hide); }
+		input.addEventListener("input", function () { setHidden(""); clearTimeout(timer); timer = setTimeout(run, 180); });
+		input.addEventListener("focus", run);
+		input.addEventListener("blur", function () { setTimeout(hide, 150); });
+		list.addEventListener("mousedown", function (e) {
+			var el = e.target.closest("[data-i]"); if (!el) return;
+			e.preventDefault();
+			var it = items[+el.dataset.i];
+			input.value = it.label; hide(); setHidden(it.value);
+		});
+	}
+	function driverSource(q) {
+		return callMethod("garagedesk.api.fleet.search_drivers", { search: q, limit: 10 }).then(function (rows) {
+			return (rows || []).map(function (d) { return { label: d.full_name || d.name, sub: d.cell_number || "", value: d.name }; });
+		});
+	}
+	attachAutocomplete(document.querySelector('#ho-form [name="from_driver_label"]'), "from_driver", driverSource);
+	attachAutocomplete(document.querySelector('#ho-form [name="to_driver_label"]'), "to_driver", driverSource);
+
+	// ---------------------------------------------------- damage line editor
+	var tbody = document.querySelector("#ho-dmg-table tbody");
+	function selectHtml(name, options, value) {
+		return '<select data-f="' + name + '"><option value=""></option>' + options.map(function (o) {
+			return '<option' + (o === value ? " selected" : "") + ">" + esc(o) + "</option>";
+		}).join("") + "</select>";
+	}
+	function addRow(d, fromPrevious) {
+		d = d || {};
+		var tr = document.createElement("tr");
+		if (fromPrevious) tr.className = "ho-prev-row";
+		tr.innerHTML =
+			"<td>" + selectHtml("area", AREAS, d.area) + "</td>" +
+			"<td>" + selectHtml("damage_type", TYPES, d.damage_type) + "</td>" +
+			"<td>" + selectHtml("severity", SEVERITIES, d.severity || "Minor") + "</td>" +
+			'<td><input data-f="description" value="' + esc(d.description || "") + '" placeholder="Notes"></td>' +
+			'<td style="text-align:right">' +
+			(fromPrevious ? '<span class="badge badge--soft" title="Carried from the previous handover">prev</span> ' : "") +
+			'<button type="button" class="icon-del" title="Remove (repaired / not present)"><i class="fa-solid fa-trash"></i></button></td>';
+		tbody.appendChild(tr);
+	}
+	tbody.addEventListener("click", function (e) {
+		var b = e.target.closest(".icon-del");
+		if (b) b.closest("tr").remove();
+	});
+	document.getElementById("ho-add-dmg").addEventListener("click", function () { addRow(); });
+	function collectDamages() {
+		return Array.prototype.map.call(tbody.querySelectorAll("tr"), function (tr) {
+			function f(n) { var el = tr.querySelector('[data-f="' + n + '"]'); return el ? el.value.trim() : ""; }
+			return { area: f("area"), damage_type: f("damage_type"), severity: f("severity"), description: f("description") };
+		}).filter(function (d) { return d.area && d.damage_type; });
+	}
+
+	// --------------------------------------------------- dynamic checklist
+	var chkBox = document.getElementById("ho-checklist");
+	function renderChecklist(items) {
+		if (!items || !items.length) {
+			chkBox.innerHTML = '<div class="muted">No checklist items configured yet. Add them in Desk &rarr; Handover Checklist Item.</div>';
+			return;
+		}
+		chkBox.innerHTML = items.map(function (it) {
+			var needsVal = it.response_type === "Check + Value";
+			return '<div class="ho-chk-row" data-item="' + esc(it.name) + '" data-type="' + esc(it.response_type || "Check") + '">' +
+				'<label class="check"><input type="checkbox" data-chk> ' + esc(it.item_name || it.name) + "</label>" +
+				(needsVal ? '<input data-val placeholder="' + esc(it.value_label || "Value") + '">' : "") +
+				"</div>";
+		}).join("");
+	}
+	chkBox.addEventListener("change", function (e) {
+		if (!e.target.matches("[data-chk]")) return;
+		var row = e.target.closest(".ho-chk-row");
+		row.classList.toggle("is-checked", e.target.checked);
+		var valEl = row.querySelector("[data-val]");
+		if (valEl) {
+			valEl.style.display = e.target.checked ? "inline-block" : "none";
+			if (e.target.checked) valEl.focus();
+			else valEl.value = "";
+		}
+	});
+	function collectChecklist() {
+		var out = [], missing = null;
+		chkBox.querySelectorAll(".ho-chk-row").forEach(function (row) {
+			var chk = row.querySelector("[data-chk]");
+			var valEl = row.querySelector("[data-val]");
+			var value = valEl ? valEl.value.trim() : "";
+			if (chk.checked && row.getAttribute("data-type") === "Check + Value" && !value && !missing) {
+				missing = row.getAttribute("data-item");
+			}
+			out.push({ item: row.getAttribute("data-item"), checked: chk.checked ? 1 : 0, value: value });
+		});
+		return { rows: out, missing: missing };
+	}
+
+	// --------------------------------------------------------- prefill
+	callMethod("garagedesk.api.fleet.get_handover_prefill", { vehicle: window.ho_vehicle })
+		.then(function (p) {
+			var ctx = document.getElementById("ho-context");
+			if (!p.is_own_fleet) {
+				ctx.innerHTML = '<span style="color:var(--red);font-weight:600">This vehicle belongs to an outside customer — handover inspections apply to own-fleet vehicles only.</span>';
+				chkBox.innerHTML = '<div class="muted">Not applicable for outside-customer vehicles.</div>';
+				document.getElementById("ho-save").disabled = true;
+				return;
+			}
+			renderChecklist(p.checklist);
+			ctx.innerHTML = "<b>" + esc(p.model) + "</b> · Plate " + esc(p.plate) +
+				(p.current_driver && p.current_driver.driver_name ? " · Current driver: <b>" + esc(p.current_driver.driver_name) + "</b>" : "") +
+				(p.odometer ? " · Last odometer " + p.odometer.toLocaleString() + " km" : "");
+			if (p.current_driver && p.current_driver.driver) {
+				document.querySelector('#ho-form [name="from_driver"]').value = p.current_driver.driver;
+				document.querySelector('#ho-form [name="from_driver_label"]').value = p.current_driver.driver_name || p.current_driver.driver;
+			}
+			if (p.previous_handover) {
+				var note = document.getElementById("ho-prev-note");
+				note.style.display = "";
+				note.innerHTML = '<i class="fa-solid fa-circle-info"></i> Pre-filled from the previous handover <b>' +
+					esc(p.previous_handover.name) + "</b> (" + esc(p.previous_handover.date) +
+					", held by " + esc(p.previous_handover.holder || "—") +
+					"). Confirm each damage, adjust severity if worse, remove lines that were repaired, and add anything new.";
+				(p.previous_damages || []).forEach(function (d) { addRow(d, true); });
+			}
+		})
+		.catch(function (err) {
+			document.getElementById("ho-context").innerHTML =
+				'<span style="color:var(--red)">Could not load vehicle: ' + esc(err.message || err) + "</span>";
+		});
+
+	// --------------------------------------------------------- photo staging
+	var files = [];
+	var input = document.getElementById("file-input");
+	var listEl = document.getElementById("file-list");
+	document.getElementById("choose-files").addEventListener("click", function () { input.click(); });
+	document.getElementById("file-dropzone").addEventListener("dragover", function (e) { e.preventDefault(); });
+	document.getElementById("file-dropzone").addEventListener("drop", function (e) { e.preventDefault(); addFiles(e.dataTransfer.files); });
+	input.addEventListener("change", function () { addFiles(input.files); input.value = ""; });
+	function addFiles(fl) { Array.prototype.forEach.call(fl, function (f) { files.push(f); }); renderFiles(); }
+	function humanSize(n) {
+		if (n < 1024) return n + " B";
+		if (n < 1048576) return (n / 1024).toFixed(1) + " KB";
+		return (n / 1048576).toFixed(1) + " MB";
+	}
+	function renderFiles() {
+		listEl.style.display = files.length ? "block" : "none";
+		listEl.innerHTML = files.map(function (f, i) {
+			return '<div class="file-chip"><i class="fa-solid fa-image type"></i>' +
+				'<span class="name">' + esc(f.name) + '</span><span class="size">' + humanSize(f.size) + "</span>" +
+				'<button type="button" class="rm" data-i="' + i + '" title="Remove"><i class="fa-solid fa-xmark"></i></button></div>';
+		}).join("");
+	}
+	listEl.addEventListener("click", function (e) {
+		var b = e.target.closest("[data-i]"); if (!b) return;
+		files.splice(+b.dataset.i, 1); renderFiles();
+	});
+	function uploadFile(f, docname) {
+		var fd = new FormData();
+		fd.append("file", f, f.name);
+		fd.append("is_private", 0);
+		fd.append("folder", "Home/Attachments");
+		fd.append("doctype", "Driver Vehicle Handover");
+		fd.append("docname", docname);
+		return fetch("/api/method/upload_file", {
+			method: "POST",
+			headers: { "X-Frappe-CSRF-Token": window.csrf_token || "", "Accept": "application/json" },
+			body: fd
+		}).then(function (r) {
+			return r.json().then(function (data) {
+				if (!r.ok) { throw new Error(cleanError((data && data._server_messages) || (data && data.exc) || r.statusText)); }
+				return data.message;
+			});
+		});
+	}
+
+	// --------------------------------------------------------------- save
+	var saveBtn = document.getElementById("ho-save");
+	saveBtn.addEventListener("click", function () {
+		var odo = val("odometer");
+		if (!odo || !Number(odo)) { alert("Odometer reading is required."); return; }
+		if (!val("from_driver") && !val("to_driver")) { alert("Pick at least one driver (From and/or To)."); return; }
+		var chk = collectChecklist();
+		if (chk.missing) { alert('Please enter a value for the checklist item "' + chk.missing + '".'); return; }
+		var original = saveBtn.innerHTML;
+		saveBtn.disabled = true;
+		saveBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving…';
+
+		callMethod("garagedesk.api.fleet.save_handover", {
+			vehicle: window.ho_vehicle,
+			odometer: odo,
+			handover_type: val("handover_type"),
+			from_driver: val("from_driver"),
+			to_driver: val("to_driver"),
+			fuel_level: val("fuel_level"),
+			overall_condition: val("overall_condition"),
+			tyre_condition: val("tyre_condition"),
+			observations: val("observations"),
+			checklist: chk.rows,
+			damages: collectDamages()
+		}).then(function (res) {
+			if (!files.length) return res;
+			saveBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Uploading photos…';
+			return files.reduce(function (chain, f) {
+				return chain.then(function () { return uploadFile(f, res.name); });
+			}, Promise.resolve()).then(function () { return res; });
+		}).then(function (res) {
+			// Show the auto-diff outcome before leaving the page.
+			var overlay = document.getElementById("ho-result-modal");
+			document.getElementById("ho-result-sub").textContent = res.name;
+			var body = document.getElementById("ho-result-body");
+			if (res.discrepancy_found) {
+				body.innerHTML =
+					'<div style="font-weight:700;color:var(--red);margin-bottom:12px"><i class="fa-solid fa-triangle-exclamation"></i> ' +
+					res.new_damages.length + " new damage" + (res.new_damages.length > 1 ? "s" : "") + " found since the previous handover</div>" +
+					res.new_damages.map(function (x) {
+						return '<div class="vh-dmg is-new"><div class="t">' + esc(x.area) + " — " + esc(x.damage_type) +
+							(x.severity ? ' <span class="badge badge--soft">' + esc(x.severity) + "</span>" : "") +
+							(x.previous_severity ? ' <span class="badge badge--pending">was ' + esc(x.previous_severity) + "</span>" : "") +
+							"</div></div>";
+					}).join("") +
+					(res.responsible_driver_name || res.responsible_driver
+						? '<div class="row-between" style="margin-top:14px"><span class="muted">Responsible driver</span><b style="color:var(--red)">' +
+						  esc(res.responsible_driver_name || res.responsible_driver) + "</b></div>"
+						: "") +
+					'<div class="muted" style="font-size:13px;margin-top:10px">Rectification is now marked <b>Pending</b> — resolve or document it before the next handover.</div>';
+			} else {
+				body.innerHTML = '<div style="font-weight:700;color:var(--green)"><i class="fa-solid fa-circle-check"></i> ' +
+					"No new damage — vehicle condition matches the previous handover.</div>";
+			}
+			document.getElementById("ho-result-done").href =
+				"/a3-workshop/vehicle-history-detail?vehicle=" + encodeURIComponent(window.ho_vehicle);
+			document.getElementById("ho-result-print").href =
+				"/a3-workshop/vehicle-history-print?handover=" + encodeURIComponent(res.name);
+			overlay.classList.add("is-open");
+		}).catch(function (err) {
+			saveBtn.disabled = false;
+			saveBtn.innerHTML = original;
+			alert("Could not save handover: " + (err.message || err));
+		});
+	});
+})();
+</script>
+{% endraw %}
+{% endif %}
+{% endblock %}
