@@ -24,6 +24,7 @@
 					<div class="list-row__avatar" id="sel-avatar">A</div>
 					<div><div class="nm" id="sel-name"></div><div class="ph" id="sel-phone"></div></div>
 				</div>
+				<a class="btn btn--outline btn--sm" id="sel-print" href="#" target="_blank" rel="noopener" style="width:100%;justify-content:center;margin:8px 0 2px"><i class="fa-solid fa-print"></i> Print Statement</a>
 				<div class="dir-sections" id="dir-sections"></div>
 			</div>
 		</div>
@@ -304,6 +305,7 @@
 		document.getElementById("sel-avatar").textContent = c.name[0];
 		document.getElementById("sel-name").textContent = c.name;
 		document.getElementById("sel-phone").textContent = c.phone + " · " + c.id;
+		document.getElementById("sel-print").href = "/a3-workshop/workshop-print?statement=" + encodeURIComponent(c.id);
 
 		// Every section is live data now — load this customer's 360 before rendering.
 		sections360 = {};
@@ -331,12 +333,18 @@
 		var rows = rowsFor(key);
 		if (!rows.length) { viewer.innerHTML = '<div class="empty">No ' + s.label.toLowerCase() + ' for this customer.</div>'; return; }
 		var statusCols = ["Status", "Severity"];
-		var thead = "<thead><tr>" + s.cols.map(function (c) { return "<th>" + esc(c) + "</th>"; }).join("") + "</tr></thead>";
+		// Sections whose first cell is a printable document name get a trailing
+		// print-icon column (opens the workshop-print view in a new tab).
+		var printModes = { invoice: "invoice", payment: "receipt", jobcard: "jobcard" };
+		var pmode = printModes[key];
+		var thead = "<thead><tr>" + s.cols.map(function (c) { return "<th>" + esc(c) + "</th>"; }).join("") + (pmode ? "<th></th>" : "") + "</tr></thead>";
 		var tbody = "<tbody>" + rows.map(function (r) {
 			return "<tr>" + r.map(function (cell, i) {
 				if (statusCols.indexOf(s.cols[i]) >= 0) return '<td><span class="badge ' + variant(cell) + '">' + esc(cell) + "</span></td>";
 				return "<td>" + esc(cell) + "</td>";
-			}).join("") + "</tr>";
+			}).join("") +
+			(pmode ? '<td style="width:34px"><a class="btn btn--outline btn--icon" style="width:26px;height:26px;font-size:11px" href="/a3-workshop/workshop-print?' + pmode + "=" + encodeURIComponent(r[0]) + '" target="_blank" rel="noopener" title="Print"><i class="fa-solid fa-print"></i></a></td>' : "") +
+			"</tr>";
 		}).join("") + "</tbody>";
 		viewer.innerHTML = '<div style="overflow:auto"><table class="table">' + thead + tbody + "</table></div>";
 	}

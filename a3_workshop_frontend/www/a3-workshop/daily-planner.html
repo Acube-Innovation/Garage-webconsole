@@ -18,7 +18,10 @@
 
 <div class="toolbar">
 	<div class="section-title" style="margin:0">Today &middot; {{ frappe.utils.formatdate(frappe.utils.nowdate(), "dd MMM yyyy") }}</div>
-	<button type="button" class="btn btn--primary" data-open-task><i class="fa-solid fa-plus"></i> Add Task</button>
+	<div class="toolbar__right">
+		<a class="btn btn--outline" href="/a3-workshop/workshop-print?dayplan=today" target="_blank" rel="noopener"><i class="fa-solid fa-print"></i> Print Day Sheet</a>
+		<button type="button" class="btn btn--primary" data-open-task><i class="fa-solid fa-plus"></i> Add Task</button>
+	</div>
 </div>
 
 <div class="dp-grid">
@@ -170,7 +173,7 @@
 		</div>
 
 		<!-- 9. Purchase Requirements — live: Critical Stock + Reorder Level Reached -->
-		<div class="card"><div class="card__head"><h3>Purchase Requirements</h3><span class="muted">Live stock</span></div>
+		<div class="card"><div class="card__head"><h3>Purchase Requirements</h3><a class="muted" href="/a3-workshop/live-stock" title="Open the Stock Monitoring Board" style="text-decoration:none">Live stock <i class="fa-solid fa-arrow-up-right-from-square" style="font-size:10px"></i></a></div>
 			<div class="card__body" id="purchase-req">
 				{%- set crit = purchase_requirements.critical %}
 				{%- set reord = purchase_requirements.reorder %}

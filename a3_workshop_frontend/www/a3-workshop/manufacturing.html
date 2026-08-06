@@ -248,7 +248,10 @@
 
 		detailEl.innerHTML =
 			'<div class="row-between" style="margin-bottom:14px"><div><div style="font-weight:800;font-size:16px">' + esc(o.item_name) + '</div>' +
-			'<div class="muted">Qty ' + o.qty + ' · ' + esc(o.bom || "") + '</div></div><span class="badge ' + o.badge + '">' + esc(o.status) + '</span></div>' +
+			'<div class="muted">Qty ' + o.qty + ' · ' + esc(o.bom || "") + '</div></div>' +
+			'<div style="display:flex;gap:8px;align-items:center">' +
+			(o.editable ? '' : '<a class="btn btn--outline btn--sm" href="/a3-workshop/workshop-print?workorder=' + encodeURIComponent(o.name) + '" target="_blank" rel="noopener" title="Print Traveler"><i class="fa-solid fa-print"></i> Print</a>') +
+			'<span class="badge ' + o.badge + '">' + esc(o.status) + '</span></div></div>' +
 			stepperHtml(o) +
 			'<div class="fieldset-title">Work Order</div>' +
 			kv([["Item", o.item_name], ["Quantity", o.qty], ["BOM", o.bom], ["Production Stage", o.stage], ["ERP Status", o.erp_status], ["Started", o.planned_start], ["Target Delivery", o.target], ["WIP / Source Wh", o.wip_warehouse], ["FG Warehouse", o.fg_warehouse]]) +

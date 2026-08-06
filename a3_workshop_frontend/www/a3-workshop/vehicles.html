@@ -45,6 +45,7 @@
 			<div class="empty">Loading…</div>
 		</div>
 		<div class="modal__foot">
+			<a class="btn btn--outline btn--sm" id="vehicle-print" href="#" target="_blank" rel="noopener"><i class="fa-solid fa-print"></i> Print History</a>
 			<a class="btn btn--outline btn--sm" id="vehicle-open-desk" href="#" target="_blank"><i class="fa-solid fa-up-right-from-square"></i> Open in Desk</a>
 			<button type="button" class="btn btn--primary btn--sm" data-close>Close</button>
 		</div>
@@ -113,6 +114,7 @@
 	function render(d) {
 		sub.textContent = (d.model || d.name || "") + (d.plate ? "  •  " + d.plate : "");
 		deskLink.href = "/app/vehicle/" + encodeURIComponent(d.name);
+		document.getElementById("vehicle-print").href = "/a3-workshop/vehicle-history-print?vehicle=" + encodeURIComponent(d.name);
 
 		var odo = d.odometer ? (Number(d.odometer).toLocaleString() + " " + (d.odometer_uom || "km")) : "";
 

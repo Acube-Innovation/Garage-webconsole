@@ -14,11 +14,13 @@
 		{"label": "Front Office", "route": "/a3-workshop/front-office", "icon": "fa-bell-concierge"},
 		{"label": "Job Cards", "route": "/a3-workshop/job-cards", "icon": "fa-clipboard-list"},
 		{"label": "Vehicles", "route": "/a3-workshop/vehicles", "icon": "fa-car"},
+		{"label": "Vehicle History", "route": "/a3-workshop/vehicle-history", "icon": "fa-clock-rotate-left"},
 		{"label": "Customers", "route": "/a3-workshop/customers", "icon": "fa-users"},
 		{"label": "Telecalling", "route": "/a3-workshop/telecalling", "icon": "fa-phone-volume"},
 		{"label": "Complaints", "route": "/a3-workshop/complaints", "icon": "fa-triangle-exclamation"},
 		{"label": "Technician Board", "route": "/a3-workshop/technician-board", "icon": "fa-screwdriver-wrench"},
 		{"label": "Manufacturing", "route": "/a3-workshop/manufacturing", "icon": "fa-industry"},
+		{"label": "Live Stock", "route": "/a3-workshop/live-stock", "icon": "fa-boxes-stacked"},
 	] -%}
 	{%- set current_path = (frappe.request.path if frappe.request else "/a3-workshop").rstrip("/") -%}
 	{%- set uname = (frappe.session.user or "User") -%}

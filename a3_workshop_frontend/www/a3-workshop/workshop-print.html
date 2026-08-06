@@ -1,0 +1,316 @@
+{% extends "templates/print_base.html" %}
+
+{%- macro money(x) -%}AED {{ "{:,.2f}".format(x or 0) }}{%- endmacro -%}
+{%- macro money0(x) -%}AED {{ "{:,.0f}".format(x or 0) }}{%- endmacro -%}
+{%- macro pill(text, kind="") -%}<span class="pill {{ kind }}">{{ text }}</span>{%- endmacro -%}
+{%- macro statuspill(s) -%}
+{%- set k = "pill--green" if s in ("Completed", "Closed", "Ready", "Paid", "Resolved", "Done") else ("pill--amber" if s in ("Open", "In Progress", "On Hold", "Unpaid", "Pending", "Partly Paid") else ("pill--red" if s in ("Cancelled", "Overdue", "Escalated", "Critical", "Severe", "Urgent") else "")) -%}
+<span class="pill {{ k }}">{{ s }}</span>
+{%- endmacro -%}
+
+{% block doc_title -%}
+{%- if mode == "jobcard" %}Job Card
+{%- elif mode == "invoice" %}Tax Invoice
+{%- elif mode == "receipt" %}Payment Receipt
+{%- elif mode == "statement" %}Customer Account Statement
+{%- elif mode == "dayplan" %}Daily Planner — Day Sheet
+{%- elif mode == "workorder" %}Work Order Traveler
+{%- elif mode == "complaints" %}Complaints Register
+{%- elif mode == "calls" %}Telecalling — Call List
+{%- else %}Print{% endif -%}
+{%- endblock %}
+
+{% block doc_subtitle -%}
+{%- if mode == "jobcard" %}{{ jc.name }} · {{ jc.customer }} · {{ jc.vehicle }}
+{%- elif mode == "invoice" %}{{ inv.name }}{% if inv.draft %} · DRAFT{% endif %} · {{ inv.customer }}
+{%- elif mode == "receipt" %}{{ pe.name }}{% if pe.draft %} · DRAFT{% endif %} · {{ pe.party }}
+{%- elif mode == "statement" %}{{ st.customer }}{% if st.mobile != "—" %} · {{ st.mobile }}{% endif %}
+{%- elif mode == "dayplan" %}{{ day }} · {{ total_tasks }} open task(s)
+{%- elif mode == "workorder" %}{{ wo.name }} · {{ wo.item }}
+{%- elif mode == "complaints" %}{{ complaint_rows | length }} recorded complaint(s)
+{%- elif mode == "calls" %}{{ day }} · {{ call_rows | length }} call(s)
+{%- endif -%}
+{%- endblock %}
+
+{% block content %}
+
+{% if mode == "none" %}
+<p class="muted">Nothing to print — open with ?jobcard=, ?invoice=, ?receipt=, ?statement=, ?dayplan=, ?workorder=, ?complaints=register or ?calls=today.</p>
+
+{# ================================================================ JOB CARD #}
+{% elif mode == "jobcard" %}
+<h2 class="sec">Job Details</h2>
+<div class="kv">
+	<div><div class="k">Customer</div><div class="v">{{ jc.customer }}</div></div>
+	<div><div class="k">Mobile</div><div class="v">{{ jc.mobile }}</div></div>
+	<div><div class="k">Vehicle</div><div class="v">{{ jc.vehicle }}</div></div>
+	<div><div class="k">Status</div><div class="v">{{ statuspill(jc.status) }}</div></div>
+	<div><div class="k">Booking Date</div><div class="v">{{ jc.booking_date }}</div></div>
+	<div><div class="k">Promised Delivery</div><div class="v">{{ jc.promised }}</div></div>
+	<div><div class="k">Service Advisor</div><div class="v">{{ jc.advisor }}</div></div>
+	<div><div class="k">Branch</div><div class="v">{{ jc.branch }}</div></div>
+</div>
+
+<h2 class="sec">Vehicle Readings</h2>
+<div class="kv">
+	<div><div class="k">Odometer</div><div class="v">{{ "{:,}".format(jc.readings.odometer) if jc.readings.odometer else "—" }} km</div></div>
+	<div><div class="k">Next Service</div><div class="v">{{ "{:,}".format(jc.readings.next_km) if jc.readings.next_km else "—" }} km</div></div>
+	<div><div class="k">Fuel Level</div><div class="v">{{ jc.readings.fuel ~ "%" if jc.readings.fuel is not none else "—" }}</div></div>
+	<div><div class="k">Oil Level</div><div class="v">{{ jc.readings.oil ~ "%" if jc.readings.oil is not none else "—" }}</div></div>
+	<div><div class="k">Coolant</div><div class="v">{{ jc.readings.coolant }}</div></div>
+	<div><div class="k">Battery</div><div class="v">{{ jc.readings.battery ~ " V" if jc.readings.battery else "—" }}</div></div>
+	<div><div class="k">Tyres</div><div class="v">{{ jc.readings.tyre }}</div></div>
+	<div><div class="k">Spare Tyre</div><div class="v">{{ "✔ Present" if jc.readings.spare else "—" }}</div></div>
+</div>
+
+{% if jc.complaints %}
+<h2 class="sec">Customer Complaints</h2>
+<table class="t"><thead><tr><th>#</th><th>Complaint</th><th>Severity</th><th>Notes</th></tr></thead><tbody>
+	{% for c in jc.complaints %}
+	<tr><td>{{ loop.index }}</td><td>{{ c.complaint }}</td><td>{{ statuspill(c.severity) }}</td><td>{{ c.notes }}</td></tr>
+	{% endfor %}
+</tbody></table>
+{% endif %}
+
+<h2 class="sec">Services / Work Items</h2>
+{% if jc.services %}
+<table class="t"><thead><tr><th>#</th><th>Job Type</th><th>Service</th><th>Technician</th><th class="right">Hours</th></tr></thead><tbody>
+	{% for s in jc.services %}
+	<tr><td>{{ loop.index }}</td><td>{{ s.jobtype }}</td><td><b>{{ s.service }}</b></td><td>{{ s.technician }}</td><td class="right">{{ s.hours or "—" }}</td></tr>
+	{% endfor %}
+</tbody></table>
+{% else %}<p class="muted">No service lines.</p>{% endif %}
+{% if jc.billing_total %}
+<p class="right" style="margin-top:8px"><b>Billing Total: {{ money0(jc.billing_total) }}</b></p>
+{% endif %}
+
+{% if jc.body_condition %}
+<h2 class="sec">Body Condition — Scratches / Dents</h2>
+<img src="{{ jc.body_condition }}" alt="Body condition markup" style="max-width:420px;width:100%;border:1px solid #e2e5ea;border-radius:6px">
+{% endif %}
+
+{% if jc.photos %}
+<h2 class="sec">Vehicle Photos ({{ jc.photos | length }})</h2>
+<div class="photos">
+	{% for p in jc.photos %}
+	<figure><img src="{{ p.image }}" alt="{{ p.caption }}">{% if p.caption %}<figcaption>{{ p.caption }}</figcaption>{% endif %}</figure>
+	{% endfor %}
+</div>
+{% endif %}
+
+<div class="sigs">
+	<div class="sig"><b>{{ jc.advisor }}</b>Service Advisor — signature &amp; date</div>
+	<div class="sig"><b>{{ jc.customer }}</b>Customer — signature &amp; date</div>
+	<div class="sig"><b>&nbsp;</b>Quality Check — signature &amp; date</div>
+</div>
+
+{# ================================================================ INVOICE #}
+{% elif mode == "invoice" %}
+<h2 class="sec">Invoice Details</h2>
+<div class="kv">
+	<div><div class="k">Invoice No.</div><div class="v">{{ inv.name }}</div></div>
+	<div><div class="k">Customer</div><div class="v">{{ inv.customer }}</div></div>
+	<div><div class="k">Date</div><div class="v">{{ inv.posting_date }}</div></div>
+	<div><div class="k">Due Date</div><div class="v">{{ inv.due_date }}</div></div>
+	<div><div class="k">Status</div><div class="v">{{ statuspill("Draft" if inv.draft else inv.status) }}</div></div>
+</div>
+
+<h2 class="sec">Items</h2>
+<table class="t"><thead><tr><th>#</th><th>Item</th><th class="right">Qty</th><th class="right">Rate</th><th class="right">Amount</th></tr></thead><tbody>
+	{% for i in inv["items"] %}
+	<tr><td>{{ loop.index }}</td><td><b>{{ i.item }}</b>{% if i.description and i.description != i.item %}<br><span class="muted">{{ i.description }}</span>{% endif %}</td>
+		<td class="right">{{ i.qty }} {{ i.uom }}</td><td class="right">{{ money(i.rate) }}</td><td class="right">{{ money(i.amount) }}</td></tr>
+	{% endfor %}
+	<tr><td colspan="4" class="right">Net Total</td><td class="right"><b>{{ money(inv.net_total) }}</b></td></tr>
+	{% for t in inv.taxes %}
+	<tr><td colspan="4" class="right">{{ t.description }}</td><td class="right">{{ money(t.amount) }}</td></tr>
+	{% endfor %}
+	<tr><td colspan="4" class="right"><b>Grand Total</b></td><td class="right"><b>{{ money(inv.grand_total) }}</b></td></tr>
+	{% if inv.outstanding %}
+	<tr><td colspan="4" class="right" style="color:#c01643"><b>Outstanding</b></td><td class="right" style="color:#c01643"><b>{{ money(inv.outstanding) }}</b></td></tr>
+	{% endif %}
+</tbody></table>
+<p style="margin-top:10px"><span class="muted">In words:</span> <b>{{ inv.in_words }}</b></p>
+{% if inv.remarks %}<p class="muted" style="margin-top:6px">{{ inv.remarks }}</p>{% endif %}
+
+<div class="sigs">
+	<div class="sig"><b>&nbsp;</b>Authorised Signatory</div>
+	<div class="sig"><b>{{ inv.customer }}</b>Customer — received &amp; accepted</div>
+	<div class="sig"><b>&nbsp;</b>Stamp</div>
+</div>
+
+{# ================================================================ RECEIPT #}
+{% elif mode == "receipt" %}
+<h2 class="sec">Receipt Details</h2>
+<div class="kv">
+	<div><div class="k">Receipt No.</div><div class="v">{{ pe.name }}{% if pe.draft %} {{ pill("DRAFT", "pill--amber") }}{% endif %}</div></div>
+	<div><div class="k">Received From</div><div class="v">{{ pe.party }}</div></div>
+	<div><div class="k">Date</div><div class="v">{{ pe.posting_date }}</div></div>
+	<div><div class="k">Mode of Payment</div><div class="v">{{ pe.mode }}</div></div>
+	<div><div class="k">Reference No.</div><div class="v">{{ pe.reference_no }}</div></div>
+	<div><div class="k">Reference Date</div><div class="v">{{ pe.reference_date }}</div></div>
+</div>
+
+<div class="stat-row" style="grid-template-columns:1fr;margin:14px 0">
+	<div class="stat" style="text-align:center"><div class="l">Amount Received</div><div class="n" style="font-size:24px">{{ money(pe.paid_amount) }}</div>
+	<div class="muted" style="margin-top:4px">{{ pe.in_words }}</div></div>
+</div>
+
+{% if pe.references %}
+<h2 class="sec">Allocated Against</h2>
+<table class="t"><thead><tr><th>Document</th><th>Reference</th><th class="right">Allocated</th></tr></thead><tbody>
+	{% for r in pe.references %}
+	<tr><td>{{ r.doctype }}</td><td>{{ r.name }}</td><td class="right">{{ money(r.allocated) }}</td></tr>
+	{% endfor %}
+</tbody></table>
+{% endif %}
+
+<div class="sigs">
+	<div class="sig"><b>{{ pe.received_by }}</b>Received By — Cashier</div>
+	<div class="sig"><b>{{ pe.party }}</b>Payer — signature</div>
+	<div class="sig"><b>&nbsp;</b>Stamp</div>
+</div>
+
+{# ================================================================ STATEMENT #}
+{% elif mode == "statement" %}
+<h2 class="sec">Account Summary</h2>
+<div class="stat-row">
+	<div class="stat"><div class="l">Total Billed</div><div class="n">{{ money0(st.total_billed) }}</div></div>
+	<div class="stat"><div class="l">Total Paid</div><div class="n">{{ money0(st.total_paid) }}</div></div>
+	<div class="stat"><div class="l">Outstanding</div><div class="n" {% if st.total_outstanding %}style="color:#c01643"{% endif %}>{{ money0(st.total_outstanding) }}</div></div>
+	<div class="stat"><div class="l">Vehicles</div><div class="n">{{ st.vehicles | length }}</div></div>
+</div>
+{% if st.vehicles %}
+<p style="margin-top:8px"><span class="muted">Vehicles:</span> {% for v in st.vehicles %}{{ v.label }} ({{ v.plate }}){{ " · " if not loop.last }}{% endfor %}</p>
+{% endif %}
+
+<h2 class="sec">Job Cards ({{ st.job_cards | length }})</h2>
+{% if st.job_cards %}
+<table class="t"><thead><tr><th>Job Card</th><th>Date</th><th>Vehicle</th><th>Status</th><th class="right">Amount</th></tr></thead><tbody>
+	{% for j in st.job_cards %}
+	<tr><td>{{ j.name }}</td><td>{{ j.date }}</td><td>{{ j.vehicle_label }}</td><td>{{ statuspill(j.status) }}</td><td class="right">{{ money0(j.billing_total) }}</td></tr>
+	{% endfor %}
+	<tr><td colspan="4"><b>Total</b></td><td class="right"><b>{{ money0(st.jc_total) }}</b></td></tr>
+</tbody></table>
+{% else %}<p class="muted">No job cards.</p>{% endif %}
+
+<h2 class="sec">Invoices ({{ st.invoices | length }})</h2>
+{% if st.invoices %}
+<table class="t"><thead><tr><th>Invoice</th><th>Date</th><th>Status</th><th class="right">Amount</th><th class="right">Balance</th></tr></thead><tbody>
+	{% for i in st.invoices %}
+	<tr><td>{{ i.name }}</td><td>{{ i.date }}</td><td>{{ statuspill("Draft" if i.docstatus == 0 else i.status) }}</td>
+		<td class="right">{{ money(i.grand_total) }}</td><td class="right">{{ money(i.outstanding_amount) }}</td></tr>
+	{% endfor %}
+</tbody></table>
+{% else %}<p class="muted">No invoices.</p>{% endif %}
+
+<h2 class="sec">Payments ({{ st.payments | length }})</h2>
+{% if st.payments %}
+<table class="t"><thead><tr><th>Receipt</th><th>Date</th><th>Mode</th><th class="right">Amount</th></tr></thead><tbody>
+	{% for p in st.payments %}
+	<tr><td>{{ p.name }}</td><td>{{ p.date }}</td><td>{{ p.mode_of_payment or "—" }}</td><td class="right">{{ money(p.paid_amount) }}</td></tr>
+	{% endfor %}
+</tbody></table>
+{% else %}<p class="muted">No payments.</p>{% endif %}
+
+{# ================================================================ DAY PLAN #}
+{% elif mode == "dayplan" %}
+{% for g in groups %}
+<h2 class="sec">{{ g.priority }} ({{ g.count }})</h2>
+{% if g.tasks %}
+<table class="t"><thead><tr><th>#</th><th>Task</th><th>Vehicle</th><th>Technician</th><th>Due</th><th>Status</th></tr></thead><tbody>
+	{% for t in g.tasks %}
+	<tr><td>{{ loop.index }}</td><td><b>{{ t.subject }}</b></td><td>{{ t.vehicle }}</td><td>{{ t.technician }}</td><td>{{ t.due }}</td><td>{{ statuspill(t.status) }}</td></tr>
+	{% endfor %}
+</tbody></table>
+{% else %}<p class="muted">None.</p>{% endif %}
+{% endfor %}
+{% if not groups %}<p class="muted">No open tasks for this day.</p>{% endif %}
+
+<div class="sigs">
+	<div class="sig"><b>&nbsp;</b>Workshop Manager — briefing done</div>
+	<div class="sig"><b>&nbsp;</b>Shift Supervisor</div>
+	<div class="sig"><b>&nbsp;</b>Date / Time</div>
+</div>
+
+{# ================================================================ TRAVELER #}
+{% elif mode == "workorder" %}
+<h2 class="sec">Work Order</h2>
+<div class="kv">
+	<div><div class="k">Item</div><div class="v">{{ wo.item }}</div></div>
+	<div><div class="k">Quantity</div><div class="v">{{ wo.qty }}</div></div>
+	<div><div class="k">Status</div><div class="v">{{ statuspill(wo.status) }}</div></div>
+	<div><div class="k">Current Stage</div><div class="v">{{ wo.stage }}</div></div>
+	<div><div class="k">BOM</div><div class="v">{{ wo.bom }}</div></div>
+	<div><div class="k">Planned Start</div><div class="v">{{ wo.planned_start }}</div></div>
+	<div><div class="k">Target Delivery</div><div class="v">{{ wo.delivery }}</div></div>
+	<div><div class="k">WIP / FG Warehouse</div><div class="v">{{ wo.wip }} / {{ wo.fg }}</div></div>
+</div>
+
+<h2 class="sec">Raw Materials</h2>
+{% if wo.materials %}
+<table class="t"><thead><tr><th>#</th><th>Item</th><th class="right">Qty</th><th>Source Warehouse</th><th style="width:90px">Issued ✔</th></tr></thead><tbody>
+	{% for m in wo.materials %}
+	<tr><td>{{ loop.index }}</td><td>{{ m.item }}</td><td class="right">{{ m.qty }}</td><td>{{ m.warehouse }}</td><td></td></tr>
+	{% endfor %}
+</tbody></table>
+{% else %}<p class="muted">No raw materials.</p>{% endif %}
+
+<h2 class="sec">Operations</h2>
+{% if wo.operations %}
+<table class="t"><thead><tr><th>#</th><th>Operation</th><th>Workstation</th><th class="right">Mins</th><th style="width:110px">Done By / Sign</th></tr></thead><tbody>
+	{% for o in wo.operations %}
+	<tr><td>{{ loop.index }}</td><td><b>{{ o.operation }}</b></td><td>{{ o.workstation }}</td><td class="right">{{ o.mins }}</td><td></td></tr>
+	{% endfor %}
+</tbody></table>
+{% else %}<p class="muted">No operations.</p>{% endif %}
+
+<h2 class="sec">Stage History</h2>
+{% if wo.history %}
+<table class="t"><thead><tr><th>Stage</th><th>From</th><th>When</th><th>By</th><th class="right">Hrs</th><th>Notes</th></tr></thead><tbody>
+	{% for h in wo.history %}
+	<tr><td><b>{{ h.stage }}</b></td><td>{{ h.from_stage }}</td><td>{{ h.entered_on }}</td><td>{{ h.entered_by }}</td><td class="right">{{ h.hours or "—" }}</td><td>{{ h.notes }}</td></tr>
+	{% endfor %}
+</tbody></table>
+{% else %}<p class="muted">No stage transitions yet.</p>{% endif %}
+
+<div class="sigs">
+	<div class="sig"><b>&nbsp;</b>Production Supervisor</div>
+	<div class="sig"><b>&nbsp;</b>Quality Check</div>
+	<div class="sig"><b>&nbsp;</b>Store / Dispatch</div>
+</div>
+
+{# ================================================================ COMPLAINTS #}
+{% elif mode == "complaints" %}
+{% if complaint_rows %}
+<table class="t"><thead><tr><th>#</th><th>Date</th><th>Job Card</th><th>Customer</th><th>Vehicle</th><th>Complaint</th><th>Severity</th><th>Technician</th><th>JC Status</th></tr></thead><tbody>
+	{% for c in complaint_rows %}
+	<tr><td>{{ loop.index }}</td><td>{{ c.date }}</td><td>{{ c.job_card }}</td><td>{{ c.customer }}</td><td>{{ c.vehicle }}</td>
+		<td><b>{{ c.complaint }}</b></td><td>{{ statuspill(c.severity) }}</td><td>{{ c.technician }}</td><td>{{ statuspill(c.jc_status) }}</td></tr>
+	{% endfor %}
+</tbody></table>
+{% else %}<p class="muted">No complaints recorded on job cards yet.</p>{% endif %}
+
+{# ================================================================ CALLS #}
+{% elif mode == "calls" %}
+{% if call_outcomes %}
+<h2 class="sec">Outcome Summary</h2>
+<div class="stat-row" style="grid-template-columns:repeat({{ [call_outcomes | length, 4] | min }},1fr)">
+	{% for label, count in call_outcomes %}
+	<div class="stat"><div class="l">{{ label }}</div><div class="n">{{ count }}</div></div>
+	{% endfor %}
+</div>
+{% endif %}
+
+<h2 class="sec">Calls</h2>
+{% if call_rows %}
+<table class="t"><thead><tr><th>Time</th><th>Customer</th><th>Mobile</th><th>Dir</th><th>Purpose</th><th>Outcome</th><th>By</th><th>Notes</th></tr></thead><tbody>
+	{% for c in call_rows %}
+	<tr><td>{{ c.time }}</td><td><b>{{ c.customer_label }}</b></td><td>{{ c.mobile_no or "—" }}</td><td>{{ c.direction or "—" }}</td>
+		<td>{{ c.purpose or "—" }}</td><td>{{ c.outcome or "—" }}</td><td>{{ c.telecaller or "—" }}</td><td>{{ (c.call_notes or "")[:80] }}</td></tr>
+	{% endfor %}
+</tbody></table>
+{% else %}<p class="muted">No calls for this day.</p>{% endif %}
+{% endif %}
+
+{% endblock %}

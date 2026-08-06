@@ -1,0 +1,551 @@
+{% extends "templates/workshop_base.html" %}
+
+{% block page_content %}
+{% if not vehicle %}
+<div class="empty">No vehicle selected. <a href="/a3-workshop/vehicle-history" style="color:var(--red);font-weight:600">Choose a customer</a> and pick a vehicle.</div>
+{% else %}
+
+<div class="toolbar">
+	<a class="btn btn--outline btn--sm" id="vh-back" href="/a3-workshop/vehicle-history"><i class="fa-solid fa-arrow-left"></i> Back</a>
+	<div class="toolbar__right">
+		<a class="btn btn--outline btn--sm" href="/a3-workshop/vehicle-history-print?vehicle={{ vehicle | urlencode }}" target="_blank" rel="noopener"><i class="fa-solid fa-print"></i> Print History</a>
+		<span id="vh-actions" style="display:none;gap:10px">
+			<a class="btn btn--primary btn--sm" id="vh-new-handover" href="#"><i class="fa-solid fa-right-left"></i> New Handover</a>
+			<button type="button" class="btn btn--navy btn--sm" id="vh-log-activity"><i class="fa-solid fa-wrench"></i> Log Activity</button>
+		</span>
+	</div>
+</div>
+
+<!-- header card -->
+<div class="card" style="margin-bottom:18px">
+	<div class="card__body" id="vh-head"><div class="empty">Loading vehicle…</div></div>
+</div>
+
+<!-- tabs -->
+<div class="vh-tabs" id="vh-tabs">
+	<button class="vh-tab is-active" data-tab="overview">Overview</button>
+	<button class="vh-tab" data-tab="drivers" data-fleet>Driver History</button>
+	<button class="vh-tab" data-tab="service">Service History</button>
+	<button class="vh-tab" data-tab="repair">Repair History</button>
+	<button class="vh-tab" data-tab="monthly">Monthly Summary</button>
+	<button class="vh-tab" data-tab="handovers" data-fleet>Handovers</button>
+	<button class="vh-tab" data-tab="activities" data-fleet>Driver Activities</button>
+</div>
+
+<div class="card"><div class="card__body">
+	<div class="vh-pane is-active" id="pane-overview"><div class="empty">Loading…</div></div>
+	<div class="vh-pane" id="pane-drivers"></div>
+	<div class="vh-pane" id="pane-service"></div>
+	<div class="vh-pane" id="pane-repair"></div>
+	<div class="vh-pane" id="pane-monthly"></div>
+	<div class="vh-pane" id="pane-handovers"></div>
+	<div class="vh-pane" id="pane-activities"></div>
+</div></div>
+
+<!-- Handover comparison modal -->
+<div class="modal-overlay" id="vh-hand-modal" role="dialog" aria-modal="true">
+	<div class="modal" style="max-width:760px">
+		<div class="modal__head">
+			<div><h3>Handover Inspection</h3><div class="sub" id="vh-hand-sub">—</div></div>
+			<button type="button" class="modal__close" data-close aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+		</div>
+		<div class="modal__body" id="vh-hand-body"><div class="empty">Loading…</div></div>
+		<div class="modal__foot">
+			<a class="btn btn--outline btn--sm" id="vh-hand-print" href="#" target="_blank" rel="noopener"><i class="fa-solid fa-print"></i> Print Inspection</a>
+			<button type="button" class="btn btn--primary btn--sm" data-close>Close</button>
+		</div>
+	</div>
+</div>
+
+<!-- Log Activity modal -->
+<div class="modal-overlay" id="vh-act-modal" role="dialog" aria-modal="true">
+	<div class="modal">
+		<div class="modal__head">
+			<div><h3>Log Driver Activity</h3><div class="sub">Maintenance performed by / through a driver</div></div>
+			<button type="button" class="modal__close" data-close aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+		</div>
+		<div class="modal__body">
+			<form class="form-grid" id="vh-act-form" onsubmit="return false">
+				<div class="field"><label>Driver <span class="req">*</span></label><input name="driver_label" placeholder="Search driver..." autocomplete="off"><input type="hidden" name="driver"></div>
+				<div class="field"><label>Activity Type <span class="req">*</span></label><select name="activity_type">
+					<option value="">Select</option>
+				</select></div>
+				<div class="field"><label>Date</label><input name="activity_date" type="date"></div>
+				<div class="field"><label>Odometer (km)</label><input name="odometer" type="number" placeholder="0"></div>
+				<div class="field"><label>Performed By</label><select name="performed_by">
+					<option>Driver</option><option>Workshop</option><option>External Vendor</option>
+				</select></div>
+				<div class="field"><label>Cost (AED)</label><input name="cost" type="number" step="0.01" placeholder="0.00"></div>
+				<div class="field field--full"><label class="check" style="font-weight:400"><input type="checkbox" name="is_preventive"> Preventive maintenance (planned upkeep, not a breakdown fix)</label></div>
+				<div class="field field--full"><label>Remarks</label><textarea name="remarks"></textarea></div>
+			</form>
+		</div>
+		<div class="modal__foot">
+			<button type="button" class="btn btn--outline btn--sm" data-close>Cancel</button>
+			<button type="button" class="btn btn--primary btn--sm" id="vh-act-save"><i class="fa-solid fa-floppy-disk"></i> Save Activity</button>
+		</div>
+	</div>
+</div>
+
+<style>
+	.vh-tabs { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:18px; }
+	.vh-tab { border:1px solid var(--border); background:var(--surface); border-radius:999px;
+		padding:8px 16px; font-size:13px; font-weight:600; color:var(--muted); cursor:pointer; font-family:var(--font); }
+	.vh-tab:hover { color:var(--text); }
+	.vh-tab.is-active { background:var(--red); border-color:var(--red); color:#fff; }
+	.vh-pane { display:none; }
+	.vh-pane.is-active { display:block; }
+	.vh-head-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:14px 22px; }
+	@media (max-width:900px){ .vh-head-grid { grid-template-columns:repeat(2,1fr); } }
+	.vh-head-grid .k { color:var(--muted); font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
+	.vh-head-grid .v { font-weight:700; margin-top:2px; }
+	.vh-chart { margin:6px 0 20px; }
+	.vh-cmp { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+	@media (max-width:640px){ .vh-cmp { grid-template-columns:1fr; } }
+	.vh-dmg { border:1px solid var(--border); border-radius:var(--radius-sm,9px); padding:8px 12px; margin-bottom:8px; font-size:13px; }
+	.vh-dmg.is-new { border-color:var(--red); background:var(--red-soft); }
+	.vh-dmg .t { font-weight:700; }
+	.vh-dmg .s { color:var(--muted); font-size:12px; }
+	.vh-kv { display:grid; grid-template-columns:repeat(3,1fr); gap:10px 18px; margin-bottom:16px; }
+	.vh-kv .k { color:var(--muted); font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
+	.vh-kv .v { font-weight:600; margin-top:2px; }
+	.vh-photos { display:grid; grid-template-columns:repeat(auto-fill,minmax(110px,1fr)); gap:10px; }
+	.vh-photos a { border:1px solid var(--border); border-radius:8px; overflow:hidden; display:block; }
+	.vh-photos img { width:100%; height:86px; object-fit:cover; display:block; }
+	.jc-ac { position:absolute; left:0; right:0; top:100%; z-index:60; margin-top:2px; background:var(--surface,#fff);
+		border:1px solid var(--border,#d8dde6); border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.12);
+		max-height:240px; overflow:auto; }
+	.jc-ac-item { padding:8px 12px; cursor:pointer; }
+	.jc-ac-item:hover, .jc-ac-item.is-active { background:var(--bg,#f1f4f8); }
+	.jc-ac-label { font-weight:600; font-size:13px; }
+	.jc-ac-sub { font-size:12px; color:var(--muted,#7a8598); }
+	.jc-ac-empty { padding:8px 12px; font-size:12px; color:var(--muted,#7a8598); }
+</style>
+
+<script>
+	window.csrf_token = "{{ frappe.session.csrf_token }}";
+	window.vh_vehicle = "{{ vehicle }}";
+</script>
+{% raw %}
+<script>
+(function () {
+	function callMethod(method, args) {
+		return fetch("/api/method/" + method, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"X-Frappe-CSRF-Token": window.csrf_token || "",
+				"Accept": "application/json"
+			},
+			body: JSON.stringify(args || {})
+		}).then(function (r) {
+			return r.json().then(function (data) {
+				if (!r.ok) {
+					var msg = (data && data._server_messages) || (data && data.exc) || r.statusText;
+					throw new Error(cleanError(msg));
+				}
+				return data.message;
+			});
+		});
+	}
+	function cleanError(msg) {
+		try {
+			var arr = JSON.parse(msg);
+			if (Array.isArray(arr) && arr.length) {
+				return arr.map(function (m) { try { return JSON.parse(m).message; } catch (e) { return m; } }).join(" ");
+			}
+		} catch (e) {}
+		return String(msg).replace(/<[^>]+>/g, "");
+	}
+	function esc(s) {
+		return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+			return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+		});
+	}
+	function money(n) { return "AED " + Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 0 }); }
+	function table(headers, rows, emptyMsg) {
+		if (!rows.length) return '<div class="empty">' + esc(emptyMsg) + "</div>";
+		return '<div style="overflow-x:auto"><table class="table"><thead><tr>' +
+			headers.map(function (h) { return "<th>" + esc(h) + "</th>"; }).join("") +
+			"</tr></thead><tbody>" +
+			rows.map(function (r) { return "<tr>" + r.map(function (c) { return "<td>" + c + "</td>"; }).join("") + "</tr>"; }).join("") +
+			"</tbody></table></div>";
+	}
+	function statusBadge(s) {
+		var cls = { Completed: "badge--success", Closed: "badge--success", Ready: "badge--success",
+			"In Progress": "badge--progress", Open: "badge--new", "On Hold": "badge--pending",
+			Cancelled: "badge--danger", Active: "badge--success", Ended: "badge--soft",
+			Pending: "badge--pending", Rectified: "badge--success" }[s] || "badge--soft";
+		return '<span class="badge ' + cls + '">' + esc(s) + "</span>";
+	}
+
+	// -------------------------------------------------------------- tabs
+	document.getElementById("vh-tabs").addEventListener("click", function (e) {
+		var b = e.target.closest(".vh-tab");
+		if (!b) return;
+		document.querySelectorAll(".vh-tab").forEach(function (t) { t.classList.toggle("is-active", t === b); });
+		document.querySelectorAll(".vh-pane").forEach(function (p) {
+			p.classList.toggle("is-active", p.id === "pane-" + b.getAttribute("data-tab"));
+		});
+	});
+	// Restore the tab named in the URL hash (used after rectification updates).
+	(function () {
+		var hashTab = (window.location.hash || "").replace("#", "");
+		var tb = hashTab && document.querySelector('.vh-tab[data-tab="' + hashTab + '"]');
+		if (tb) tb.click();
+	})();
+
+	// -------------------------------------------------------------- load
+	var D = null;
+	callMethod("garagedesk.api.fleet.get_vehicle_history", { vehicle: window.vh_vehicle })
+		.then(function (d) {
+			D = d;
+			renderHead(d);
+			renderOverview(d);
+			renderDrivers(d);
+			renderService(d);
+			renderRepair(d);
+			renderMonthly(d);
+			renderHandovers(d);
+			renderActivities(d);
+			if (d.vehicle.customer) {
+				document.getElementById("vh-back").href = "/a3-workshop/vehicle-history?customer=" + encodeURIComponent(d.vehicle.customer);
+			}
+			if (d.is_own_fleet) {
+				document.getElementById("vh-actions").style.display = "inline-flex";
+				document.getElementById("vh-new-handover").href =
+					"/a3-workshop/vehicle-history-handover?vehicle=" + encodeURIComponent(d.vehicle.name);
+				// Activity types come from the Driver Activity Type master.
+				var actSel = document.querySelector('#vh-act-form [name="activity_type"]');
+				actSel.innerHTML = '<option value="">Select</option>' + (d.activity_types || []).map(function (t) {
+					return '<option value="' + esc(t.name) + '">' + esc(t.name) + "</option>";
+				}).join("");
+				actSel.addEventListener("change", function () {
+					var t = (d.activity_types || []).find(function (x) { return x.name === actSel.value; });
+					document.querySelector('#vh-act-form [name="is_preventive"]').checked = !!(t && t.is_preventive_default);
+				});
+			} else {
+				// Outside customer: hide the driver-facing tabs entirely (requirement 5).
+				document.querySelectorAll("[data-fleet]").forEach(function (t) { t.style.display = "none"; });
+			}
+		})
+		.catch(function (err) {
+			document.getElementById("vh-head").innerHTML =
+				'<div class="empty">Could not load vehicle history.<br><span class="muted">' + esc(err.message || err) + "</span></div>";
+		});
+
+	function renderHead(d) {
+		var v = d.vehicle;
+		function item(k, val) {
+			return '<div><div class="k">' + esc(k) + '</div><div class="v">' + esc(val || "—") + "</div></div>";
+		}
+		document.getElementById("vh-head").innerHTML =
+			'<div style="display:flex;gap:14px;align-items:center;margin-bottom:16px">' +
+			'<div class="list-row__avatar" style="background:var(--navy)"><i class="fa-solid fa-car"></i></div>' +
+			'<div><div style="font-weight:800;font-size:17px">' + esc(v.model) +
+			(d.is_own_fleet ? ' <span class="badge badge--navy">Own Fleet</span>' : "") + "</div>" +
+			'<div class="muted" style="font-size:12px">Owner: ' + esc(v.customer_name) + "</div></div></div>" +
+			'<div class="vh-head-grid">' +
+			item("Plate", v.plate) + item("Chassis / VIN", v.chassis) +
+			item("Odometer", v.odometer ? v.odometer.toLocaleString() + " km" : "—") + item("Fuel", v.fuel) +
+			item("Year", v.year) + item("Color", v.color) +
+			(d.is_own_fleet ? item("Current Driver", d.current_driver || "Unassigned") : "") +
+			"</div>";
+	}
+
+	function renderOverview(d) {
+		var open = d.handovers.filter(function (h) {
+			return h.discrepancy_found && ["Pending", "In Progress"].indexOf(h.rectification_status) !== -1;
+		});
+		var totalCost = d.service_history.concat(d.repair_history).reduce(function (a, r) { return a + (r.amount || 0); }, 0) +
+			d.activities.reduce(function (a, r) { return a + (r.cost || 0); }, 0);
+		var last12 = d.monthly.reduce(function (a, m) { return a + (m.distance_km || 0); }, 0);
+		function tile(label, value, sub) {
+			return '<div class="stat-card stat-card--sm"><div class="label">' + esc(label) + '</div><div class="value">' +
+				esc(value) + "</div>" + (sub ? '<div class="sub">' + esc(sub) + "</div>" : "") + "</div>";
+		}
+		var html = '<div class="stat-grid" style="margin-bottom:18px">' +
+			tile("Distance", last12.toLocaleString() + " km", "Last 12 months") +
+			tile("Service Visits", d.service_history.length, "All time") +
+			tile("Repairs", d.repair_history.length, "All time") +
+			tile("Maintenance Cost", money(totalCost), "All time") +
+			"</div>";
+		if (d.is_own_fleet) {
+			html += '<div class="row-between"><span class="muted">Handovers</span><b>' + d.handovers.length + "</b></div>" +
+				'<div class="row-between" style="margin-top:6px"><span class="muted">Open damage discrepancies</span><b style="color:' +
+				(open.length ? "var(--red)" : "inherit") + '">' + open.length + "</b></div>" +
+				'<div class="row-between" style="margin-top:6px"><span class="muted">Driver maintenance activities</span><b>' + d.activities.length + "</b></div>";
+		}
+		document.getElementById("pane-overview").innerHTML = html;
+	}
+
+	function renderDrivers(d) {
+		document.getElementById("pane-drivers").innerHTML = table(
+			["Driver", "From", "To", "Start Odo", "End Odo", "Distance", "Status"],
+			d.assignments.map(function (a) {
+				return [
+					'<b>' + esc(a.driver_name || a.driver) + "</b>",
+					esc((a.from_date || "").slice(0, 16)),
+					esc(a.to_date ? String(a.to_date).slice(0, 16) : "—"),
+					a.start_odometer ? a.start_odometer.toLocaleString() : "—",
+					a.end_odometer ? a.end_odometer.toLocaleString() : "—",
+					a.distance_km ? a.distance_km.toLocaleString() + " km" : "—",
+					statusBadge(a.status)
+				];
+			}),
+			"No driver assignments recorded yet. Create the first handover to assign a driver."
+		);
+	}
+
+	function jobRows(rows) {
+		return rows.map(function (r) {
+			return ['<b>' + esc(r.name) + "</b>", esc(r.date), esc(r.jobtype), esc(r.service), statusBadge(r.status), money(r.amount)];
+		});
+	}
+	function renderService(d) {
+		document.getElementById("pane-service").innerHTML = table(
+			["Job Card", "Date", "Job Type", "Service", "Status", "Amount"],
+			jobRows(d.service_history), "No service history for this vehicle yet.");
+	}
+	function renderRepair(d) {
+		document.getElementById("pane-repair").innerHTML = table(
+			["Job Card", "Date", "Job Type", "Work", "Status", "Amount"],
+			jobRows(d.repair_history), "No mechanical repair history for this vehicle yet.");
+	}
+
+	function renderMonthly(d) {
+		var rows = d.monthly || [];
+		var max = Math.max.apply(null, rows.map(function (m) { return m.distance_km; }).concat([1]));
+		// hand-rolled SVG bars, same approach as the dashboard pages
+		var W = 720, H = 150, pad = 24, bw = (W - pad * 2) / Math.max(rows.length, 1);
+		var bars = rows.map(function (m, i) {
+			var h = Math.round((m.distance_km / max) * (H - 46));
+			var x = pad + i * bw;
+			return '<rect x="' + (x + 4) + '" y="' + (H - 26 - h) + '" width="' + Math.max(6, bw - 8) + '" height="' + h +
+				'" rx="3" fill="var(--red)" opacity="0.85"><title>' + esc(m.month) + ": " + m.distance_km.toLocaleString() + ' km</title></rect>' +
+				'<text x="' + (x + bw / 2) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="9" fill="var(--muted)">' +
+				esc(m.month.split(" ")[0]) + "</text>";
+		}).join("");
+		var chart = '<svg class="chart-svg vh-chart" viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="Monthly distance">' + bars + "</svg>";
+		document.getElementById("pane-monthly").innerHTML = chart + table(
+			["Month", "Distance", "Utilisation", "Handovers", "Service Visits", "Cost"],
+			rows.map(function (m) {
+				return [esc(m.month), m.distance_km.toLocaleString() + " km", m.utilisation_pct + "%",
+					m.handovers, m.service_visits, money(m.cost)];
+			}),
+			"No monthly data yet.");
+	}
+
+	function renderHandovers(d) {
+		document.getElementById("pane-handovers").innerHTML = table(
+			["Date", "Type", "From", "To", "Odometer", "New Damages", "Rectification", ""],
+			d.handovers.map(function (h) {
+				return [
+					esc(h.handover_date_fmt), esc(h.handover_type || "—"),
+					esc(h.from_driver_name || "—"), esc(h.to_driver_name || "—"),
+					h.odometer ? h.odometer.toLocaleString() : "—",
+					h.discrepancy_found
+						? '<span class="badge badge--danger">' + h.new_damage_count + " new</span>"
+						: '<span class="badge badge--success">None</span>',
+					h.discrepancy_found ? statusBadge(h.rectification_status || "Pending") : '<span class="muted">—</span>',
+					'<button type="button" class="btn btn--outline btn--sm" data-handover="' + esc(h.name) + '">View</button>'
+				];
+			}),
+			"No handover inspections recorded for this vehicle yet.");
+	}
+
+	function renderActivities(d) {
+		document.getElementById("pane-activities").innerHTML = table(
+			["Date", "Driver", "Activity", "Odometer", "By", "Preventive", "Cost"],
+			d.activities.map(function (a) {
+				return [
+					esc(a.activity_date_fmt), esc(a.driver_name || "—"), "<b>" + esc(a.activity_type) + "</b>",
+					a.odometer ? a.odometer.toLocaleString() : "—", esc(a.performed_by || "—"),
+					a.is_preventive
+						? '<span class="badge ' + (a.was_on_schedule ? "badge--success" : "badge--pending") + '">' +
+						  (a.was_on_schedule ? "On schedule" : "Preventive") + "</span>"
+						: '<span class="muted">—</span>',
+					money(a.cost)
+				];
+			}),
+			"No driver maintenance activities recorded yet.");
+	}
+
+	// ------------------------------------------------- handover comparison modal
+	function wireModal(overlay) {
+		function close() { overlay.classList.remove("is-open"); }
+		overlay.querySelectorAll("[data-close]").forEach(function (b) { b.addEventListener("click", close); });
+		overlay.addEventListener("click", function (e) { if (e.target === overlay) close(); });
+		document.addEventListener("keydown", function (e) { if (e.key === "Escape") close(); });
+		return { open: function () { overlay.classList.add("is-open"); }, close: close };
+	}
+	var handModal = wireModal(document.getElementById("vh-hand-modal"));
+	var actModal = wireModal(document.getElementById("vh-act-modal"));
+
+	function dmgCard(x) {
+		return '<div class="vh-dmg' + (x.is_new ? " is-new" : "") + '"><div class="t">' + esc(x.area) + " — " + esc(x.damage_type) +
+			(x.severity ? ' <span class="badge badge--soft">' + esc(x.severity) + "</span>" : "") +
+			(x.is_new ? ' <span class="badge badge--danger">NEW</span>' : "") +
+			(x.previous_severity ? ' <span class="badge badge--pending">was ' + esc(x.previous_severity) + "</span>" : "") +
+			'</div>' + (x.description ? '<div class="s">' + esc(x.description) + "</div>" : "") + "</div>";
+	}
+
+	document.getElementById("pane-handovers").addEventListener("click", function (e) {
+		var b = e.target.closest("[data-handover]");
+		if (!b) return;
+		var body = document.getElementById("vh-hand-body");
+		document.getElementById("vh-hand-print").href =
+			"/a3-workshop/vehicle-history-print?handover=" + encodeURIComponent(b.getAttribute("data-handover"));
+		body.innerHTML = '<div class="empty">Loading…</div>';
+		handModal.open();
+		callMethod("garagedesk.api.fleet.get_handover", { name: b.getAttribute("data-handover") })
+			.then(function (h) {
+				document.getElementById("vh-hand-sub").textContent = h.name + "  •  " + h.date;
+				function kv(k, v) { return '<div><div class="k">' + esc(k) + '</div><div class="v">' + v + "</div></div>"; }
+				var html = '<div class="vh-kv">' +
+					kv("From Driver", esc(h.from_driver)) + kv("To Driver", esc(h.to_driver)) +
+					kv("Odometer", h.odometer.toLocaleString() + " km") +
+					kv("KM Since Previous", (h.km_since_previous || 0).toLocaleString()) +
+					kv("Fuel", esc(h.fuel_level)) + kv("Condition", esc(h.overall_condition)) +
+					kv("Tyres", esc(h.tyre_condition)) +
+					kv("Checklist", (h.checklist_items && h.checklist_items.length)
+						? h.checklist_items.map(function (c) {
+							return '<span style="white-space:nowrap;margin-right:10px;font-size:12px">' +
+								(c.checked ? '<i class="fa-solid fa-check" style="color:var(--green)"></i>' : '<i class="fa-solid fa-xmark" style="color:var(--muted)"></i>') +
+								" " + esc(c.item) + (c.value ? ": <b>" + esc(c.value) + "</b>" : "") + "</span>";
+						}).join(" ")
+						: ["spare_tyre", "tools_present", "documents_present", "first_aid_kit"].map(function (k) {
+							return h.checklist[k] ? '<i class="fa-solid fa-check" style="color:var(--green)"></i>' : '<i class="fa-solid fa-xmark" style="color:var(--muted)"></i>';
+						}).join(" ")) +
+					kv("Responsible", h.responsible_driver ? '<b style="color:var(--red)">' + esc(h.responsible_driver) + "</b>" : "—") +
+					"</div>";
+				html += '<div class="vh-cmp">';
+				html += "<div><div class=\"vd-section-title\" style=\"font-size:12px;font-weight:800;text-transform:uppercase;color:var(--muted);margin-bottom:10px\">Recorded Condition (" + h.damages.length + ")</div>" +
+					(h.damages.length ? h.damages.map(dmgCard).join("") : '<div class="muted" style="font-size:13px">No damages recorded.</div>') + "</div>";
+				html += "<div><div class=\"vd-section-title\" style=\"font-size:12px;font-weight:800;text-transform:uppercase;color:var(--muted);margin-bottom:10px\">New vs Previous Handover (" + h.new_damages.length + ")</div>" +
+					(h.new_damages.length ? h.new_damages.map(function (x) { x.is_new = 1; return dmgCard(x); }).join("")
+						: '<div class="muted" style="font-size:13px">No new damage — matches the previous record.</div>') + "</div>";
+				html += "</div>";
+				if (h.discrepancy_found) {
+					html += '<div class="row-between" style="margin-top:16px"><span class="muted">Rectification</span><span>' +
+						statusBadge(h.rectification_status) + "</span></div>";
+					if (h.rectification_notes) html += '<div class="muted" style="font-size:13px;margin-top:6px">' + esc(h.rectification_notes) + "</div>";
+					if (h.rectification_job_card) html += '<div class="muted" style="font-size:13px;margin-top:4px">Repair job card: <b>' + esc(h.rectification_job_card) + "</b></div>";
+					if (h.rectification_status !== "Rectified") {
+						html += '<div style="display:flex;gap:8px;margin-top:10px;align-items:flex-end">' +
+							'<div class="field" style="flex:1;margin:0"><input id="vh-rect-notes" placeholder="Rectification notes (optional)"></div>' +
+							(h.rectification_status === "Pending"
+								? '<button type="button" class="btn btn--outline btn--sm" data-rect="In Progress" data-h="' + esc(h.name) + '">Start Work</button>'
+								: "") +
+							'<button type="button" class="btn btn--primary btn--sm" data-rect="Rectified" data-h="' + esc(h.name) + '"><i class="fa-solid fa-check"></i> Mark Rectified</button>' +
+							"</div>";
+					}
+				}
+				if (h.attachments.length) {
+					html += '<div class="vd-section-title" style="font-size:12px;font-weight:800;text-transform:uppercase;color:var(--muted);margin:18px 0 10px">Photos (' + h.attachments.length + ")</div>" +
+						'<div class="vh-photos">' + h.attachments.map(function (a) {
+							return '<a href="' + esc(a.file_url) + '" target="_blank" rel="noopener"><img src="' + esc(a.file_url) + '" alt="' + esc(a.file_name) + '"></a>';
+						}).join("") + "</div>";
+				}
+				body.innerHTML = html;
+			})
+			.catch(function (err) {
+				body.innerHTML = '<div class="empty">Could not load handover.<br><span class="muted">' + esc(err.message || err) + "</span></div>";
+			});
+	});
+
+	// Rectification actions inside the handover modal (delegated — buttons are
+	// rendered per handover). Reload lands back on the Handovers tab via the hash.
+	document.getElementById("vh-hand-body").addEventListener("click", function (e) {
+		var b = e.target.closest("[data-rect]");
+		if (!b) return;
+		b.disabled = true;
+		var notesEl = document.getElementById("vh-rect-notes");
+		callMethod("garagedesk.api.fleet.update_rectification", {
+			name: b.getAttribute("data-h"),
+			status: b.getAttribute("data-rect"),
+			notes: notesEl ? notesEl.value.trim() : ""
+		}).then(function () {
+			window.location.hash = "handovers";
+			window.location.reload();
+		}).catch(function (err) {
+			b.disabled = false;
+			alert("Could not update rectification: " + (err.message || err));
+		});
+	});
+
+	// ------------------------------------------------------ log activity modal
+	function attachAutocomplete(input, source, onSelect) {
+		if (!input) return;
+		var wrap = input.parentNode;
+		wrap.style.position = "relative";
+		var list = document.createElement("div");
+		list.className = "jc-ac"; list.style.display = "none";
+		wrap.appendChild(list);
+		var items = [], active = -1, timer = null;
+		function hide() { list.style.display = "none"; active = -1; }
+		function render(rows) {
+			items = rows || [];
+			if (!items.length) { list.innerHTML = '<div class="jc-ac-empty">No matches</div>'; list.style.display = "block"; return; }
+			list.innerHTML = items.map(function (it, i) {
+				return '<div class="jc-ac-item" data-i="' + i + '"><div class="jc-ac-label">' + esc(it.label) + "</div>" +
+					(it.sub ? '<div class="jc-ac-sub">' + esc(it.sub) + "</div>" : "") + "</div>";
+			}).join("");
+			active = -1; list.style.display = "block";
+		}
+		function run() { Promise.resolve(source(input.value.trim())).then(render).catch(hide); }
+		input.addEventListener("input", function () { clearTimeout(timer); timer = setTimeout(run, 180); });
+		input.addEventListener("focus", run);
+		input.addEventListener("blur", function () { setTimeout(hide, 150); });
+		list.addEventListener("mousedown", function (e) {
+			var el = e.target.closest("[data-i]"); if (!el) return;
+			e.preventDefault();
+			var it = items[+el.dataset.i];
+			input.value = it.label; hide();
+			if (onSelect) onSelect(it);
+		});
+	}
+	function driverSource(q) {
+		return callMethod("garagedesk.api.fleet.search_drivers", { search: q, limit: 10 }).then(function (rows) {
+			return (rows || []).map(function (d) { return { label: d.full_name || d.name, sub: d.cell_number || "", value: d.name }; });
+		});
+	}
+	var actForm = document.getElementById("vh-act-form");
+	attachAutocomplete(actForm.querySelector('[name="driver_label"]'), driverSource, function (it) {
+		actForm.querySelector('[name="driver"]').value = it.value;
+	});
+	actForm.querySelector('[name="driver_label"]').addEventListener("input", function () {
+		actForm.querySelector('[name="driver"]').value = "";
+	});
+
+	document.getElementById("vh-log-activity").addEventListener("click", actModal.open);
+	document.getElementById("vh-act-save").addEventListener("click", function () {
+		function v(n) { var el = actForm.querySelector('[name="' + n + '"]'); return el ? el.value.trim() : ""; }
+		if (!v("driver") || !v("activity_type")) { alert("Please pick a driver from the list and an activity type."); return; }
+		var btn = document.getElementById("vh-act-save");
+		var original = btn.innerHTML;
+		btn.disabled = true;
+		btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving…';
+		callMethod("garagedesk.api.fleet.log_driver_activity", {
+			vehicle: window.vh_vehicle,
+			driver: v("driver"),
+			activity_type: v("activity_type"),
+			activity_date: v("activity_date") || null,
+			odometer: v("odometer"),
+			performed_by: v("performed_by"),
+			is_preventive: actForm.querySelector('[name="is_preventive"]').checked ? 1 : 0,
+			cost: v("cost"),
+			remarks: v("remarks")
+		}).then(function () {
+			window.location.reload();
+		}).catch(function (err) {
+			btn.disabled = false;
+			btn.innerHTML = original;
+			alert("Could not save activity: " + (err.message || err));
+		});
+	});
+})();
+</script>
+{% endraw %}
+{% endif %}
+{% endblock %}
