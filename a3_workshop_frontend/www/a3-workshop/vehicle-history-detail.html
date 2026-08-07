@@ -11,7 +11,6 @@
 		<a class="btn btn--outline btn--sm" href="/a3-workshop/vehicle-history-print?vehicle={{ vehicle | urlencode }}" target="_blank" rel="noopener"><i class="fa-solid fa-print"></i> Print History</a>
 		<span id="vh-actions" style="display:none;gap:10px">
 			<a class="btn btn--primary btn--sm" id="vh-new-handover" href="#"><i class="fa-solid fa-right-left"></i> New Handover</a>
-			<button type="button" class="btn btn--navy btn--sm" id="vh-log-activity"><i class="fa-solid fa-wrench"></i> Log Activity</button>
 		</span>
 	</div>
 </div>
@@ -57,36 +56,6 @@
 	</div>
 </div>
 
-<!-- Log Activity modal -->
-<div class="modal-overlay" id="vh-act-modal" role="dialog" aria-modal="true">
-	<div class="modal">
-		<div class="modal__head">
-			<div><h3>Log Driver Activity</h3><div class="sub">Maintenance performed by / through a driver</div></div>
-			<button type="button" class="modal__close" data-close aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
-		</div>
-		<div class="modal__body">
-			<form class="form-grid" id="vh-act-form" onsubmit="return false">
-				<div class="field"><label>Driver <span class="req">*</span></label><input name="driver_label" placeholder="Search driver..." autocomplete="off"><input type="hidden" name="driver"></div>
-				<div class="field"><label>Activity Type <span class="req">*</span></label><select name="activity_type">
-					<option value="">Select</option>
-				</select></div>
-				<div class="field"><label>Date</label><input name="activity_date" type="date"></div>
-				<div class="field"><label>Odometer (km)</label><input name="odometer" type="number" placeholder="0"></div>
-				<div class="field"><label>Performed By</label><select name="performed_by">
-					<option>Driver</option><option>Workshop</option><option>External Vendor</option>
-				</select></div>
-				<div class="field"><label>Cost (AED)</label><input name="cost" type="number" step="0.01" placeholder="0.00"></div>
-				<div class="field field--full"><label class="check" style="font-weight:400"><input type="checkbox" name="is_preventive"> Preventive maintenance (planned upkeep, not a breakdown fix)</label></div>
-				<div class="field field--full"><label>Remarks</label><textarea name="remarks"></textarea></div>
-			</form>
-		</div>
-		<div class="modal__foot">
-			<button type="button" class="btn btn--outline btn--sm" data-close>Cancel</button>
-			<button type="button" class="btn btn--primary btn--sm" id="vh-act-save"><i class="fa-solid fa-floppy-disk"></i> Save Activity</button>
-		</div>
-	</div>
-</div>
-
 <style>
 	.vh-tabs { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:18px; }
 	.vh-tab { border:1px solid var(--border); background:var(--surface); border-radius:999px;
@@ -112,14 +81,7 @@
 	.vh-photos { display:grid; grid-template-columns:repeat(auto-fill,minmax(110px,1fr)); gap:10px; }
 	.vh-photos a { border:1px solid var(--border); border-radius:8px; overflow:hidden; display:block; }
 	.vh-photos img { width:100%; height:86px; object-fit:cover; display:block; }
-	.jc-ac { position:absolute; left:0; right:0; top:100%; z-index:60; margin-top:2px; background:var(--surface,#fff);
-		border:1px solid var(--border,#d8dde6); border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.12);
-		max-height:240px; overflow:auto; }
-	.jc-ac-item { padding:8px 12px; cursor:pointer; }
-	.jc-ac-item:hover, .jc-ac-item.is-active { background:var(--bg,#f1f4f8); }
-	.jc-ac-label { font-weight:600; font-size:13px; }
-	.jc-ac-sub { font-size:12px; color:var(--muted,#7a8598); }
-	.jc-ac-empty { padding:8px 12px; font-size:12px; color:var(--muted,#7a8598); }
+	.vh-jc-link { font-weight:700; color:var(--navy); white-space:nowrap; }
 </style>
 
 <script>
@@ -215,15 +177,6 @@
 				document.getElementById("vh-actions").style.display = "inline-flex";
 				document.getElementById("vh-new-handover").href =
 					"/a3-workshop/vehicle-history-handover?vehicle=" + encodeURIComponent(d.vehicle.name);
-				// Activity types come from the Driver Activity Type master.
-				var actSel = document.querySelector('#vh-act-form [name="activity_type"]');
-				actSel.innerHTML = '<option value="">Select</option>' + (d.activity_types || []).map(function (t) {
-					return '<option value="' + esc(t.name) + '">' + esc(t.name) + "</option>";
-				}).join("");
-				actSel.addEventListener("change", function () {
-					var t = (d.activity_types || []).find(function (x) { return x.name === actSel.value; });
-					document.querySelector('#vh-act-form [name="is_preventive"]').checked = !!(t && t.is_preventive_default);
-				});
 			} else {
 				// Outside customer: hide the driver-facing tabs entirely (requirement 5).
 				document.querySelectorAll("[data-fleet]").forEach(function (t) { t.style.display = "none"; });
@@ -336,9 +289,21 @@
 			"No monthly data yet.");
 	}
 
+	// New damage is closed out by raising a repair job card: until one exists the
+	// cell offers the button, afterwards it shows the card it was rectified under.
+	function jobCardCell(h) {
+		if (!h.discrepancy_found) return '<span class="muted">—</span>';
+		if (h.rectification_job_card) {
+			return '<a class="vh-jc-link" href="/a3-workshop/job-card/detail?id=' +
+				encodeURIComponent(h.rectification_job_card) + '">' + esc(h.rectification_job_card) + "</a>";
+		}
+		return '<button type="button" class="btn btn--navy btn--sm" data-newjc="' + esc(h.name) +
+			'"><i class="fa-solid fa-plus"></i> Create Job Card</button>';
+	}
+
 	function renderHandovers(d) {
 		document.getElementById("pane-handovers").innerHTML = table(
-			["Date", "Type", "From", "To", "Odometer", "New Damages", "Rectification", ""],
+			["Date", "Type", "From", "To", "Odometer", "New Damages", "Job Card", "Rectification", ""],
 			d.handovers.map(function (h) {
 				return [
 					esc(h.handover_date_fmt), esc(h.handover_type || "—"),
@@ -347,11 +312,25 @@
 					h.discrepancy_found
 						? '<span class="badge badge--danger">' + h.new_damage_count + " new</span>"
 						: '<span class="badge badge--success">None</span>',
+					jobCardCell(h),
 					h.discrepancy_found ? statusBadge(h.rectification_status || "Pending") : '<span class="muted">—</span>',
 					'<button type="button" class="btn btn--outline btn--sm" data-handover="' + esc(h.name) + '">View</button>'
 				];
 			}),
 			"No handover inspections recorded for this vehicle yet.");
+	}
+
+	// Hand the wizard everything it needs to open pre-filled, plus the handover it
+	// is rectifying — the wizard links back via fleet.link_rectification_job_card
+	// as soon as the card is created.
+	function newJobCardUrl(handover) {
+		var v = (D && D.vehicle) || {};
+		var q = "?handover=" + encodeURIComponent(handover) +
+			"&vehicle=" + encodeURIComponent(v.name || window.vh_vehicle) +
+			"&vehicle_label=" + encodeURIComponent(v.model || v.name || "");
+		if (v.customer) q += "&customer=" + encodeURIComponent(v.customer);
+		if (v.customer_name) q += "&customer_name=" + encodeURIComponent(v.customer_name);
+		return "/a3-workshop/job-card/new" + q;
 	}
 
 	function renderActivities(d) {
@@ -380,7 +359,6 @@
 		return { open: function () { overlay.classList.add("is-open"); }, close: close };
 	}
 	var handModal = wireModal(document.getElementById("vh-hand-modal"));
-	var actModal = wireModal(document.getElementById("vh-act-modal"));
 
 	function dmgCard(x) {
 		return '<div class="vh-dmg' + (x.is_new ? " is-new" : "") + '"><div class="t">' + esc(x.area) + " — " + esc(x.damage_type) +
@@ -391,6 +369,8 @@
 	}
 
 	document.getElementById("pane-handovers").addEventListener("click", function (e) {
+		var jc = e.target.closest("[data-newjc]");
+		if (jc) { window.location.href = newJobCardUrl(jc.getAttribute("data-newjc")); return; }
 		var b = e.target.closest("[data-handover]");
 		if (!b) return;
 		var body = document.getElementById("vh-hand-body");
@@ -402,6 +382,13 @@
 			.then(function (h) {
 				document.getElementById("vh-hand-sub").textContent = h.name + "  •  " + h.date;
 				function kv(k, v) { return '<div><div class="k">' + esc(k) + '</div><div class="v">' + v + "</div></div>"; }
+				function ticks(rows) {
+					return rows.map(function (c) {
+						return '<span style="white-space:nowrap;margin-right:10px;font-size:12px">' +
+							(c.checked ? '<i class="fa-solid fa-check" style="color:var(--green)"></i>' : '<i class="fa-solid fa-xmark" style="color:var(--muted)"></i>') +
+							" " + esc(c.item) + (c.value ? ": <b>" + esc(c.value) + "</b>" : "") + "</span>";
+					}).join(" ");
+				}
 				var html = '<div class="vh-kv">' +
 					kv("From Driver", esc(h.from_driver)) + kv("To Driver", esc(h.to_driver)) +
 					kv("Odometer", h.odometer.toLocaleString() + " km") +
@@ -409,14 +396,14 @@
 					kv("Fuel", esc(h.fuel_level)) + kv("Condition", esc(h.overall_condition)) +
 					kv("Tyres", esc(h.tyre_condition)) +
 					kv("Checklist", (h.checklist_items && h.checklist_items.length)
-						? h.checklist_items.map(function (c) {
-							return '<span style="white-space:nowrap;margin-right:10px;font-size:12px">' +
-								(c.checked ? '<i class="fa-solid fa-check" style="color:var(--green)"></i>' : '<i class="fa-solid fa-xmark" style="color:var(--muted)"></i>') +
-								" " + esc(c.item) + (c.value ? ": <b>" + esc(c.value) + "</b>" : "") + "</span>";
-						}).join(" ")
+						? ticks(h.checklist_items)
+						// Handovers recorded before the checklist master existed only
+						// carry the four legacy flags.
 						: ["spare_tyre", "tools_present", "documents_present", "first_aid_kit"].map(function (k) {
 							return h.checklist[k] ? '<i class="fa-solid fa-check" style="color:var(--green)"></i>' : '<i class="fa-solid fa-xmark" style="color:var(--muted)"></i>';
 						}).join(" ")) +
+					kv("Attachments", (h.attachment_items && h.attachment_items.length)
+						? ticks(h.attachment_items) : '<span class="muted">—</span>') +
 					kv("Responsible", h.responsible_driver ? '<b style="color:var(--red)">' + esc(h.responsible_driver) + "</b>" : "—") +
 					"</div>";
 				html += '<div class="vh-cmp">';
@@ -430,15 +417,16 @@
 					html += '<div class="row-between" style="margin-top:16px"><span class="muted">Rectification</span><span>' +
 						statusBadge(h.rectification_status) + "</span></div>";
 					if (h.rectification_notes) html += '<div class="muted" style="font-size:13px;margin-top:6px">' + esc(h.rectification_notes) + "</div>";
-					if (h.rectification_job_card) html += '<div class="muted" style="font-size:13px;margin-top:4px">Repair job card: <b>' + esc(h.rectification_job_card) + "</b></div>";
-					if (h.rectification_status !== "Rectified") {
-						html += '<div style="display:flex;gap:8px;margin-top:10px;align-items:flex-end">' +
-							'<div class="field" style="flex:1;margin:0"><input id="vh-rect-notes" placeholder="Rectification notes (optional)"></div>' +
-							(h.rectification_status === "Pending"
-								? '<button type="button" class="btn btn--outline btn--sm" data-rect="In Progress" data-h="' + esc(h.name) + '">Start Work</button>'
-								: "") +
-							'<button type="button" class="btn btn--primary btn--sm" data-rect="Rectified" data-h="' + esc(h.name) + '"><i class="fa-solid fa-check"></i> Mark Rectified</button>' +
-							"</div>";
+					// The repair job card IS the rectification: raising one closes the
+					// discrepancy, so there is no manual "Mark Rectified" step here.
+					if (h.rectification_job_card) {
+						html += '<div class="row-between" style="margin-top:8px"><span class="muted">Repair job card</span>' +
+							'<a class="vh-jc-link" href="/a3-workshop/job-card/detail?id=' +
+							encodeURIComponent(h.rectification_job_card) + '">' + esc(h.rectification_job_card) + "</a></div>";
+					} else {
+						html += '<div style="display:flex;justify-content:flex-end;margin-top:10px">' +
+							'<button type="button" class="btn btn--navy btn--sm" data-newjc="' + esc(h.name) +
+							'"><i class="fa-solid fa-plus"></i> Create Job Card</button></div>';
 					}
 				}
 				if (h.attachments.length) {
@@ -454,96 +442,13 @@
 			});
 	});
 
-	// Rectification actions inside the handover modal (delegated — buttons are
-	// rendered per handover). Reload lands back on the Handovers tab via the hash.
+	// "Create Job Card" inside the modal — same hand-off as the table cell.
 	document.getElementById("vh-hand-body").addEventListener("click", function (e) {
-		var b = e.target.closest("[data-rect]");
+		var b = e.target.closest("[data-newjc]");
 		if (!b) return;
-		b.disabled = true;
-		var notesEl = document.getElementById("vh-rect-notes");
-		callMethod("garagedesk.api.fleet.update_rectification", {
-			name: b.getAttribute("data-h"),
-			status: b.getAttribute("data-rect"),
-			notes: notesEl ? notesEl.value.trim() : ""
-		}).then(function () {
-			window.location.hash = "handovers";
-			window.location.reload();
-		}).catch(function (err) {
-			b.disabled = false;
-			alert("Could not update rectification: " + (err.message || err));
-		});
+		window.location.href = newJobCardUrl(b.getAttribute("data-newjc"));
 	});
 
-	// ------------------------------------------------------ log activity modal
-	function attachAutocomplete(input, source, onSelect) {
-		if (!input) return;
-		var wrap = input.parentNode;
-		wrap.style.position = "relative";
-		var list = document.createElement("div");
-		list.className = "jc-ac"; list.style.display = "none";
-		wrap.appendChild(list);
-		var items = [], active = -1, timer = null;
-		function hide() { list.style.display = "none"; active = -1; }
-		function render(rows) {
-			items = rows || [];
-			if (!items.length) { list.innerHTML = '<div class="jc-ac-empty">No matches</div>'; list.style.display = "block"; return; }
-			list.innerHTML = items.map(function (it, i) {
-				return '<div class="jc-ac-item" data-i="' + i + '"><div class="jc-ac-label">' + esc(it.label) + "</div>" +
-					(it.sub ? '<div class="jc-ac-sub">' + esc(it.sub) + "</div>" : "") + "</div>";
-			}).join("");
-			active = -1; list.style.display = "block";
-		}
-		function run() { Promise.resolve(source(input.value.trim())).then(render).catch(hide); }
-		input.addEventListener("input", function () { clearTimeout(timer); timer = setTimeout(run, 180); });
-		input.addEventListener("focus", run);
-		input.addEventListener("blur", function () { setTimeout(hide, 150); });
-		list.addEventListener("mousedown", function (e) {
-			var el = e.target.closest("[data-i]"); if (!el) return;
-			e.preventDefault();
-			var it = items[+el.dataset.i];
-			input.value = it.label; hide();
-			if (onSelect) onSelect(it);
-		});
-	}
-	function driverSource(q) {
-		return callMethod("garagedesk.api.fleet.search_drivers", { search: q, limit: 10 }).then(function (rows) {
-			return (rows || []).map(function (d) { return { label: d.full_name || d.name, sub: d.cell_number || "", value: d.name }; });
-		});
-	}
-	var actForm = document.getElementById("vh-act-form");
-	attachAutocomplete(actForm.querySelector('[name="driver_label"]'), driverSource, function (it) {
-		actForm.querySelector('[name="driver"]').value = it.value;
-	});
-	actForm.querySelector('[name="driver_label"]').addEventListener("input", function () {
-		actForm.querySelector('[name="driver"]').value = "";
-	});
-
-	document.getElementById("vh-log-activity").addEventListener("click", actModal.open);
-	document.getElementById("vh-act-save").addEventListener("click", function () {
-		function v(n) { var el = actForm.querySelector('[name="' + n + '"]'); return el ? el.value.trim() : ""; }
-		if (!v("driver") || !v("activity_type")) { alert("Please pick a driver from the list and an activity type."); return; }
-		var btn = document.getElementById("vh-act-save");
-		var original = btn.innerHTML;
-		btn.disabled = true;
-		btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving…';
-		callMethod("garagedesk.api.fleet.log_driver_activity", {
-			vehicle: window.vh_vehicle,
-			driver: v("driver"),
-			activity_type: v("activity_type"),
-			activity_date: v("activity_date") || null,
-			odometer: v("odometer"),
-			performed_by: v("performed_by"),
-			is_preventive: actForm.querySelector('[name="is_preventive"]').checked ? 1 : 0,
-			cost: v("cost"),
-			remarks: v("remarks")
-		}).then(function () {
-			window.location.reload();
-		}).catch(function (err) {
-			btn.disabled = false;
-			btn.innerHTML = original;
-			alert("Could not save activity: " + (err.message || err));
-		});
-	});
 })();
 </script>
 {% endraw %}

@@ -104,7 +104,7 @@
 {% if d.is_own_fleet %}
 <h2 class="sec">Handover Inspections</h2>
 {% if d.handovers %}
-<table class="t"><thead><tr><th>Date</th><th>Type</th><th>From</th><th>To</th><th class="right">Odometer</th><th>New Damages</th><th>Responsible</th><th>Rectification</th></tr></thead><tbody>
+<table class="t"><thead><tr><th>Date</th><th>Type</th><th>From</th><th>To</th><th class="right">Odometer</th><th>New Damages</th><th>Responsible</th><th>Job Card</th><th>Rectification</th></tr></thead><tbody>
 	{% for x in d.handovers %}
 	<tr>
 		<td>{{ x.handover_date_fmt }}</td><td>{{ x.handover_type or "—" }}</td>
@@ -112,6 +112,7 @@
 		<td class="right">{{ num(x.odometer) }}</td>
 		<td>{% if x.discrepancy_found %}<span class="pill pill--red">{{ x.new_damage_count }} new</span>{% else %}<span class="pill pill--green">None</span>{% endif %}</td>
 		<td>{{ x.responsible_driver_name or "—" }}</td>
+		<td>{{ x.rectification_job_card or "—" }}</td>
 		<td>{% if x.discrepancy_found %}{{ rectpill(x.rectification_status or "Pending") }}{% else %}—{% endif %}</td>
 	</tr>
 	{% endfor %}
@@ -227,6 +228,15 @@
 	<div><div class="k">First Aid Kit</div><div class="v">{{ "✔ Present" if h.checklist.first_aid_kit else "✘ Missing" }}</div></div>
 	{% endif %}
 </div>
+{% if h.attachment_items %}
+<h2 class="sec">Attachments</h2>
+<div class="kv">
+	{% for a in h.attachment_items %}
+	<div><div class="k">{{ a.item }}</div><div class="v">{{ "✔ Attached" if a.checked else "✘ Not attached" }}{% if a.value %} — {{ a.value }}{% endif %}</div></div>
+	{% endfor %}
+</div>
+{% endif %}
+
 {% if h.observations %}<p style="margin-top:8px"><span class="k" style="font-size:10px;text-transform:uppercase;color:#8a94a6;font-weight:700">Observations:</span> {{ h.observations }}</p>{% endif %}
 
 <h2 class="sec">Recorded Vehicle Condition ({{ h.damages | length }} damages)</h2>

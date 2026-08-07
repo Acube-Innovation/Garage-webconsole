@@ -35,6 +35,14 @@
 </div>
 
 <div class="card" style="margin-bottom:18px">
+	<div class="card__head"><h3><i class="fa-solid fa-trailer"></i> Attachments</h3></div>
+	<div class="card__body">
+		<div class="muted" style="font-size:13px;margin-bottom:12px">Equipment coupled to the vehicle — tick what is attached and handed over with it.</div>
+		<div id="ho-attachments" class="ho-checklist"><div class="muted">Loading attachments…</div></div>
+	</div>
+</div>
+
+<div class="card" style="margin-bottom:18px">
 	<div class="card__head"><h3><i class="fa-solid fa-car-burst"></i> Vehicle Condition — Damages</h3></div>
 	<div class="card__body">
 		<div id="ho-prev-note" class="muted" style="font-size:13px;margin-bottom:12px;display:none"></div>
@@ -55,7 +63,13 @@
 			<i class="fa-solid fa-cloud-arrow-up" style="font-size:28px;color:var(--muted)"></i>
 			<div style="margin-top:10px">Upload photos of the vehicle condition (front, rear, sides, odometer)</div>
 			<input type="file" id="file-input" multiple accept="image/*" style="display:none">
-			<button type="button" class="btn btn--outline btn--sm" id="choose-files" style="margin-top:12px"><i class="fa-solid fa-image"></i> Choose Files</button>
+			<!-- Fallback for browsers without getUserMedia (plain-HTTP LAN access):
+			     `capture` hands straight over to the device camera app. -->
+			<input type="file" id="cam-fallback-input" accept="image/*" capture="environment" style="display:none">
+			<div style="margin-top:12px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+				<button type="button" class="btn btn--outline btn--sm" id="choose-files"><i class="fa-solid fa-image"></i> Choose Files</button>
+				<button type="button" class="btn btn--navy btn--sm" id="take-photo"><i class="fa-solid fa-camera"></i> Take Photo</button>
+			</div>
 		</div>
 		<div id="file-list" style="margin-top:14px;display:none"></div>
 	</div>
@@ -64,6 +78,28 @@
 <div class="form-actions">
 	<span></span>
 	<button type="button" class="btn btn--primary" id="ho-save"><i class="fa-solid fa-floppy-disk"></i> Complete Handover</button>
+</div>
+
+<!-- Camera capture: live preview, shoot as many frames as needed -->
+<div class="modal-overlay" id="ho-cam-modal" role="dialog" aria-modal="true">
+	<div class="modal" style="max-width:640px">
+		<div class="modal__head">
+			<div><h3>Take Photo</h3><div class="sub" id="ho-cam-sub">Frame the vehicle and capture</div></div>
+			<button type="button" class="modal__close" data-cam-close aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+		</div>
+		<div class="modal__body">
+			<div class="ho-cam-stage">
+				<video id="ho-cam-video" playsinline muted autoplay></video>
+				<div class="msg" id="ho-cam-msg" style="display:none"></div>
+			</div>
+			<div id="ho-cam-shots" class="ho-cam-shots"></div>
+		</div>
+		<div class="modal__foot">
+			<button type="button" class="btn btn--outline btn--sm" id="ho-cam-flip" style="display:none"><i class="fa-solid fa-camera-rotate"></i> Switch Camera</button>
+			<button type="button" class="btn btn--outline btn--sm" data-cam-close>Done</button>
+			<button type="button" class="btn btn--primary btn--sm" id="ho-cam-shoot"><i class="fa-solid fa-camera"></i> Capture</button>
+		</div>
+	</div>
 </div>
 
 <!-- Result modal: the auto-diff outcome -->
@@ -108,6 +144,13 @@
 	.vh-dmg { border:1px solid var(--border); border-radius:var(--radius-sm,9px); padding:8px 12px; margin-bottom:8px; font-size:13px; }
 	.vh-dmg.is-new { border-color:var(--red); background:var(--red-soft); }
 	.vh-dmg .t { font-weight:700; }
+	.ho-cam-stage { background:#000; border-radius:var(--radius-sm,9px); overflow:hidden; aspect-ratio:4/3;
+		display:flex; align-items:center; justify-content:center; }
+	.ho-cam-stage video { width:100%; height:100%; object-fit:cover; display:block; }
+	.ho-cam-stage .msg { color:#fff; font-size:13px; padding:24px; text-align:center; line-height:1.6; }
+	.ho-cam-shots { display:grid; grid-template-columns:repeat(auto-fill,minmax(84px,1fr)); gap:8px; margin-top:12px; }
+	.ho-cam-shots img { width:100%; height:62px; object-fit:cover; border-radius:6px; border:1px solid var(--border); display:block; }
+	.ho-cam-shots:empty { display:none; }
 </style>
 
 <script>
@@ -229,14 +272,17 @@
 		}).filter(function (d) { return d.area && d.damage_type; });
 	}
 
-	// --------------------------------------------------- dynamic checklist
+	// ------------------------------------- dynamic tick lists (checklist + attachments)
+	// Both sections are master-driven and behave identically: a tick, plus a value
+	// input that only appears (and is only required) for "Check + Value" items.
 	var chkBox = document.getElementById("ho-checklist");
-	function renderChecklist(items) {
+	var attBox = document.getElementById("ho-attachments");
+	function renderTicks(box, items, emptyMsg) {
 		if (!items || !items.length) {
-			chkBox.innerHTML = '<div class="muted">No checklist items configured yet. Add them in Desk &rarr; Handover Checklist Item.</div>';
+			box.innerHTML = '<div class="muted">' + emptyMsg + "</div>";
 			return;
 		}
-		chkBox.innerHTML = items.map(function (it) {
+		box.innerHTML = items.map(function (it) {
 			var needsVal = it.response_type === "Check + Value";
 			return '<div class="ho-chk-row" data-item="' + esc(it.name) + '" data-type="' + esc(it.response_type || "Check") + '">' +
 				'<label class="check"><input type="checkbox" data-chk> ' + esc(it.item_name || it.name) + "</label>" +
@@ -244,20 +290,24 @@
 				"</div>";
 		}).join("");
 	}
-	chkBox.addEventListener("change", function (e) {
-		if (!e.target.matches("[data-chk]")) return;
-		var row = e.target.closest(".ho-chk-row");
-		row.classList.toggle("is-checked", e.target.checked);
-		var valEl = row.querySelector("[data-val]");
-		if (valEl) {
-			valEl.style.display = e.target.checked ? "inline-block" : "none";
-			if (e.target.checked) valEl.focus();
-			else valEl.value = "";
-		}
-	});
-	function collectChecklist() {
+	function wireTicks(box) {
+		box.addEventListener("change", function (e) {
+			if (!e.target.matches("[data-chk]")) return;
+			var row = e.target.closest(".ho-chk-row");
+			row.classList.toggle("is-checked", e.target.checked);
+			var valEl = row.querySelector("[data-val]");
+			if (valEl) {
+				valEl.style.display = e.target.checked ? "inline-block" : "none";
+				if (e.target.checked) valEl.focus();
+				else valEl.value = "";
+			}
+		});
+	}
+	wireTicks(chkBox);
+	wireTicks(attBox);
+	function collectTicks(box) {
 		var out = [], missing = null;
-		chkBox.querySelectorAll(".ho-chk-row").forEach(function (row) {
+		box.querySelectorAll(".ho-chk-row").forEach(function (row) {
 			var chk = row.querySelector("[data-chk]");
 			var valEl = row.querySelector("[data-val]");
 			var value = valEl ? valEl.value.trim() : "";
@@ -276,10 +326,14 @@
 			if (!p.is_own_fleet) {
 				ctx.innerHTML = '<span style="color:var(--red);font-weight:600">This vehicle belongs to an outside customer — handover inspections apply to own-fleet vehicles only.</span>';
 				chkBox.innerHTML = '<div class="muted">Not applicable for outside-customer vehicles.</div>';
+				attBox.innerHTML = '<div class="muted">Not applicable for outside-customer vehicles.</div>';
 				document.getElementById("ho-save").disabled = true;
 				return;
 			}
-			renderChecklist(p.checklist);
+			renderTicks(chkBox, p.checklist,
+				"No checklist items configured yet. Add them in Desk &rarr; Handover Checklist Item.");
+			renderTicks(attBox, p.attachments,
+				"No attachments configured yet. Add them in Desk &rarr; Handover Attachment Item.");
 			ctx.innerHTML = "<b>" + esc(p.model) + "</b> · Plate " + esc(p.plate) +
 				(p.current_driver && p.current_driver.driver_name ? " · Current driver: <b>" + esc(p.current_driver.driver_name) + "</b>" : "") +
 				(p.odometer ? " · Last odometer " + p.odometer.toLocaleString() + " km" : "");
@@ -328,6 +382,127 @@
 		var b = e.target.closest("[data-i]"); if (!b) return;
 		files.splice(+b.dataset.i, 1); renderFiles();
 	});
+
+	// ------------------------------------------------------ camera capture
+	// Live capture via getUserMedia (secure contexts: https and localhost). Where
+	// that is unavailable — plain-HTTP LAN access, or permission denied — we fall
+	// back to a file input with `capture`, which opens the device camera app.
+	var camOverlay = document.getElementById("ho-cam-modal");
+	var camVideo = document.getElementById("ho-cam-video");
+	var camShots = document.getElementById("ho-cam-shots");
+	var camFlip = document.getElementById("ho-cam-flip");
+	var camShoot = document.getElementById("ho-cam-shoot");
+	var camMsg = document.getElementById("ho-cam-msg");
+	var camSub = document.getElementById("ho-cam-sub");
+	var camFallback = document.getElementById("cam-fallback-input");
+	var camStream = null, camFacing = "environment", camShotNo = 0;
+
+	function camSupported() {
+		return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+	}
+	function camStop() {
+		if (camStream) { camStream.getTracks().forEach(function (t) { t.stop(); }); camStream = null; }
+		camVideo.srcObject = null;
+	}
+	function camClose() {
+		camStop();
+		camOverlay.classList.remove("is-open");
+	}
+	function camStart() {
+		camStop();
+		return navigator.mediaDevices.getUserMedia({
+			video: { facingMode: { ideal: camFacing }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+			audio: false
+		}).then(function (stream) {
+			camStream = stream;
+			camVideo.style.display = "";
+			camVideo.srcObject = stream;
+			return camVideo.play().catch(function () {});
+		});
+	}
+	function camFail(err) {
+		// Do NOT auto-click the fallback input here. getUserMedia rejects
+		// asynchronously, so by this point the user activation from the original
+		// click is spent and browsers silently refuse to open a file chooser.
+		// Keep the modal up, explain, and offer a button — that press carries the
+		// activation the chooser needs.
+		camStop();
+		camVideo.style.display = "none";
+		camFlip.style.display = "none";
+		camShoot.style.display = "none";
+		var reason = err && err.name === "NotAllowedError"
+			? "Camera access was blocked for this site."
+			: "No live camera here — a browser only grants one over HTTPS or on localhost.";
+		camSub.textContent = "Live preview unavailable";
+		camMsg.style.display = "";
+		camMsg.innerHTML = '<i class="fa-solid fa-camera-slash" style="font-size:24px;opacity:.7"></i><br>' +
+			esc(reason) +
+			'<br><button type="button" class="btn btn--primary btn--sm" id="ho-cam-native" style="margin-top:14px">' +
+			'<i class="fa-solid fa-camera"></i> Use device camera</button>';
+	}
+	// Delegated: the button only exists after a failure.
+	camMsg.addEventListener("click", function (e) {
+		if (!e.target.closest("#ho-cam-native")) return;
+		camClose();
+		camFallback.click();  // real user activation — the chooser opens
+	});
+	document.getElementById("take-photo").addEventListener("click", function () {
+		if (!camSupported()) { camFallback.click(); return; }
+		camShots.innerHTML = ""; camShotNo = 0;
+		// Reset from any previous failure before reopening.
+		camMsg.style.display = "none";
+		camMsg.innerHTML = "";
+		camVideo.style.display = "";
+		camShoot.style.display = "";
+		camSub.textContent = "Frame the vehicle and capture";
+		camOverlay.classList.add("is-open");
+		camStart().then(function () {
+			// Only worth offering the flip once we know there are two cameras.
+			if (navigator.mediaDevices.enumerateDevices) {
+				navigator.mediaDevices.enumerateDevices().then(function (ds) {
+					var cams = ds.filter(function (d) { return d.kind === "videoinput"; });
+					camFlip.style.display = cams.length > 1 ? "" : "none";
+				}).catch(function () {});
+			}
+		}).catch(camFail);
+	});
+	camFlip.addEventListener("click", function () {
+		camFacing = camFacing === "environment" ? "user" : "environment";
+		camStart().catch(camFail);
+	});
+	camOverlay.querySelectorAll("[data-cam-close]").forEach(function (b) {
+		b.addEventListener("click", camClose);
+	});
+	camOverlay.addEventListener("click", function (e) { if (e.target === camOverlay) camClose(); });
+	document.addEventListener("keydown", function (e) {
+		if (e.key === "Escape" && camOverlay.classList.contains("is-open")) camClose();
+	});
+	camShoot.addEventListener("click", function () {
+		if (!camStream) return;
+		var track = camStream.getVideoTracks()[0];
+		var settings = (track && track.getSettings && track.getSettings()) || {};
+		var w = camVideo.videoWidth || settings.width || 1280;
+		var h = camVideo.videoHeight || settings.height || 960;
+		var canvas = document.createElement("canvas");
+		canvas.width = w; canvas.height = h;
+		canvas.getContext("2d").drawImage(camVideo, 0, 0, w, h);
+		canvas.toBlob(function (blob) {
+			if (!blob) return;
+			camShotNo += 1;
+			var name = "handover-photo-" + Date.now() + "-" + camShotNo + ".jpg";
+			// A File (not a bare Blob) so it rides the same upload path as picked files.
+			files.push(new File([blob], name, { type: "image/jpeg" }));
+			renderFiles();
+			var img = document.createElement("img");
+			img.src = URL.createObjectURL(blob);
+			img.alt = name;
+			camShots.appendChild(img);
+		}, "image/jpeg", 0.9);
+	});
+	camFallback.addEventListener("change", function () {
+		addFiles(camFallback.files);
+		camFallback.value = "";
+	});
 	function uploadFile(f, docname) {
 		var fd = new FormData();
 		fd.append("file", f, f.name);
@@ -353,8 +528,10 @@
 		var odo = val("odometer");
 		if (!odo || !Number(odo)) { alert("Odometer reading is required."); return; }
 		if (!val("from_driver") && !val("to_driver")) { alert("Pick at least one driver (From and/or To)."); return; }
-		var chk = collectChecklist();
+		var chk = collectTicks(chkBox);
 		if (chk.missing) { alert('Please enter a value for the checklist item "' + chk.missing + '".'); return; }
+		var att = collectTicks(attBox);
+		if (att.missing) { alert('Please enter a value for the attachment "' + att.missing + '".'); return; }
 		var original = saveBtn.innerHTML;
 		saveBtn.disabled = true;
 		saveBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving…';
@@ -370,6 +547,7 @@
 			tyre_condition: val("tyre_condition"),
 			observations: val("observations"),
 			checklist: chk.rows,
+			attachments: att.rows,
 			damages: collectDamages()
 		}).then(function (res) {
 			if (!files.length) return res;

@@ -24,6 +24,11 @@
 	.jc-ac-empty { padding:8px 12px; font-size:12px; color:var(--muted,#7a8598); }
 </style>
 
+<!-- Rectification context: shown only when opened from a handover discrepancy -->
+<div class="card" id="jc-handover-banner" style="display:none;margin-bottom:14px">
+	<div class="card__body" id="jc-handover-note"></div>
+</div>
+
 <!-- progress tabs -->
 <div class="card"><div class="stepper" id="wizard-stepper">
 	{%- for s in steps %}{%- set n = loop.index %}
@@ -402,6 +407,45 @@
 	var jobNoInput = document.querySelector('[name="job_no"]');
 	if (jobNoInput) jobNoInput.readOnly = true;
 
+	// ---- Handover rectification hand-off (?handover=HND-…) ---------------
+	// Opened from a handover's "Create Job Card" button. The link is made as soon
+	// as the card exists (first save) — that is what flips the handover to
+	// Rectified and swaps the button for this card's id on the history page.
+	var handoverRef = qparam("handover");
+	var handoverLinked = false;
+	var hoBanner = document.getElementById('jc-handover-banner');
+	var hoNote = document.getElementById('jc-handover-note');
+	function backToVehicle() {
+		return "/a3-workshop/vehicle-history-detail?vehicle=" +
+			encodeURIComponent(qparam("vehicle")) + "#handovers";
+	}
+	function renderHandoverBanner(jobCard) {
+		if (!handoverRef) return;
+		hoBanner.style.display = "";
+		hoNote.innerHTML = jobCard
+			? '<i class="fa-solid fa-circle-check" style="color:var(--green)"></i> Job card <b>' + jobCard +
+			  '</b> is now the rectification for handover <b>' + handoverRef +
+			  '</b> — that handover is marked <b>Rectified</b>. ' +
+			  '<a href="' + backToVehicle() + '" style="color:var(--red);font-weight:600">Back to vehicle history</a>'
+			: '<i class="fa-solid fa-triangle-exclamation" style="color:var(--red)"></i> Repairing the new damage found at handover <b>' +
+			  handoverRef + '</b>. Saving this job card marks that handover <b>Rectified</b>. ' +
+			  '<a href="' + backToVehicle() + '" style="color:var(--red);font-weight:600">Cancel and go back</a>';
+	}
+	function linkHandover(jobCard) {
+		if (!handoverRef || handoverLinked || !jobCard) return;
+		handoverLinked = true;
+		callMethod("garagedesk.api.fleet.link_rectification_job_card", {
+			handover: handoverRef, job_card: jobCard
+		}).then(function () {
+			renderHandoverBanner(jobCard);
+		}).catch(function (err) {
+			handoverLinked = false; // let the next save retry
+			alert("Job card " + jobCard + " was saved, but could not be linked to handover " +
+				handoverRef + ": " + (err && err.message ? err.message : err));
+		});
+	}
+	renderHandoverBanner(null);
+
 	function loadJobCardOptions() {
 		return callMethod("garagedesk.api.front_office.get_job_card_options", {}).then(function (o) {
 			o = o || {};
@@ -533,6 +577,7 @@
 		}).then(function (res) {
 			jobCardName = res.name;
 			setVal("job_no", res.name); // Job Number appears once saved as draft
+			linkHandover(res.name);
 			if (advance && cur < TOTAL) goTo(cur + 1);
 			return res;
 		}).catch(function (err) {

@@ -37,9 +37,12 @@ website_route_rules = [
 # Includes in <head>
 # ------------------
 
-# include js, css files in header of desk.html
-# app_include_css = "/assets/a3_workshop_frontend/css/a3_workshop_frontend.css"
-# app_include_js = "/assets/a3_workshop_frontend/js/a3_workshop_frontend.js"
+# Desk only: a Workshop shortcut button next to the app logo in the navbar, so
+# back-office users can jump from ERP to the workshop portal. Plain (non-bundle)
+# asset paths are served straight from public/ via the sites/assets symlink, so
+# these need no `bench build`.
+app_include_css = "/assets/a3_workshop_frontend/css/workshop_navbar.css"
+app_include_js = "/assets/a3_workshop_frontend/js/workshop_navbar.js"
 
 # include js, css files in header of web template
 # web_include_css = "/assets/a3_workshop_frontend/css/a3_workshop_frontend.css"
