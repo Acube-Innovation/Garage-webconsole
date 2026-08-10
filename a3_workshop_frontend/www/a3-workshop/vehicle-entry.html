@@ -7,7 +7,19 @@
 	<div class="card__body"><form class="form-grid" id="vehicle-form">
 		<input type="hidden" name="customer_id">
 		{{ field("Plate Number","plate",required=True) }}
-		{{ field("Make / Model","model",required=True,placeholder="e.g. Toyota Fortuner") }}
+		{#- Make and Model are separate Link masters (Vehicle Make / Vehicle Model).
+		    Each input is a search box over the existing records with a "Create …"
+		    row when nothing matches; the hidden sibling carries the chosen value. -#}
+		<div class="field">
+			<label>Make <span class="req">*</span></label>
+			<input name="make_label" placeholder="Search make, e.g. Toyota" autocomplete="off">
+			<input type="hidden" name="make">
+		</div>
+		<div class="field">
+			<label>Model <span class="req">*</span></label>
+			<input name="model_label" placeholder="Pick a make first" autocomplete="off">
+			<input type="hidden" name="model">
+		</div>
 		{{ field("Chassis Number","chassis") }}
 		{{ field("Engine Number","engine") }}
 		{{ field("Odometer Reading","odo",type="number",placeholder="0") }}
@@ -47,6 +59,9 @@
 	.jc-ac-label { font-weight:600; font-size:13px; }
 	.jc-ac-sub { font-size:12px; color:var(--muted,#7a8598); }
 	.jc-ac-empty { padding:8px 12px; font-size:12px; color:var(--muted,#7a8598); }
+	/* "Create …" row — separated and tinted so it reads as an action, not a match. */
+	.jc-ac-item.is-create { border-top:1px solid var(--border,#e3e8ef); color:var(--red,#ec2e5d); }
+	.jc-ac-item.is-create .jc-ac-label { display:flex; align-items:center; gap:7px; font-weight:600; }
 	.file-chip { display:flex; align-items:center; gap:10px; padding:8px 12px; border:1px solid var(--border);
 		border-radius:var(--radius-sm,8px); background:var(--surface); margin-bottom:8px; font-size:13px; }
 	.file-chip i.type { color:var(--muted); }
@@ -93,9 +108,19 @@
 	function val(name) { var el = document.querySelector('[name="' + name + '"]'); return el ? el.value.trim() : ""; }
 	function setVal(name, v) { var el = document.querySelector('[name="' + name + '"]'); if (el) el.value = v || ""; }
 
-	// ---- Customer autocomplete (resolves the free-text field to a Customer id) ---
-	function attachAutocomplete(input, source, onSelect) {
+	function esc(s) {
+		return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+			return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+		});
+	}
+
+	// ---- Shared autocomplete ---------------------------------------------------
+	// A row carrying `action` is a command, not a value: picking it fires onSelect
+	// but never writes its (HTML) label into the input. `opts.onInput` lets each
+	// field clear its own hidden companion as the user types.
+	function attachAutocomplete(input, source, onSelect, opts) {
 		if (!input) return;
+		opts = opts || {};
 		var wrap = input.parentNode;
 		wrap.style.position = "relative";
 		var list = document.createElement("div");
@@ -103,31 +128,39 @@
 		wrap.appendChild(list);
 		var items = [], active = -1, timer = null;
 		function hide() { list.style.display = "none"; active = -1; }
+		function pick(it) {
+			if (!it) return;
+			if (!it.action) input.value = it.label;
+			hide();
+			if (onSelect) onSelect(it);
+		}
 		function render(rows) {
 			items = rows || [];
 			if (!items.length) { list.innerHTML = '<div class="jc-ac-empty">No matches</div>'; list.style.display = "block"; return; }
 			list.innerHTML = items.map(function (it, i) {
-				return '<div class="jc-ac-item" data-i="' + i + '"><div class="jc-ac-label">' + it.label + '</div>' +
+				return '<div class="jc-ac-item' + (it.action ? ' is-create' : '') + '" data-i="' + i + '">' +
+					'<div class="jc-ac-label">' + it.label + '</div>' +
 					(it.sub ? '<div class="jc-ac-sub">' + it.sub + '</div>' : '') + '</div>';
 			}).join("");
 			active = -1; list.style.display = "block";
 		}
 		function run() { Promise.resolve(source(input.value.trim())).then(render).catch(hide); }
-		input.addEventListener("input", function () { setVal("customer_id", ""); clearTimeout(timer); timer = setTimeout(run, 180); });
+		input.addEventListener("input", function () {
+			if (opts.onInput) opts.onInput();
+			clearTimeout(timer); timer = setTimeout(run, 180);
+		});
 		input.addEventListener("focus", run);
 		input.addEventListener("blur", function () { setTimeout(hide, 150); });
 		list.addEventListener("mousedown", function (e) {
 			var el = e.target.closest("[data-i]"); if (!el) return;
 			e.preventDefault();
-			var it = items[+el.dataset.i];
-			input.value = it.label; hide();
-			if (onSelect) onSelect(it);
+			pick(items[+el.dataset.i]);
 		});
 		input.addEventListener("keydown", function (e) {
 			if (list.style.display === "none" || !items.length) return;
 			if (e.key === "ArrowDown") active = Math.min(items.length - 1, active + 1);
 			else if (e.key === "ArrowUp") active = Math.max(0, active - 1);
-			else if (e.key === "Enter" && active >= 0) { e.preventDefault(); var it = items[active]; input.value = it.label; hide(); if (onSelect) onSelect(it); return; }
+			else if (e.key === "Enter" && active >= 0) { e.preventDefault(); pick(items[active]); return; }
 			else if (e.key === "Escape") { hide(); return; }
 			else return;
 			e.preventDefault();
@@ -138,7 +171,72 @@
 		return callMethod("garagedesk.api.front_office.list_customers", { search: q, limit: 10 }).then(function (rows) {
 			return (rows || []).map(function (c) { return { label: c.customer_name || c.name, sub: c.mobile_no || "", value: c.name }; });
 		});
-	}, function (it) { setVal("customer_id", it.value); });
+	}, function (it) { setVal("customer_id", it.value); },
+	   { onInput: function () { setVal("customer_id", ""); } });
+
+	// ---- Make / Model ----------------------------------------------------------
+	// Both read the Vehicle Make / Vehicle Model masters. Matching is
+	// case-insensitive server-side (the DB collation is utf8mb4_unicode_ci), and
+	// so is creation: typing "nissan" when "Nissan" exists selects the existing
+	// record rather than adding a second one.
+	var makeLabel = document.querySelector('[name="make_label"]');
+	var modelLabel = document.querySelector('[name="model_label"]');
+
+	function createRow(typed, sub) {
+		return {
+			action: "create", typed: typed, sub: sub,
+			label: '<i class="fa-solid fa-plus"></i> Create &ldquo;' + esc(typed) + '&rdquo;'
+		};
+	}
+	// An exact (case-insensitive) hit means it already exists — don't offer to add it.
+	function needsCreate(typed, rows) {
+		if (!typed) return false;
+		return !rows.some(function (r) { return String(r.label).toLowerCase() === typed.toLowerCase(); });
+	}
+	function setModelEnabled(on) {
+		modelLabel.placeholder = on ? "Search model, e.g. Patrol" : "Pick a make first";
+	}
+	function clearModel() { setVal("model", ""); modelLabel.value = ""; }
+
+	attachAutocomplete(makeLabel, function (q) {
+		return callMethod("garagedesk.api.vehicle.search_vehicle_makes", { search: q, limit: 15 })
+			.then(function (rows) {
+				var out = (rows || []).map(function (m) { return { label: m.make_name || m.name, value: m.name }; });
+				var typed = (q || "").trim();
+				if (needsCreate(typed, out)) out.push(createRow(typed, "Adds a new vehicle make"));
+				return out;
+			});
+	}, function (it) {
+		if (it.action !== "create") { setVal("make", it.value); setModelEnabled(true); clearModel(); return; }
+		callMethod("garagedesk.api.vehicle.create_vehicle_make", { make_name: it.typed })
+			.then(function (res) {
+				// Echo back the canonical spelling — "nissan" resolves to "Nissan".
+				setVal("make", res.name); makeLabel.value = res.make_name || res.name;
+				setModelEnabled(true); clearModel();
+			})
+			.catch(function (err) { alert("Could not add make: " + (err && err.message ? err.message : err)); });
+	}, { onInput: function () { setVal("make", ""); setModelEnabled(false); clearModel(); } });
+
+	attachAutocomplete(modelLabel, function (q) {
+		var make = val("make");
+		if (!make) return [{ label: "Pick a make first", action: "noop" }];
+		return callMethod("garagedesk.api.vehicle.search_vehicle_models", { make: make, search: q, limit: 15 })
+			.then(function (rows) {
+				var out = (rows || []).map(function (m) { return { label: m.model_name || m.name, value: m.model_name || m.name }; });
+				var typed = (q || "").trim();
+				if (needsCreate(typed, out)) out.push(createRow(typed, "Adds it under " + esc(make)));
+				return out;
+			});
+	}, function (it) {
+		if (it.action === "noop") return;
+		if (it.action !== "create") { setVal("model", it.value); return; }
+		callMethod("garagedesk.api.vehicle.create_vehicle_model", { make: val("make"), model_name: it.typed })
+			.then(function (res) {
+				setVal("model", res.model_name || res.name);
+				modelLabel.value = res.model_name || res.name;
+			})
+			.catch(function (err) { alert("Could not add model: " + (err && err.message ? err.message : err)); });
+	}, { onInput: function () { setVal("model", ""); } });
 
 	// ---- File selection (staged in-browser; uploaded after the Vehicle is created) ---
 	var files = [];
@@ -196,12 +294,16 @@
 		if (el) el.style.borderColor = on ? "var(--red)" : "";
 	}
 	saveBtn.addEventListener("click", function () {
-		markInvalid("plate", false); markInvalid("model", false);
-		var plate = val("plate"), model = val("model");
-		if (!plate || !model) {
+		markInvalid("plate", false); markInvalid("make_label", false); markInvalid("model_label", false);
+		var plate = val("plate"), make = val("make"), model = val("model");
+		// The hidden values are only set by picking (or creating) from the list, so
+		// half-typed text that was never chosen correctly counts as missing.
+		if (!plate || !make || !model) {
 			if (!plate) markInvalid("plate", true);
-			if (!model) markInvalid("model", true);
-			alert("Please fill the required fields: Plate Number and Make / Model.");
+			if (!make) markInvalid("make_label", true);
+			if (!model) markInvalid("model_label", true);
+			alert("Please fill the required fields: Plate Number, Make and Model.\n\n" +
+				"Pick Make and Model from the list — or use the “Create” option if they are not there yet.");
 			return;
 		}
 		var original = saveBtn.innerHTML;
@@ -210,6 +312,7 @@
 
 		callMethod("garagedesk.api.vehicle.create_vehicle", {
 			plate: plate,
+			make: make,
 			model: model,
 			chassis: val("chassis"),
 			engine: val("engine"),
