@@ -2,38 +2,80 @@
 {% from "templates/macros/workshop.html" import badge %}
 
 {% block page_content %}
-{%- set jc = (card.name if card else job_card_id) or "JC-2026-06-18-0011" -%}
+{#- Everything on this page comes from the saved Workshop Job Card, assembled by
+    www/a3-workshop/job-card/detail.py -> garagedesk.api.front_office.get_job_card_detail:
+    service_items (+ the ERPNext Task each row spawned), complaints, the three
+    billing kit tables, billing_tasks, readings and vehicle_photos.
+
+    `card` is None when the ?id is missing or names no job card — the page then
+    renders a not-found state. No id, customer, vehicle, status, task, technician
+    or amount is ever fabricated here, and every amount arrives pre-formatted in
+    the company's own currency (front_office._money), never with a hardcoded symbol.
+
+    Dropped from the earlier version, because nothing in the doctype backs them:
+    the QC checklist checkboxes (All Parts Fitted / Road Test / Cleanliness),
+    the Primary / Assistant technician roles, the split "Estimated Labor vs
+    Estimated Parts" figures, and the Update QC / Mark Ready buttons, which
+    persisted nothing. -#}
+
+{%- if not card %}
 <div class="card">
-	<div class="card__body row-between">
-		<div>
-			<div class="muted">Job Card</div>
-			<h2>{{ jc }}</h2>
-			<div class="muted" style="margin-top:4px">
-				{%- if card %}{{ card.customer }} · {{ card.vehicle }}{%- else %}DAAT LOGISTICS L.L.C · Toyota Fortuner · A-12345{%- endif %}</div>
+	<div class="card__body">
+		<div class="empty" style="padding:48px 24px">
+			<div style="font-size:30px;color:var(--muted)"><i class="fa-regular fa-folder-open"></i></div>
+			<div style="font-weight:800;margin-top:10px">Job card not found</div>
+			<div class="muted" style="margin-top:6px">
+				{%- if job_card_id %}No job card <b>{{ job_card_id }}</b> exists on this site.
+				{%- else %}This page needs a job card to show — open it from the job card list.{% endif %}
+			</div>
+			<div class="row" style="gap:10px;justify-content:center;margin-top:16px">
+				<a class="btn btn--primary" href="/a3-workshop/job-cards"><i class="fa-solid fa-clipboard-list"></i> Back to Job Cards</a>
+				<a class="btn btn--outline" href="/a3-workshop/job-card/new"><i class="fa-solid fa-plus"></i> Create Job Card</a>
+			</div>
 		</div>
-		<div class="stack" style="align-items:flex-end;gap:8px">
-			{%- if card %}{{ badge(card.status, card.status_badge) }}{%- else %}{{ badge("QC Pending","badge--pending") }}{%- endif %}
-			<div class="row">{%- if card %}<a class="btn btn--outline btn--sm" href="/a3-workshop/workshop-print?jobcard={{ card.name }}" target="_blank" rel="noopener"><i class="fa-solid fa-print"></i> Print</a>{%- endif %}<a class="btn btn--purple btn--sm">Update QC</a><a class="btn btn--primary btn--sm">Mark Ready</a></div>
+	</div>
+</div>
+{%- else %}
+
+<div class="card">
+	<div class="card__body row-between" style="align-items:flex-start;gap:16px">
+		<div style="min-width:0">
+			<div class="muted">Job Card</div>
+			<h2>{{ card.name }}</h2>
+			<div class="muted" style="margin-top:4px">
+				{{ card.customer_name or "No customer on this card" }}
+				{%- if card.vehicle_label %} · {{ card.vehicle_label }}{% endif %}
+				{%- if card.mobile_no %} · {{ card.mobile_no }}{% endif %}
+			</div>
+		</div>
+		<div class="stack" style="align-items:flex-end;gap:8px;flex-shrink:0">
+			{{ badge(card.status, card.status_variant) }}
+			<div class="row" style="gap:8px">
+				<a class="btn btn--outline btn--sm" href="/a3-workshop/workshop-print?jobcard={{ card.name }}" target="_blank" rel="noopener"><i class="fa-solid fa-print"></i> Print</a>
+				<a class="btn btn--primary btn--sm" href="/a3-workshop/job-card/new?id={{ card.name }}"><i class="fa-solid fa-pen"></i> Edit Job Card</a>
+			</div>
 		</div>
 	</div>
 </div>
 
-{%- if card %}
-<!-- Readings & Body Condition — regenerated from the saved job card -->
 <div class="card" style="margin-top:18px">
 	<div class="card__head"><h3>Vehicle Readings &amp; Body Condition</h3><span class="muted">Inspection</span></div>
 	<div class="card__body">
 		{%- set r = card.readings %}
+		{%- if r.has_any %}
 		<div class="readings-grid">
-			<div class="kv-row"><span class="k">Odometer</span><b>{{ r.odometer or "—" }} {{ "km" if r.odometer else "" }}</b></div>
-			<div class="kv-row"><span class="k">Next Service</span><b>{{ r.next_km or "—" }} {{ "km" if r.next_km else "" }}</b></div>
-			<div class="kv-row"><span class="k">Fuel Level</span><b>{{ r.fuel }}%</b></div>
-			<div class="kv-row"><span class="k">Oil Level</span><b>{{ r.oil }}%</b></div>
+			<div class="kv-row"><span class="k">Odometer</span><b>{% if r.odometer %}{{ r.odometer }} km{% else %}—{% endif %}</b></div>
+			<div class="kv-row"><span class="k">Next Service</span><b>{% if r.next_km %}{{ r.next_km }} km{% else %}—{% endif %}</b></div>
+			<div class="kv-row"><span class="k">Fuel Level</span><b>{% if r.fuel is not none %}{{ r.fuel }}%{% else %}—{% endif %}</b></div>
+			<div class="kv-row"><span class="k">Oil Level</span><b>{% if r.oil is not none %}{{ r.oil }}%{% else %}—{% endif %}</b></div>
 			<div class="kv-row"><span class="k">Coolant</span><b>{{ r.coolant or "—" }}</b></div>
-			<div class="kv-row"><span class="k">Battery</span><b>{{ r.battery or "—" }} {{ "V" if r.battery else "" }}</b></div>
+			<div class="kv-row"><span class="k">Battery</span><b>{% if r.battery %}{{ r.battery }} V{% else %}—{% endif %}</b></div>
 			<div class="kv-row"><span class="k">Tyre Condition</span><b>{{ r.tyre or "—" }}</b></div>
 			<div class="kv-row"><span class="k">Spare Tyre</span><b>{{ "Present" if r.spare else "—" }}</b></div>
 		</div>
+		{%- else %}
+		<div class="empty" style="padding:20px">No readings were captured on this job card.</div>
+		{%- endif %}
 
 		{%- if card.body_condition %}
 		<div class="fieldset-title">Body Condition — scratches / dents</div>
@@ -58,7 +100,7 @@
 		<div class="fieldset-title">Vehicle Photos</div>
 		<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:12px">
 			{%- for p in card.photos %}
-			<a href="{{ p.image }}" target="_blank" title="{{ p.caption }}">
+			<a href="{{ p.image }}" target="_blank" rel="noopener" title="{{ p.caption }}">
 				<img src="{{ p.image }}" alt="{{ p.caption }}" style="width:100%;height:90px;object-fit:cover;border-radius:8px;border:1px solid var(--border)">
 			</a>
 			{%- endfor %}
@@ -66,55 +108,156 @@
 		{%- endif %}
 	</div>
 </div>
-{%- endif %}
 
 <div class="page-grid-2" style="margin-top:18px">
 	<div class="stack">
 		<div class="card">
-			<div class="card__head"><h3>Service Items / Tasks</h3></div>
+			<div class="card__head"><h3>Service Jobs</h3><span class="muted">{{ card.services|length }} on this card</span></div>
 			<div class="card__body" style="padding:0">
 				<table class="table">
-					<thead><tr><th>Task</th><th>Technician</th><th>Status</th></tr></thead>
+					<thead><tr><th>Job</th><th>Technician</th><th>Hours</th><th>Task Status</th></tr></thead>
 					<tbody>
-						<tr><td>Engine Oil Change</td><td>Arun Kumar</td><td>{{ badge("Done","badge--success") }}</td></tr>
-						<tr><td>Brake Pad Replacement</td><td>Rajesh Nair</td><td>{{ badge("In Progress","badge--progress") }}</td></tr>
-						<tr><td>Wheel Alignment</td><td>—</td><td>{{ badge("Pending","badge--pending") }}</td></tr>
+						{%- for s in card.services %}
+						<tr>
+							<td>
+								<div style="font-weight:600">{{ s.service or "—" }}</div>
+								{%- if s.jobtype %}<div class="muted" style="font-size:11px">{{ s.jobtype }}</div>{% endif %}
+								{%- if s.description %}<div class="muted" style="font-size:11px">{{ s.description }}</div>{% endif %}
+							</td>
+							<td>{{ s.technician or "—" }}</td>
+							<td>{% if s.hours_display %}{{ s.hours_display }} h{% else %}—{% endif %}</td>
+							<td>
+								{%- if s.task_status %}{{ badge(s.task_status, s.task_variant) }}
+								{%- elif s.task %}<span class="muted">{{ s.task }}</span>
+								{%- else %}<span class="muted">No task created</span>{% endif %}
+							</td>
+						</tr>
+						{%- else %}
+						<tr><td colspan="4" class="empty">No service jobs on this card yet. Add them in the job card's <b>Service Jobs</b> tab.</td></tr>
+						{%- endfor %}
 					</tbody>
 				</table>
 			</div>
 		</div>
+
 		<div class="card">
-			<div class="card__head"><h3>Quality Check</h3></div>
-			<div class="card__body stack">
-				<label><input type="checkbox" checked> All Parts Fitted</label>
-				<label><input type="checkbox"> Road Test</label>
-				<label><input type="checkbox"> Cleanliness</label>
+			<div class="card__head"><h3>Complaints / Check-Up</h3></div>
+			<div class="card__body" style="padding:0">
+				<table class="table">
+					<thead><tr><th>Complaint</th><th>Reported By</th><th>Technician</th><th>Severity</th></tr></thead>
+					<tbody>
+						{%- for c in card.complaints %}
+						<tr>
+							<td>
+								<div>{{ c.complaint or "—" }}</div>
+								{%- if c.notes %}<div class="muted" style="font-size:11px">{{ c.notes }}</div>{% endif %}
+							</td>
+							<td>{{ c.reported_by or "—" }}</td>
+							<td>{{ c.technician or "—" }}</td>
+							<td>{% if c.severity %}{{ badge(c.severity, c.severity_variant) }}{% else %}<span class="muted">—</span>{% endif %}</td>
+						</tr>
+						{%- else %}
+						<tr><td colspan="4" class="empty">No complaints recorded on this job card.</td></tr>
+						{%- endfor %}
+					</tbody>
+				</table>
+			</div>
+		</div>
+
+		<div class="card">
+			<div class="card__head"><h3>Completed Tasks</h3><span class="muted">Billing ledger</span></div>
+			<div class="card__body" style="padding:0">
+				<table class="table">
+					<thead><tr><th>Task</th><th>Technician</th><th>Hours</th><th>Completed On</th></tr></thead>
+					<tbody>
+						{%- for t in card.billing.tasks %}
+						<tr>
+							<td>{{ t.subject or "—" }}</td>
+							<td>{{ t.technician or "—" }}</td>
+							<td>{% if t.hours_display %}{{ t.hours_display }} h{% else %}—{% endif %}</td>
+							<td>{{ t.completed_on or "—" }}</td>
+						</tr>
+						{%- else %}
+						<tr><td colspan="4" class="empty">No task on this card has been completed yet — a task lands here the moment it is marked Completed.</td></tr>
+						{%- endfor %}
+					</tbody>
+				</table>
 			</div>
 		</div>
 	</div>
+
 	<div class="stack">
 		<div class="card">
 			<div class="card__head"><h3>Technician Assignment</h3></div>
 			<div class="card__body stack">
-				<div class="row-between"><span class="muted">Primary</span><b>Arun Kumar</b></div>
-				<div class="row-between"><span class="muted">Assistant</span><b>Rajesh Nair</b></div>
+				{%- for t in card.technicians %}
+				<div class="row-between">
+					<span>{{ t.technician }}</span>
+					<b>{{ t.jobs }} job{{ "" if t.jobs == 1 else "s" }}{% if t.hours %} · {{ t.hours_display }} h{% endif %}</b>
+				</div>
+				{%- else %}
+				<div class="empty" style="padding:16px">No technician assigned to any service job yet.</div>
+				{%- endfor %}
 			</div>
 		</div>
+
 		<div class="card">
-			<div class="card__head"><h3>Cost &amp; Estimate Summary</h3></div>
+			<div class="card__head"><h3>Cost Summary</h3><span class="muted">Kit for billing</span></div>
 			<div class="card__body stack">
-				<div class="row-between"><span class="muted">Estimated Labor</span><span>AED 600.00</span></div>
-				<div class="row-between"><span class="muted">Estimated Parts</span><span>AED 938.46</span></div>
-				<div class="row-between" style="font-weight:800"><span>Total</span><span style="color:var(--red)">AED 1538.46</span></div>
+				{%- if card.billing.has_costs %}
+				<div class="row-between"><span class="muted">Labour ({{ card.billing.labour_lines }} line{{ "" if card.billing.labour_lines == 1 else "s" }})</span><span>{{ card.billing.labour_total }}</span></div>
+				<div class="row-between"><span class="muted">Parts ({{ card.billing.parts_lines }} line{{ "" if card.billing.parts_lines == 1 else "s" }})</span><span>{{ card.billing.parts_total }}</span></div>
+				<div class="row-between"><span class="muted">Sublet ({{ card.billing.sublet_lines }} line{{ "" if card.billing.sublet_lines == 1 else "s" }})</span><span>{{ card.billing.sublet_total }}</span></div>
+				<div class="row-between" style="font-weight:800"><span>Total (pre-tax)</span><span style="color:var(--red)">{{ card.billing.total }}</span></div>
+				{%- else %}
+				<div class="empty" style="padding:16px">Nothing costed yet — labour, parts and sublet lines appear here from the job card's <b>Billing</b> tab.</div>
+				{%- endif %}
+				{%- if card.estimate %}
+				<div class="row-between" style="border-top:1px solid var(--border);padding-top:10px">
+					<span class="muted">Estimate {{ card.estimate.name }}</span>
+					<span>{{ card.estimate.total }} {{ badge("Draft" if card.estimate.draft else "Submitted", "badge--soft" if card.estimate.draft else "badge--success") }}</span>
+				</div>
+				{%- endif %}
+				{%- if card.billing.sales_order %}
+				<div class="row-between"><span class="muted">Sales Order</span><b>{{ card.billing.sales_order }}</b></div>
+				{%- endif %}
 			</div>
 		</div>
+
 		<div class="card">
-			<div class="card__head"><h3>Delivery</h3></div>
+			<div class="card__head"><h3>Quality &amp; Approvals</h3></div>
 			<div class="card__body stack">
-				<div class="row-between"><span class="muted">Promised</span><b>20 Jun 2026 · 5:00 PM</b></div>
-				{{ badge("Ready for Billing","badge--navy") }}
+				{%- set q = card.qc %}
+				<div class="row-between"><span class="muted">QC</span>{{ badge("Passed", "badge--success") if q.qc_passed else badge("Not passed", "badge--soft") }}</div>
+				<div class="row-between"><span class="muted">DVI Gate</span>
+					{%- if not q.dvi_gate_required %}<span class="muted">Not required</span>
+					{%- elif q.dvi_gate_status %}{{ badge(q.dvi_gate_status, "badge--success" if q.dvi_gate_status == "Passed" else ("badge--danger" if q.dvi_gate_status == "Failed" else "badge--pending")) }}
+					{%- else %}<span class="muted">—</span>{% endif %}
+				</div>
+				<div class="row-between"><span class="muted">Approval</span>
+					{%- if not q.approval_required %}<span class="muted">Not required</span>
+					{%- elif q.approval_status %}{{ badge(q.approval_status, "badge--success" if q.approval_status == "Approved" else ("badge--danger" if q.approval_status == "Rejected" else "badge--pending")) }}
+					{%- else %}<span class="muted">—</span>{% endif %}
+				</div>
+				<div class="row-between"><span class="muted">Fleet PO Verified</span>{{ badge("Yes", "badge--success") if q.fleet_po_verified else badge("No", "badge--soft") }}</div>
+				{%- if q.on_hold_reason %}
+				<div class="kv-row"><span class="k">On Hold Reason</span><b>{{ q.on_hold_reason }}</b></div>
+				{%- endif %}
+			</div>
+		</div>
+
+		<div class="card">
+			<div class="card__head"><h3>Booking &amp; Delivery</h3></div>
+			<div class="card__body stack">
+				<div class="row-between"><span class="muted">Booked</span><b>{{ card.booking_date or "—" }}</b></div>
+				<div class="row-between"><span class="muted">Promised Delivery</span><b>{{ card.promised_delivery or "Not set" }}</b></div>
+				{%- if card.booking_channel %}<div class="row-between"><span class="muted">Channel</span><b>{{ card.booking_channel }}</b></div>{% endif %}
+				<div class="row-between"><span class="muted">Service Advisor</span><b>{{ card.service_advisor or "—" }}</b></div>
+				{%- if card.branch %}<div class="row-between"><span class="muted">Branch</span><b>{{ card.branch }}</b></div>{% endif %}
+				{%- if card.project_booking %}<div class="row-between"><span class="muted">Project Booking</span>{{ badge("Yes", "badge--navy") }}</div>{% endif %}
 			</div>
 		</div>
 	</div>
 </div>
+{%- endif %}
 {% endblock %}

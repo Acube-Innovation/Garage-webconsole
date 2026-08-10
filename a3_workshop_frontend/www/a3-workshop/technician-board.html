@@ -1,24 +1,174 @@
 {% extends "templates/workshop_base.html" %}
-{% from "templates/macros/workshop.html" import badge %}
+{% from "templates/macros/workshop.html" import badge, statcard %}
 
 {% block page_content %}
-{%- set tasks = [
-  {"jc":"JC-2026-06-18-0011","v":"Toyota Fortuner","task":"Brake Pad Replacement","pr":70,"qc":"QC Pending","qv":"badge--pending"},
-  {"jc":"JC-2026-06-18-0010","v":"Nissan Patrol","task":"Accident bodywork","pr":40,"qc":"In Progress","qv":"badge--progress"},
-  {"jc":"JC-2026-06-18-0007","v":"Mitsubishi Canter","task":"Engine overhaul","pr":100,"qc":"QC Passed","qv":"badge--success"}
-] -%}
-<div class="type-grid" style="grid-template-columns:repeat(3,1fr)">
-	{%- for t in tasks %}
-	<div class="card"><div class="card__body">
-		<div class="row-between"><b>{{ t.jc }}</b>{{ badge(t.qc, t.qv) }}</div>
-		<div class="muted" style="margin:6px 0"><i class="fa-solid fa-car"></i> {{ t.v }}</div>
-		<div style="font-weight:600">{{ t.task }}</div>
-		<div style="height:8px;background:var(--bg);border-radius:6px;margin-top:12px;overflow:hidden">
-			<div style="height:100%;width:{{ t.pr }}%;background:var(--red)"></div>
+<script>window.csrf_token = "{{ frappe.session.csrf_token }}";</script>
+
+<div class="toolbar">
+	<div class="muted">
+		{%- if me %}
+		<i class="fa-solid fa-user-gear"></i> Assignments for <b>{{ me.employee_name }}</b> ({{ me.name }})
+		{%- else %}
+		<i class="fa-solid fa-users-gear"></i> No Employee is linked to <b>{{ frappe.session.user }}</b> — showing every technician's open work
+		{%- endif %}
+	</div>
+	<div class="toolbar__right">
+		<a class="btn btn--outline btn--sm" href="/a3-workshop/job-cards"><i class="fa-solid fa-clipboard-list"></i> Job Cards</a>
+	</div>
+</div>
+
+<div class="tc-stats">
+	{{ statcard("Open Tasks", totals.tasks, "stat-card--sm", "Assigned service lines") }}
+	{{ statcard("Job Cards", totals.job_cards, "stat-card--sm", "Cards on the floor") }}
+	{{ statcard("Hours Assigned", totals.hours, "stat-card--sm", "From service lines") }}
+	{%- if me %}
+	{{ statcard("Avg. Progress", totals.avg ~ "%", "stat-card--sm", totals.done ~ " of " ~ totals.tracked ~ " at 100%") }}
+	{%- else %}
+	{{ statcard("Technicians Busy", totals.technicians, "stat-card--sm", "With open work") }}
+	{%- endif %}
+</div>
+
+{%- if groups %}
+<div class="stack">
+	{%- for g in groups %}
+	<div class="card">
+		<div class="card__head">
+			<h3><i class="fa-solid fa-user-gear"></i> {{ g.technician_name }}</h3>
+			<div class="muted">{{ g.count }} open task{{ "" if g.count == 1 else "s" }} · {{ g.hours }} h · {{ g.done }} at 100%</div>
 		</div>
-		<div class="muted" style="font-size:12px;margin-top:6px">{{ t.pr }}% complete</div>
-		<a class="btn btn--primary btn--sm" style="margin-top:12px;width:100%;justify-content:center">Update Progress</a>
-	</div></div>
+		<div class="card__body">
+			<div class="type-grid" style="grid-template-columns:repeat(auto-fill,minmax(280px,1fr))">
+				{%- for t in g["rows"] %}
+				<div class="card tb-card"><div class="card__body">
+					<div class="row-between"><b>{{ t.job_card }}</b>{{ badge(t.qc, t.qc_variant) }}</div>
+					<div class="muted" style="margin:6px 0"><i class="fa-solid fa-car"></i> {{ t.vehicle or "No vehicle on card" }}</div>
+					<div style="font-weight:600">{{ t.label }}</div>
+					<div class="muted" style="font-size:12px;margin-top:4px">
+						{{ t.customer or "No customer" }}{% if t.due %} · due {{ t.due }}{% endif %}{% if t.hours %} · {{ t.hours }} h{% endif %}
+					</div>
+
+					{%- if t.tracked %}
+					<div class="bar" style="margin-top:12px"><span style="width:{{ t.progress }}%"></span></div>
+					<div class="row-between" style="margin-top:6px">
+						<span class="muted" style="font-size:12px"><span class="tb-pct">{{ t.progress }}</span>% complete</span>
+						{{ badge(t.task_status or "No status", t.task_badge) }}
+					</div>
+					{%- else %}
+					<div class="row-between" style="margin-top:12px">
+						<span class="muted" style="font-size:12px">No task linked — progress not tracked</span>
+						{{ badge(t.jc_status or "Draft", t.jc_badge) }}
+					</div>
+					{%- endif %}
+
+					{%- if t.dvi %}
+					<div class="muted" style="font-size:12px;margin-top:4px">DVI gate: {{ t.dvi }}</div>
+					{%- endif %}
+
+					<div class="row-between" style="margin-top:12px">
+						<a class="btn btn--outline btn--sm" href="/a3-workshop/job-card/detail?id={{ t.job_card }}"><i class="fa-solid fa-eye"></i> Job Card</a>
+						{%- if can_update and t.tracked %}
+						<span style="display:inline-flex;gap:6px;align-items:center" data-task="{{ t.task }}">
+							<select class="tb-progress" style="padding:6px 8px;border-radius:9px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:12px">
+								{%- for p in range(0, 101, 10) %}
+								<option value="{{ p }}"{% if p == t.progress %} selected{% endif %}>{{ p }}%</option>
+								{%- endfor %}
+							</select>
+							<button type="button" class="btn btn--primary btn--sm tb-save"><i class="fa-solid fa-floppy-disk"></i> Update</button>
+						</span>
+						{%- endif %}
+					</div>
+					<div class="muted tb-msg" style="font-size:12px;margin-top:6px"></div>
+				</div></div>
+				{%- endfor %}
+			</div>
+		</div>
+	</div>
 	{%- endfor %}
 </div>
+{%- else %}
+<div class="card"><div class="card__body">
+	<div class="empty">
+		<i class="fa-solid fa-screwdriver-wrench" style="font-size:30px;display:block;margin-bottom:12px"></i>
+		<b>No open job-card tasks{% if me %} assigned to you{% endif %}.</b>
+		<div style="margin-top:6px">A card appears here as soon as a Workshop Job Card service line is assigned to a technician.</div>
+		<a class="btn btn--outline btn--sm" style="margin-top:14px" href="/a3-workshop/job-card/new"><i class="fa-solid fa-plus"></i> Create Job Card</a>
+	</div>
+</div></div>
+{%- endif %}
+
+{%- if idle %}
+<div class="card" style="margin-top:18px">
+	<div class="card__head">
+		<h3><i class="fa-solid fa-user-clock"></i> Available</h3>
+		<div class="muted">{{ idle|length }} active employee{{ "" if idle|length == 1 else "s" }} with no open assignments</div>
+	</div>
+	<div class="card__body">
+		<div style="display:flex;flex-wrap:wrap;gap:8px">
+			{%- for e in idle %}
+			<span class="badge badge--soft">{{ e.employee_name }}</span>
+			{%- endfor %}
+		</div>
+	</div>
+</div>
+{%- endif %}
+
+<script>
+(function () {
+	"use strict";
+
+	function callMethod(method, args) {
+		return fetch("/api/method/" + method, {
+			method: "POST",
+			headers: { "Content-Type": "application/json", "X-Frappe-CSRF-Token": window.csrf_token || "", "Accept": "application/json" },
+			credentials: "same-origin",
+			body: JSON.stringify(args || {})
+		}).then(function (r) {
+			return r.json().then(function (data) {
+				if (!r.ok) throw new Error(readError(data) || r.statusText);
+				return data.message;
+			});
+		});
+	}
+
+	// Frappe returns errors as a JSON array of JSON strings in _server_messages.
+	function readError(data) {
+		var raw = data && data._server_messages;
+		if (!raw) return (data && data.exception) || "";
+		try {
+			return JSON.parse(raw).map(function (m) {
+				try { return JSON.parse(m).message; } catch (e) { return m; }
+			}).join(" ").replace(/<[^>]*>/g, "");
+		} catch (e) { return String(raw); }
+	}
+
+	// "Update Progress" writes the linked ERPNext Task's `progress` through core
+	// Frappe's whitelisted frappe.client.set_value, which saves the Task and so
+	// enforces Task write permission server-side.
+	document.addEventListener("click", function (ev) {
+		var btn = ev.target.closest && ev.target.closest(".tb-save");
+		if (!btn || btn.disabled) return;
+		var wrap = btn.closest("[data-task]");
+		var card = btn.closest(".tb-card");
+		var msg = card.querySelector(".tb-msg");
+		var pct = parseInt(wrap.querySelector(".tb-progress").value, 10) || 0;
+
+		btn.disabled = true;
+		msg.textContent = "Saving…";
+		callMethod("frappe.client.set_value", {
+			doctype: "Task",
+			name: wrap.getAttribute("data-task"),
+			fieldname: { progress: pct }
+		}).then(function (doc) {
+			var saved = Math.max(0, Math.min(100, parseInt((doc && doc.progress) || pct, 10) || 0));
+			card.querySelector(".bar > span").style.width = saved + "%";
+			card.querySelector(".tb-pct").textContent = saved;
+			msg.textContent = "Saved — " + saved + "% at " + new Date().toLocaleTimeString();
+		}).catch(function (err) {
+			msg.textContent = "Could not update: " + (err && err.message ? err.message : "server unreachable");
+		}).then(function () {
+			btn.disabled = false;
+		});
+	});
+})();
+</script>
 {% endblock %}

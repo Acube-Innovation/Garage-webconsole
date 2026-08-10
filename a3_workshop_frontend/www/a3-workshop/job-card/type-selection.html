@@ -16,16 +16,18 @@
 
 {% block page_content %}
 {{ stepper(1) }}
-{%- set types = [
-  {"i":"fa-screwdriver-wrench","t":"General Service","s":"Scheduled maintenance"},
-  {"i":"fa-car-burst","t":"Body Shop","s":"Accident repair & bodywork"},
-  {"i":"fa-gears","t":"Mechanical","s":"Engine & mechanical complaints"},
-  {"i":"fa-magnifying-glass","t":"Inspection","s":"Pre-purchase or general check"},
-  {"i":"fa-rotate","t":"Repeat Service","s":"Follow-up for previous job"}
-] -%}
+{# Job types are the site's `Jobcard Type` records (see type_selection.py) — the same
+   list the wizard's Service Jobs step shows. The chosen type is carried to the wizard
+   as ?type= and starts selected there. #}
+{%- if job_types %}
 <div class="type-grid" style="margin-top:18px">
-	{%- for ty in types %}
-	<a href="/a3-workshop/job-card/new">{{ typecard(ty.i, ty.t, ty.s) }}</a>
+	{%- for ty in job_types %}
+	<a href="/a3-workshop/job-card/new?type={{ ty.name | urlencode }}">{{ typecard(ty.icon, ty.label, ty.sub) }}</a>
 	{%- endfor %}
 </div>
+{%- else %}
+<div class="card" style="margin-top:18px"><div class="card__body">
+	<div class="empty">No job card types configured yet — add a Jobcard Type before raising job cards.</div>
+</div></div>
+{%- endif %}
 {% endblock %}

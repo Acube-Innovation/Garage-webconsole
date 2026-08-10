@@ -25,16 +25,24 @@
 	{%- set current_path = (frappe.request.path if frappe.request else "/a3-workshop").rstrip("/") -%}
 	{%- set uname = (frappe.session.user or "User") -%}
 	{%- set uinitial = uname[0] if uname and uname != "Guest" else "U" -%}
+	{%- set user_row = (frappe.db.get_value("User", uname, ["first_name", "role_profile_name"], as_dict=True) if uname != "Guest" else None) or {} -%}
+	{#- The line under the name is the user's real job title: the designation on their
+	    Employee record, else the Role Profile assigned to their User. A user with
+	    neither gets no line at all — never an invented one. -#}
+	{%- set user_role = (frappe.db.get_value("Employee", {"user_id": uname}, "designation") if uname != "Guest" else None) or user_row.get("role_profile_name") -%}
+	{#- Company name comes from the database; the literal is only a last resort for a
+	    site with no Company at all. -#}
+	{%- set company_name = frappe.db.get_default("company") or (frappe.get_all("Company", pluck="name", order_by="creation", limit_page_length=1) or ["Redlines International"])[0] -%}
 
 	<div class="workshop-shell">
 		<aside class="workshop-sidebar">
-			<a class="workshop-logo" href="/a3-workshop" title="Redlines International">
-				<img src="/assets/a3_workshop_frontend/images/redline-logo.png" alt="Redlines International">
+			<a class="workshop-logo" href="/a3-workshop" title="{{ company_name }}">
+				<img src="/assets/a3_workshop_frontend/images/redline-logo.png" alt="{{ company_name }}">
 			</a>
 			<div class="workshop-avatar">{{ uinitial }}</div>
 			<div class="workshop-userblock">
-				<div class="name">{{ (frappe.db.get_value("User", uname, "first_name") if uname != "Guest" else "User") or uname }}</div>
-				<div class="role">System User</div>
+				<div class="name">{{ (user_row.get("first_name") if uname != "Guest" else "User") or uname }}</div>
+				{%- if user_role %}<div class="role">{{ user_role }}</div>{%- endif %}
 			</div>
 
 			<nav class="workshop-nav">

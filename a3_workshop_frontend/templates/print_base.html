@@ -58,13 +58,16 @@
 	</style>
 </head>
 <body class="printdoc">
+	{#- Company name comes from the database; the literal is only a last resort for a
+	    site with no Company at all. -#}
+	{%- set company_name = frappe.db.get_default("company") or (frappe.get_all("Company", pluck="name", order_by="creation", limit_page_length=1) or ["Redlines International"])[0] -%}
 	<div class="print-toolbar">
 		<button type="button" onclick="window.print()">Print / Save as PDF</button>
 		<button type="button" class="alt" onclick="window.close()">Close</button>
 	</div>
 	<div class="sheet">
 		<header class="doc-head">
-			<img src="/assets/a3_workshop_frontend/images/redline-logo.png" alt="Redlines International">
+			<img src="/assets/a3_workshop_frontend/images/redline-logo.png" alt="{{ company_name }}">
 			<div class="doc-title">
 				<h1>{% block doc_title %}{% endblock %}</h1>
 				<div class="sub">{% block doc_subtitle %}{% endblock %}</div>
@@ -75,7 +78,7 @@
 			</div>
 		</header>
 		{% block content %}{% endblock %}
-		<footer class="doc-foot">Redlines International — Service Center CRM · Vehicle History &amp; Driver Performance</footer>
+		<footer class="doc-foot">{{ company_name }} — Service Center CRM · Vehicle History &amp; Driver Performance</footer>
 	</div>
 	<script>
 		// open the browser print dialog once images have loaded

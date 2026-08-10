@@ -1,28 +1,52 @@
 {% extends "templates/workshop_base.html" %}
-{% from "templates/macros/workshop.html" import badge, qr %}
+{% from "templates/macros/workshop.html" import badge %}
 
 {% block page_content %}
 
 <div class="toolbar">
 	<a class="btn btn--primary" href="/a3-workshop/job-card/new"><i class="fa-solid fa-plus"></i> Create Job Card</a>
 	<div class="toolbar__right">
-		<button class="btn btn--outline"><i class="fa-solid fa-filter"></i> Filter</button>
-		<button class="btn btn--purple"><i class="fa-solid fa-chart-column"></i> Report</button>
+		<!-- Real, server-side filter: the options are the Workshop Job Card status
+		     Select options, and submitting reloads the list with ?status=. -->
+		<form method="get" class="jc-filter">
+			<select name="status" aria-label="Filter by status">
+				<option value="">All statuses</option>
+				{%- for s in statuses %}
+				<option value="{{ s }}"{{ ' selected' if s == status else '' }}>{{ s }}</option>
+				{%- endfor %}
+			</select>
+			<button class="btn btn--outline" type="submit"><i class="fa-solid fa-filter"></i> Filter</button>
+		</form>
+		{%- if status %}
+		<a class="btn btn--outline btn--sm" href="/a3-workshop/job-cards"><i class="fa-solid fa-xmark"></i> Clear</a>
+		{%- endif %}
+		{%- if pages > 1 %}
 		<div class="pager">
-			<span class="page">Prev</span>
-			<span class="page is-active">1</span><span class="page">2</span><span class="page">3</span>
-			<span class="page">4</span><span class="page">5</span><span class="page">…</span>
-			<span class="page">Next</span>
+			{%- if page > 1 %}
+			<a class="page" href="?page={{ page - 1 }}{% if status %}&status={{ status|urlencode }}{% endif %}">Prev</a>
+			{%- else %}<span class="page is-disabled">Prev</span>{% endif %}
+			{%- for p in page_links %}
+				{%- if p is none %}<span class="page is-gap">…</span>
+				{%- elif p == page %}<span class="page is-active">{{ p }}</span>
+				{%- else %}<a class="page" href="?page={{ p }}{% if status %}&status={{ status|urlencode }}{% endif %}">{{ p }}</a>{% endif %}
+			{%- endfor %}
+			{%- if page < pages %}
+			<a class="page" href="?page={{ page + 1 }}{% if status %}&status={{ status|urlencode }}{% endif %}">Next</a>
+			{%- else %}<span class="page is-disabled">Next</span>{% endif %}
 		</div>
+		{%- endif %}
 	</div>
 </div>
 
 <div class="jc-grid">
 
 	<!-- LEFT (70%) — job cards list -->
-	<div class="list-rows" id="jc-list">
+	<div class="list-rows" id="jc-list" data-can-update="{{ 1 if can_update else 0 }}">
+		{%- if rows %}
+		<div class="muted jc-count">Showing {{ range_from }}–{{ range_to }} of {{ total }} job card{{ "" if total == 1 else "s" }}{% if status %} with status “{{ status }}”{% endif %}.</div>
+		{%- endif %}
 		{%- for r in rows %}
-		<div class="list-row" data-no="{{ r.no }}" data-emp="{{ r.advisor }}" data-est="{{ r.est }}" data-done="{{ 1 if r.status == 'Completed' else 0 }}">
+		<div class="list-row" data-no="{{ r.no }}" data-next="{{ r.next_status }}">
 			<!-- Col 1: customer photo if available, else first letter -->
 			<div class="list-row__party">
 				<div class="list-row__avatar">
@@ -46,38 +70,79 @@
 			</div>
 			<!-- Col 3: QR left blank -->
 			<div class="qr-blank"></div>
+			<!-- Col 4: real money only — the card's Billing Total in the company
+			     currency, and the Sales Invoice / Sales Order it actually has. -->
 			<div>
-				<div class="list-row__amount">AED 0.00</div>
-				<div class="list-row__col" style="text-align:right;margin-top:4px"><span class="k">#Inv: 0000</span><br><span class="k">Credit: 0</span></div>
+				<div class="list-row__amount">{{ r.amount or "—" }}</div>
+				<div class="list-row__col" style="text-align:right;margin-top:4px">
+					{%- if r.invoice %}
+					<a class="k" style="color:var(--red);font-weight:600" href="/a3-workshop/workshop-print?invoice={{ r.invoice|urlencode }}" target="_blank" rel="noopener">{{ r.invoice }}</a>
+					{%- if r.invoice_note %}<br><span class="k">{{ r.invoice_note }}</span>{% endif %}
+					{%- elif r.sales_order %}
+					<span class="k">SO {{ r.sales_order }}</span><br><span class="k">Not invoiced</span>
+					{%- else %}
+					<span class="k">{{ "Not invoiced" if r.amount else "Not billed yet" }}</span>
+					{%- endif %}
+				</div>
 			</div>
 			<div class="list-row__actions">
 				<div class="row" style="justify-content:flex-end">
-					<button type="button" class="btn btn--icon js-complete {{ 'btn--outline' if r.status == 'Completed' else 'btn--purple' }}" title="{{ 'Reopen' if r.status == 'Completed' else 'Mark Done' }}">
-						<i class="fa-solid {{ 'fa-rotate-left' if r.status == 'Completed' else 'fa-check' }}"></i>
+					{%- if can_update %}
+					<button type="button" class="btn btn--icon js-status {{ 'btn--outline' if r.done else 'btn--purple' }}" title="{{ r.action }} — set status to {{ r.next_status }}">
+						<i class="fa-solid {{ 'fa-rotate-left' if r.done else 'fa-check' }}"></i>
 					</button>
-					<a class="btn btn--outline btn--icon" href="/a3-workshop/job-card/detail?id={{ r.no }}" title="View Card"><i class="fa-solid fa-eye"></i></a>
+					{%- endif %}
+					<a class="btn btn--outline btn--icon" href="/a3-workshop/job-card/detail?id={{ r.no|urlencode }}" title="View Card"><i class="fa-solid fa-eye"></i></a>
 				</div>
 				<div class="row" style="justify-content:flex-end">
-					<a class="btn btn--outline btn--icon" href="/a3-workshop/workshop-print?jobcard={{ r.no }}" target="_blank" rel="noopener" title="Print Job Card"><i class="fa-solid fa-print"></i></a>
-					<a class="btn btn--outline btn--icon" href="/a3-workshop/job-card/new?id={{ r.no }}" title="Edit"><i class="fa-solid fa-pen"></i></a>
-					<a class="btn btn--danger btn--icon" href="#" title="Delete"><i class="fa-solid fa-trash"></i></a>
+					<a class="btn btn--outline btn--icon" href="/a3-workshop/workshop-print?jobcard={{ r.no|urlencode }}" target="_blank" rel="noopener" title="Print Job Card"><i class="fa-solid fa-print"></i></a>
+					<a class="btn btn--outline btn--icon" href="/a3-workshop/job-card/new?id={{ r.no|urlencode }}" title="Edit"><i class="fa-solid fa-pen"></i></a>
 				</div>
+				<div class="jc-msg muted" aria-live="polite"></div>
 			</div>
 		</div>
 		{%- else %}
-		<div class="empty" style="padding:24px">No job cards yet. <a href="/a3-workshop/job-card/new">Create one</a>.</div>
+		<div class="card"><div class="card__body">
+			<div class="empty">
+				{%- if status %}
+				<div style="font-weight:700;color:var(--text)">No job cards with status “{{ status }}”</div>
+				<div style="margin-top:6px">Nothing on the board is in that state right now.</div>
+				<a class="btn btn--outline btn--sm" style="margin-top:16px" href="/a3-workshop/job-cards"><i class="fa-solid fa-xmark"></i> Clear filter</a>
+				{%- else %}
+				<div style="font-weight:700;color:var(--text)">No job cards yet</div>
+				<div style="margin-top:6px">Cards appear here as soon as the first vehicle is booked in.</div>
+				<a class="btn btn--primary btn--sm" style="margin-top:16px" href="/a3-workshop/job-card/new"><i class="fa-solid fa-plus"></i> Create Job Card</a>
+				{%- endif %}
+			</div>
+		</div></div>
 		{%- endfor %}
 	</div>
 
-	<!-- RIGHT (30%) — employee status & workload sidebar -->
+	<!-- RIGHT (30%) — service advisor workload, computed over every job card -->
 	<aside class="jc-side">
 		<div class="card">
 			<div class="card__head">
 				<h3>Team Workload</h3>
-				<span class="readonly-tag" id="emp-avail">—</span>
+				<span class="readonly-tag">{{ workload|length }} advisor{{ "" if workload|length == 1 else "s" }}</span>
 			</div>
 			<div class="card__body">
-				<div class="emp-list" id="emp-list"></div>
+				<div class="emp-list">
+					{%- for e in workload %}
+					<div class="emp-card">
+						<div class="emp-card__top">
+							<span class="emp-card__name">{{ e.name }}</span>
+							{%- if e.hours %}<span class="emp-card__hours badge badge--soft">{{ e.hours }}h est. open</span>{% endif %}
+						</div>
+						<div class="emp-card__stats">
+							<span class="emp-card__count"><b>{{ e.open }} open</b> out of {{ e.total }}</span>
+							<div class="bar"><span style="width:{{ e.pct }}%"></span></div>
+						</div>
+					</div>
+					{%- else %}
+					<div class="emp-empty">No job cards are assigned to a service advisor yet.</div>
+					{%- endfor %}
+				</div>
+				<div class="muted" style="font-size:12px;margin-top:10px">Counts cover every job card, not just this page. Estimated hours are the service-line hours on cards still open.</div>
 			</div>
 		</div>
 	</aside>
@@ -96,7 +161,7 @@
 }
 /* keep the sidebar in view while the (potentially long) list scrolls */
 .jc-side { position: sticky; top: 18px; }
-.emp-list { display: flex; flex-direction: column; gap: 12px; max-height: calc(100vh - 220px); overflow: auto; }
+.emp-list { display: flex; flex-direction: column; gap: 12px; max-height: calc(100vh - 260px); overflow: auto; }
 
 .emp-card {
 	border: 1px solid var(--border);
@@ -115,94 +180,70 @@
 .emp-empty { color: var(--muted); font-size: 13px; padding: 6px 2px; }
 /* QR intentionally left blank — keep the column's footprint so the row layout holds */
 .qr-blank { width: 64px; height: 64px; }
+
+.jc-filter { display: flex; align-items: center; gap: 8px; margin: 0; }
+.jc-filter select { height: 34px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); padding: 0 8px; font-size: 13px; }
+.jc-count { font-size: 12px; margin-bottom: 10px; }
+.pager a.page { text-decoration: none; color: inherit; }
+.pager .page.is-disabled, .pager .page.is-gap { opacity: .45; border-color: transparent; }
+.jc-msg { font-size: 11px; text-align: right; min-height: 0; }
+.jc-msg:empty { display: none; }
 </style>
 
+{%- if can_update %}
 {% raw %}
 <script>
 (function () {
-	// Per-employee shift length (hours). Anyone not listed defaults to 8h.
-	var SHIFTS = { "Rahul Menon": 8, "Suresh Kumar": 10, "Anil Joseph": 8 };
-	var DEFAULT_SHIFT = 8;
+	"use strict";
 
 	var listEl = document.getElementById("jc-list");
-	var empListEl = document.getElementById("emp-list");
-	var availEl = document.getElementById("emp-avail");
+	if (!listEl || listEl.dataset.canUpdate !== "1") return;
 
-	// Build the employee -> workload model straight from the rendered rows,
-	// so the left list stays the single source of truth.
-	function buildEmployees() {
-		var map = {};
-		listEl.querySelectorAll(".list-row").forEach(function (row) {
-			var name = row.dataset.emp;
-			if (!name) return;
-			var est = parseFloat(row.dataset.est) || 0;
-			var done = row.dataset.done === "1";
-			var e = map[name] || (map[name] = { name: name, total: 0, done: 0, committed: 0, shift: SHIFTS[name] || DEFAULT_SHIFT });
-			e.total += 1;
-			if (done) e.done += 1;
-			else e.committed += est; // only pending work eats into remaining capacity
-		});
-		return Object.keys(map).map(function (k) { return map[k]; })
-			.sort(function (a, b) { return (b.total - b.done) - (a.total - a.done); }); // busiest first
+	function readError(data) {
+		var raw = data && data._server_messages;
+		if (!raw) return (data && data.exception) || "";
+		try {
+			return JSON.parse(raw).map(function (m) {
+				try { return JSON.parse(m).message; } catch (e) { return m; }
+			}).join(" ").replace(/<[^>]*>/g, "");
+		} catch (e) { return String(raw); }
 	}
 
-	function hoursVariant(left, shift) {
-		if (left <= 0) return "badge--danger";          // no capacity
-		if (left <= shift * 0.25) return "badge--pending"; // nearly full
-		return "badge--success";                          // has room
-	}
-
-	function renderSidebar() {
-		var emps = buildEmployees();
-		if (!emps.length) { empListEl.innerHTML = '<div class="emp-empty">No employees assigned.</div>'; availEl.textContent = "—"; return; }
-
-		var freeCount = 0;
-		empListEl.innerHTML = emps.map(function (e) {
-			var pending = e.total - e.done;
-			var left = Math.max(0, e.shift - e.committed);
-			var pct = e.total ? Math.round((e.done / e.total) * 100) : 0;
-			if (left > 0) freeCount += 1;
-			var leftStr = (Math.round(left * 10) / 10).toString();
-			return '' +
-				'<div class="emp-card">' +
-					'<div class="emp-card__top">' +
-						'<span class="emp-card__name">' + e.name + '</span>' +
-						'<span class="emp-card__hours badge ' + hoursVariant(left, e.shift) + '">' + leftStr + ' Hrs Left</span>' +
-					'</div>' +
-					'<div class="emp-card__stats">' +
-						'<span class="emp-card__count"><b>' + pending + ' Pending</b> out of ' + e.total + '</span>' +
-						'<div class="bar"><span style="width:' + pct + '%"></span></div>' +
-					'</div>' +
-				'</div>';
-		}).join("");
-
-		availEl.textContent = freeCount + " / " + emps.length + " free";
-	}
-
-	// Mark done / reopen — flips the row, updates its badge, recomputes the sidebar live.
-	listEl.addEventListener("click", function (e) {
-		var btn = e.target.closest(".js-complete");
-		if (!btn) return;
+	// Mark Done / Reopen writes Workshop Job Card.status through core Frappe's
+	// whitelisted frappe.client.set_value, which saves the document and so
+	// enforces write permission server-side. Nothing is changed on screen until
+	// the server confirms it; the page then reloads so the badge, the pager and
+	// the Team Workload sidebar all come back from the database.
+	listEl.addEventListener("click", function (ev) {
+		var btn = ev.target.closest && ev.target.closest(".js-status");
+		if (!btn || btn.disabled) return;
 		var row = btn.closest(".list-row");
-		var done = row.dataset.done !== "1";
-		row.dataset.done = done ? "1" : "0";
+		var msg = row.querySelector(".jc-msg");
+		var next = row.dataset.next;
 
-		var badgeEl = row.querySelector(".jc-status .badge");
-		if (badgeEl) {
-			badgeEl.className = "badge " + (done ? "badge--success" : "badge--new");
-			badgeEl.textContent = done ? "Completed" : "New";
-		}
-		btn.classList.toggle("btn--purple", !done);
-		btn.classList.toggle("btn--outline", done);
-		btn.title = done ? "Reopen" : "Mark Done";
-		btn.querySelector("i").className = "fa-solid " + (done ? "fa-rotate-left" : "fa-check");
+		btn.disabled = true;
+		msg.textContent = "Saving…";
 
-		// TODO: persist here, e.g. frappe.call({ method: "...set_status", args: { name: row.dataset.no, done: done } })
-		renderSidebar();
+		fetch("/api/method/frappe.client.set_value", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", "X-Frappe-CSRF-Token": window.csrf_token || "", "Accept": "application/json" },
+			credentials: "same-origin",
+			body: JSON.stringify({ doctype: "Workshop Job Card", name: row.dataset.no, fieldname: { status: next } })
+		}).then(function (r) {
+			return r.json().then(function (data) {
+				if (!r.ok) throw new Error(readError(data) || r.statusText);
+				return data.message;
+			});
+		}).then(function () {
+			msg.textContent = "Saved — reloading…";
+			window.location.reload();
+		}).catch(function (err) {
+			msg.textContent = "Could not update: " + (err && err.message ? err.message : "server unreachable");
+			btn.disabled = false;
+		});
 	});
-
-	renderSidebar();
 })();
 </script>
 {% endraw %}
+{%- endif %}
 {% endblock %}
