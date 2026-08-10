@@ -3,15 +3,6 @@
 
 {% block page_content %}
 {%- set steps = ["Customer Details", "Service Jobs", "Complaints / Check-Up", "Readings", "Estimate", "Billing"] -%}
-{%- set jobtypes = [
-  {"i":"fa-screwdriver-wrench","t":"General Service","s":"Scheduled maintenance"},
-  {"i":"fa-car-burst","t":"Body Shop","s":"Accident repair & bodywork"},
-  {"i":"fa-gears","t":"Mechanical","s":"Engine & mechanical"},
-  {"i":"fa-magnifying-glass","t":"Inspection","s":"General check"},
-  {"i":"fa-rotate","t":"Repeat Service","s":"Follow-up job"},
-  {"i":"fa-snowflake","t":"AC Service","s":"Cooling & AC"},
-  {"i":"fa-car-battery","t":"Electrical","s":"Battery & electrical"}
-] -%}
 
 <style>
 	.jc-ac { position:absolute; left:0; right:0; top:100%; z-index:60; margin-top:2px; background:#fff;
@@ -276,10 +267,17 @@
 			<div class="card__body">
 				<div id="cart"></div>
 				<div class="empty" id="cart-empty">Cart is empty — add items from the left.</div>
+				{#- The tax row exists only when the company has a Sales Taxes and Charges
+				    Template to read a rate from (see new.py `_estimate_tax`); with none
+				    configured the estimate shows no tax rather than a guessed rate. -#}
 				<div class="totals">
-					<div class="row-between"><span class="muted">Subtotal</span><span id="t-sub">AED 0.00</span></div>
-					<div class="row-between"><span class="muted">VAT (5%)</span><span id="t-vat">AED 0.00</span></div>
-					<div class="row-between grand"><span>Total Amount</span><span id="t-grand">AED 0.00</span></div>
+					<div class="row-between"><span class="muted">Subtotal</span><span id="t-sub">{{ currency }} 0.00</span></div>
+					{%- if tax_rate %}
+					<div class="row-between"><span class="muted">{{ tax_label }} ({{ tax_rate_display }}%)</span><span id="t-vat">{{ currency }} 0.00</span></div>
+					{%- else %}
+					<div class="row-between"><span class="muted" style="font-size:12px">No sales tax template configured — totals exclude tax.</span></div>
+					{%- endif %}
+					<div class="row-between grand"><span>Total Amount</span><span id="t-grand">{{ currency }} 0.00</span></div>
 				</div>
 				<button type="button" class="btn btn--primary" id="create-quotation" style="width:100%;justify-content:center;margin-top:14px"><i class="fa-solid fa-file-invoice-dollar"></i> Create / Update Quotation</button>
 				<div id="quotation-result" class="muted" style="font-size:12px;margin-top:8px"></div>
@@ -326,7 +324,7 @@
 					<div class="empty" id="bill-sublet-empty">No sublet lines.</div>
 				</div>
 				<div class="totals">
-					<div class="row-between grand"><span>Billing Total</span><span id="bill-total">AED 0.00</span></div>
+					<div class="row-between grand"><span>Billing Total</span><span id="bill-total">{{ currency }} 0.00</span></div>
 				</div>
 				<div class="row" style="gap:10px;margin-top:12px">
 					<button type="button" class="btn btn--ghost" id="bill-save"><i class="fa-solid fa-floppy-disk"></i> Save Billing</button>
@@ -354,7 +352,12 @@
 	</div>
 </div>
 
-<script>window.csrf_token = "{{ frappe.session.csrf_token }}";</script>
+<script>window.csrf_token = "{{ frappe.session.csrf_token }}";
+// Resolved server-side in new.py: company default currency, and the estimate tax rate
+// read from the company's Sales Taxes and Charges Template (0 = no template, no tax row).
+window.WS_CURRENCY = {{ (currency or "") | tojson }};
+window.WS_TAX_RATE = {{ tax_rate or 0 }};
+</script>
 {% raw %}
 <script>
 (function () {
@@ -465,6 +468,10 @@
 						return '<option value="' + e.name + '">' + (e.employee_name || e.name) + '</option>';
 					}).join("");
 			}
+			// Job type picked on the Choose Job Type step (?type=) starts selected here.
+			var preType = qparam("type");
+			if (preType && selected.indexOf(preType) < 0 &&
+				JOBCARD_TYPES.some(function (t) { return t.name === preType; })) selected.push(preType);
 			renderJobTypeList();
 		}).catch(function () {});
 	}
@@ -940,7 +947,7 @@
 
 	// ---- Kit Components: popup picker + three tables under Job Details ----
 	function esc(s) { var d = document.createElement('div'); d.textContent = (s == null ? '' : s); return d.innerHTML; }
-	function fmtMoney(v) { return 'AED ' + (Number(v) || 0).toFixed(2); }
+	function fmtMoney(v) { return (window.WS_CURRENCY ? window.WS_CURRENCY + ' ' : '') + (Number(v) || 0).toFixed(2); }
 	function fmtNum(v) { var n = Number(v) || 0; return (n % 1 === 0) ? String(n) : n.toFixed(2); }
 
 	// Dedup keys mirror the desk form so a line is never offered/added twice.
@@ -1351,7 +1358,9 @@
 	var cartEmpty = document.getElementById('cart-empty');
 	var catalogEl = document.getElementById('catalog');
 	var mappedHours = {}; // item_code -> default qty (from the mapped service's hours)
-	function money(v) { return 'AED ' + (v || 0).toFixed(2); }
+	function money(v) { return (window.WS_CURRENCY ? window.WS_CURRENCY + ' ' : '') + (v || 0).toFixed(2); }
+	// Rate resolved from the company's tax template server-side; 0 when none is configured.
+	var TAX_RATE = Number(window.WS_TAX_RATE) || 0;
 
 	function serviceHours() {
 		var m = {};
@@ -1398,9 +1407,10 @@
 				'<button type="button" class="icon-del" data-rm><i class="fa-solid fa-trash"></i></button></div>';
 		}).join('');
 		var sub = codes.reduce(function (s, c) { return s + cart[c].rate * cart[c].qty; }, 0);
+		var vatEl = document.getElementById('t-vat'); // absent when no tax rate is configured
 		document.getElementById('t-sub').textContent = money(sub);
-		document.getElementById('t-vat').textContent = money(sub * 0.05);
-		document.getElementById('t-grand').textContent = money(sub * 1.05);
+		if (vatEl) vatEl.textContent = money(sub * TAX_RATE / 100);
+		document.getElementById('t-grand').textContent = money(sub * (1 + TAX_RATE / 100));
 	}
 	cartEl.addEventListener('click', function (e) {
 		var item = e.target.closest('[data-cn]'); if (!item) return; var c = item.dataset.cn;

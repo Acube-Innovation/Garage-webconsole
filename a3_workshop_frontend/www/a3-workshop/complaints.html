@@ -2,25 +2,125 @@
 {% from "templates/macros/workshop.html" import badge %}
 
 {% block page_content %}
-<div class="toolbar"><span></span><div class="toolbar__right"><a class="btn btn--outline" href="/a3-workshop/workshop-print?complaints=register" target="_blank" rel="noopener"><i class="fa-solid fa-print"></i> Print Register</a><a class="btn btn--primary"><i class="fa-solid fa-plus"></i> Add Structured Complaint</a></div></div>
-{%- set cs = [
-  {"n":"AAS Shipping LLC","t":"AC still not cooling properly after service","st":"Escalated","sv":"badge--danger","p":"Critical"},
-  {"n":"District Cooling Company","t":"Billing discrepancy - overcharged for parts","st":"Pending","sv":"badge--pending","p":"High"},
-  {"n":"Aaber Facilities Management","t":"Delay in promised delivery - vehicle not ready","st":"Pending","sv":"badge--pending","p":"Medium"},
-  {"n":"Daat Logistics L.L.C","t":"Wrong part installed - needs replacement","st":"Resolved","sv":"badge--success","p":"High"}
-] -%}
-<div class="stack">
-	{%- for c in cs %}
-	<div class="card"><div class="card__body row-between">
-		<div>
-			<div style="font-weight:700">{{ c.n }}</div>
-			<div class="muted" style="margin-top:4px">{{ c.t }}</div>
+{#- Rows arrive from the page controller (www/a3-workshop/complaints.py ->
+    garagedesk.api.complaints.get_complaint_board), which reads the real
+    `Workshop Job Card Complaint` child rows with the same query as the printed
+    Complaints Register (workshop-print?complaints=register) — so this page and
+    that printout always show the same complaints in the same order.
+
+    A complaint row has no status field of its own, so the Status badge is the
+    status of the JOB CARD carrying it (the register's "JC Status" column). The
+    old Escalate / Resolve buttons are gone: nothing persisted them. Editing a
+    complaint happens where it lives — on its job card. -#}
+{%- set s = board.summary -%}
+
+<div class="toolbar">
+	<div class="section-title" style="margin:0">Complaints on Job Cards</div>
+	<div class="toolbar__right">
+		<a class="btn btn--outline" href="/a3-workshop/workshop-print?complaints=register" target="_blank" rel="noopener"><i class="fa-solid fa-print"></i> Print Register</a>
+		<a class="btn btn--primary" href="/a3-workshop/job-card/new"><i class="fa-solid fa-plus"></i> Add Complaint on Job Card</a>
+	</div>
+</div>
+
+<div class="tc-stats">
+	<div class="stat-card stat-card--sm"><div class="label">Complaints Recorded</div><div class="value">{{ s.total }}</div><div class="sub">On {{ s.job_cards }} job card{{ "" if s.job_cards == 1 else "s" }}</div></div>
+	<div class="stat-card stat-card--sm stat-card--navy"><div class="label">Still Open</div><div class="value">{{ s.open }}</div><div class="sub">Job card not closed</div></div>
+	<div class="stat-card stat-card--sm"><div class="label">Critical / High</div><div class="value">{{ s.critical }}</div><div class="sub">Open &amp; severe</div></div>
+	<div class="stat-card stat-card--sm stat-card--purple"><div class="label">Closed Out</div><div class="value">{{ s.closed }}</div><div class="sub">Job card completed</div></div>
+</div>
+
+{%- if board.rows %}
+<div class="toolbar" style="margin-top:14px">
+	<div class="row" style="gap:10px;flex-wrap:wrap">
+		<input type="search" id="cp-search" placeholder="Search complaint, customer, vehicle…" style="min-width:260px">
+		<select id="cp-severity">
+			<option value="">All severities</option>
+			{%- for sev in board.severities %}<option>{{ sev }}</option>{%- endfor %}
+		</select>
+		<select id="cp-status">
+			<option value="">All job card statuses</option>
+			{%- for st in board.statuses %}<option>{{ st }}</option>{%- endfor %}
+		</select>
+	</div>
+	<div class="toolbar__right"><span class="muted" id="cp-count" style="font-size:12px"></span></div>
+</div>
+{%- endif %}
+
+<div class="stack" id="cp-list">
+	{%- for c in board.rows %}
+	<div class="card cp-row" data-search="{{ (c.complaint ~ ' ' ~ c.customer ~ ' ' ~ c.vehicle ~ ' ' ~ c.job_card ~ ' ' ~ c.technician ~ ' ' ~ c.notes)|lower }}" data-severity="{{ c.severity }}" data-status="{{ c.status }}">
+		<div class="card__body row-between" style="align-items:flex-start;gap:16px">
+			<div style="min-width:0">
+				<div style="font-weight:700">{{ c.customer }}</div>
+				<div style="margin-top:4px">{{ c.complaint }}</div>
+				{%- if c.notes %}<div class="muted" style="margin-top:4px">{{ c.notes }}</div>{% endif %}
+				<div class="muted" style="margin-top:6px;font-size:12px">
+					<i class="fa-regular fa-calendar"></i> {{ c.date }}
+					{%- if c.job_card %} · <a href="/a3-workshop/job-card/detail?id={{ c.job_card }}" style="color:var(--red);font-weight:700">{{ c.job_card }}</a>{% endif %}
+					· <i class="fa-solid fa-car-side"></i> {{ c.vehicle }}
+					· <i class="fa-regular fa-user"></i> {{ c.technician }}
+					{%- if c.reported_by %} · Reported by {{ c.reported_by }}{% endif %}
+				</div>
+			</div>
+			<div class="stack" style="align-items:flex-end;gap:8px;flex-shrink:0">
+				<div class="row" style="gap:8px">{{ badge(c.severity, c.severity_variant) }}{{ badge(c.status, c.status_variant) }}</div>
+				{%- if c.job_card %}
+				<div class="row" style="gap:8px">
+					<a class="btn btn--outline btn--sm" href="/a3-workshop/job-card/detail?id={{ c.job_card }}"><i class="fa-solid fa-eye"></i> View Card</a>
+					<a class="btn btn--primary btn--sm" href="/a3-workshop/job-card/new?id={{ c.job_card }}"><i class="fa-solid fa-pen"></i> Edit Complaint</a>
+				</div>
+				{%- endif %}
+			</div>
 		</div>
-		<div class="stack" style="align-items:flex-end;gap:8px">
-			<div class="row" style="gap:8px">{{ badge(c.p,"badge--soft") }}{{ badge(c.st, c.sv) }}</div>
-			<div class="row" style="gap:8px"><a class="btn btn--outline btn--sm">Escalate</a><a class="btn btn--primary btn--sm">Resolve</a></div>
+	</div>
+	{%- else %}
+	<div class="card"><div class="card__body">
+		<div class="empty" style="padding:32px">
+			No complaints recorded yet.<br>
+			<span class="muted">Complaints are captured on a job card, in its <b>Complaints / Check-Up</b> tab.</span><br>
+			<a href="/a3-workshop/job-card/new" style="color:var(--red);font-weight:600">Create a job card</a>
+			or <a href="/a3-workshop/job-cards" style="color:var(--red);font-weight:600">open an existing one</a> to record one.
 		</div>
 	</div></div>
 	{%- endfor %}
 </div>
+
+{%- if board.rows %}
+<div class="empty" id="cp-none" style="padding:24px;display:none">No complaints match this filter.</div>
+{%- endif %}
+
+{% raw %}
+<script>
+(function () {
+	var list = document.getElementById("cp-list");
+	var search = document.getElementById("cp-search");
+	if (!list || !search) return; // nothing recorded — no filters rendered
+
+	var sev = document.getElementById("cp-severity");
+	var status = document.getElementById("cp-status");
+	var countEl = document.getElementById("cp-count");
+	var noneEl = document.getElementById("cp-none");
+	var rows = Array.prototype.slice.call(list.querySelectorAll(".cp-row"));
+
+	function apply() {
+		var q = (search.value || "").trim().toLowerCase();
+		var shown = 0;
+		rows.forEach(function (row) {
+			var ok = (!q || row.dataset.search.indexOf(q) !== -1) &&
+				(!sev.value || row.dataset.severity === sev.value) &&
+				(!status.value || row.dataset.status === status.value);
+			row.style.display = ok ? "" : "none";
+			if (ok) shown += 1;
+		});
+		countEl.textContent = shown + " of " + rows.length + " complaint" + (rows.length === 1 ? "" : "s");
+		noneEl.style.display = shown ? "none" : "";
+	}
+
+	search.addEventListener("input", apply);
+	sev.addEventListener("change", apply);
+	status.addEventListener("change", apply);
+	apply();
+})();
+</script>
+{% endraw %}
 {% endblock %}

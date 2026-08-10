@@ -3,64 +3,56 @@ from a3_workshop_frontend.website_utils import require_login
 
 no_cache = 1
 
-_STATUS_BADGE = {
-	"Open": "badge--new",
-	"In Progress": "badge--progress",
-	"Completed": "badge--success",
-}
+# This template is reached by two URL shapes:
+#   /a3-workshop/job-card/<name>          the pretty route (hooks.website_route_rules)
+#   /a3-workshop/job-card/detail?id=<name>  the query form other pages link with
+# The "<id>" route rule matches the second shape too, and Werkzeug's route args are
+# merged into form_dict *after* the query string — so on the query form form_dict["id"]
+# is the literal page name "detail". _requested_id() therefore looks at the query string
+# first and never treats the page name as a job card id.
+_PAGE_NAME = "detail"
 
 
 def get_context(context):
 	require_login(context)
 	context.page_icon = "fa-clipboard-check"
-	context.subtitle = ""
 	context.breadcrumb = "Job Card"
 
-	jc_id = frappe.form_dict.get("id")
-	context.job_card_id = jc_id
-	context.card = None
+	# One read-only call assembles the page from the saved Workshop Job Card and its
+	# child tables (garagedesk.api.front_office.get_job_card_detail): service rows and
+	# the Task each one spawned, complaints, the billing kit tables, readings, photos.
+	# It returns {} for an unknown id, and the template renders its not-found state —
+	# no id, customer, vehicle, status or amount is ever invented here.
+	from garagedesk.api.front_office import get_job_card_detail
 
-	if jc_id and frappe.db.exists("Workshop Job Card", jc_id):
-		doc = frappe.get_doc("Workshop Job Card", jc_id)
-		cust = (
-			frappe.db.get_value("Customer", doc.customer, ["customer_name"], as_dict=True)
-			if doc.customer
-			else {}
-		) or {}
-		veh = (
-			frappe.db.get_value(
-				"Vehicle", doc.vehicle, ["make", "model", "custom_plate", "license_plate"], as_dict=True
-			)
-			if doc.vehicle
-			else {}
-		) or {}
-		vlabel = " ".join([x for x in (veh.get("make"), veh.get("model")) if x])
-		plate = veh.get("custom_plate") or veh.get("license_plate")
-		if plate:
-			vlabel = (vlabel + " · " + plate).strip(" ·")
+	card = None
+	requested = ""
+	for candidate in _candidate_ids():
+		requested = requested or candidate
+		card = get_job_card_detail(candidate) or None
+		if card:
+			break
 
-		context.card = {
-			"name": doc.name,
-			"customer": cust.get("customer_name") or doc.customer or "—",
-			"vehicle": vlabel or "—",
-			"status": doc.status or "Open",
-			"status_badge": _STATUS_BADGE.get(doc.status or "Open", "badge--soft"),
-			"readings": {
-				"odometer": doc.reading_odometer,
-				"next_km": doc.next_service_km,
-				"fuel": doc.fuel_level,
-				"oil": doc.oil_level,
-				"coolant": doc.coolant_level,
-				"battery": doc.battery_voltage,
-				"tyre": doc.tyre_condition,
-				"spare": doc.spare_tyre,
-			},
-			"body_condition": doc.body_condition or "",
-			"photos": [
-				{"image": p.image, "caption": p.caption or ""} for p in (doc.vehicle_photos or [])
-			],
-		}
-		context.title = "Job Card " + doc.name
+	context.job_card_id = requested
+	context.card = card
+
+	if card:
+		context.title = "Job Card " + card["name"]
+		context.subtitle = " · ".join(
+			[x for x in (card["customer_name"], card["vehicle_label"]) if x]
+		)
 	else:
-		context.title = "Job Card Detail"
+		context.title = "Job Card"
+		context.subtitle = "Job card not found"
 	return context
+
+
+def _candidate_ids():
+	"""Ids the URL could be asking for, query string first, page name excluded."""
+	args = frappe.request.args if getattr(frappe, "request", None) else {}
+	ids = []
+	for value in (args.get("id") if args else None, frappe.form_dict.get("id")):
+		value = (value or "").strip()
+		if value and value != _PAGE_NAME and value not in ids:
+			ids.append(value)
+	return ids

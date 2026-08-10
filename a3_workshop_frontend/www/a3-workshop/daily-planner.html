@@ -2,17 +2,8 @@
 {% from "templates/macros/workshop.html" import badge, field %}
 
 {% block page_content %}
-{#- pipeline / followups / techs / bills all arrive live from the page controller
-    (www/a3-workshop/daily_planner.py -> garagedesk.api.daily_planner).
-
-    `advances` is still hardcoded: Customer and Supplier advances have no records
-    to read on this bench, and Employee Advances cannot be computed at all — that
-    doctype ships with Frappe HR (hrms), which is not installed here. -#}
-{%- set advances = [
-  {"type":"Customer Advances","sub":"Awaiting service completion","count":7,"amt":"₹1,20,000"},
-  {"type":"Supplier Advances","sub":"Pending material delivery","count":3,"amt":"₹45,000"},
-  {"type":"Employee Advances","sub":"Pending settlement","count":5,"amt":"₹18,500"}
-] -%}
+{#- pipeline / followups / techs / advances / bills all arrive live from the page
+    controller (www/a3-workshop/daily_planner.py -> garagedesk.api.daily_planner). -#}
 {%- set receivables = bills.receivables -%}
 {%- set payables = bills.payables -%}
 
@@ -77,8 +68,8 @@
 			</div>
 		</div>
 
-		<!-- 3. Today's Bookings — real Opportunities (input time · customer — vehicle) -->
-		<div class="card"><div class="card__head"><h3>Today's Bookings</h3><span class="muted">Enquiries by time slot</span></div>
+		<!-- 3. Today's Enquiries — Opportunities logged today (time · customer — vehicle) -->
+		<div class="card"><div class="card__head"><h3>Today's Enquiries</h3><span class="muted">Logged today, by time slot</span></div>
 			<div class="card__body">
 				{%- for s in booking_slots %}
 				<div class="group-head"><i class="fa-regular fa-clock" style="color:var(--navy)"></i>{{ s.slot }}<span class="count">{{ s.rows|length }}</span></div>
@@ -86,15 +77,10 @@
 				<div class="slot-row">
 					<span class="time-chip">{{ b.time }}</span>
 					<span class="txt" style="flex:1">{{ b.customer }} &mdash; {{ b.vehicle }}</span>
-					<div class="act-btns">
-						<button class="act-btn" title="Check-in"><i class="fa-solid fa-right-to-bracket"></i></button>
-						<button class="act-btn" title="Reschedule"><i class="fa-solid fa-calendar-day"></i></button>
-						<button class="act-btn" title="Cancel"><i class="fa-solid fa-xmark"></i></button>
-					</div>
 				</div>
 				{%- endfor %}
 				{%- else %}
-				<div class="empty" style="padding:14px 0">No enquiries yet.</div>
+				<div class="empty" style="padding:14px 0">No enquiries logged today.</div>
 				{%- endfor %}
 			</div>
 		</div>
@@ -141,14 +127,16 @@
 			</div>
 		</div>
 
-		<!-- 7. Pending Advances -->
+		<!-- 7. Pending Advances — live: unallocated Payment Entries by party type -->
 		<div class="card"><div class="card__head"><h3>Pending Advances</h3><span class="muted">By type</span></div>
 			<div class="card__body">
 				{%- for a in advances %}
 				<div class="kv-row">
 					<span class="k"><span><div style="font-weight:600">{{ a.type }}</div><div class="muted" style="font-size:12px">{{ a.sub }}</div></span></span>
-					<span style="text-align:right"><b>{{ a.amt }}</b><div class="muted" style="font-size:12px">{{ a.count }} entries</div></span>
+					<span style="text-align:right"><b>{{ a.amt }}</b><div class="muted" style="font-size:12px">{{ a.count }} {{ "entry" if a.count == 1 else "entries" }}</div></span>
 				</div>
+				{%- else %}
+				<div class="empty" style="padding:14px 0">No pending advances.</div>
 				{%- endfor %}
 			</div>
 		</div>
@@ -273,7 +261,9 @@
 	</div>
 </div>
 
-<!-- Add Task modal — fields mirror the ERPNext Task doctype -->
+<!-- Add Task modal — every field maps to a real ERPNext Task field and is saved by
+     garagedesk.api.daily_planner.create_task. The three Link pickers are only
+     rendered when the database actually has records to link to. -->
 <div class="modal-overlay" id="task-modal" role="dialog" aria-modal="true" aria-labelledby="task-modal-title">
 	<div class="modal">
 		<div class="modal__head">
@@ -283,16 +273,46 @@
 		<div class="modal__body">
 			<form class="form-grid" id="task-form">
 				{{ field("Subject", "subject", required=True, placeholder="Task subject", full=True) }}
-				{{ field("Project", "project", placeholder="Link to Project / Job Card") }}
-				{{ field("Task Type", "type", placeholder="e.g. Service, QC, Delivery") }}
-				{{ field("Status", "status", type="select", options=["Open","Working","Pending Review","Overdue","Template","Completed","Cancelled"]) }}
-				{{ field("Priority", "priority", type="select", options=["Low","Medium","High","Urgent"]) }}
+				{%- if task_form.projects %}
+				<div class="field">
+					<label>Project</label>
+					<select name="project">
+						<option value="">No project</option>
+						{%- for p in task_form.projects %}<option value="{{ p.value }}">{{ p.label }}</option>{%- endfor %}
+					</select>
+				</div>
+				{%- endif %}
+				{%- if task_form.task_types %}
+				{{ field("Task Type", "task_type", type="select", options=task_form.task_types, placeholder="No type") }}
+				{%- endif %}
+				{#- Status/Priority always carry a value (no blank option), so what the
+				    form shows is what gets saved. -#}
+				<div class="field">
+					<label>Status</label>
+					<select name="status">
+						{%- for s in task_form.statuses %}<option{{ " selected" if loop.first else "" }}>{{ s }}</option>{%- endfor %}
+					</select>
+				</div>
+				<div class="field">
+					<label>Priority</label>
+					<select name="priority">
+						{%- for p in task_form.priorities %}<option{{ " selected" if p == "Medium" else "" }}>{{ p }}</option>{%- endfor %}
+					</select>
+				</div>
 				<div class="fieldset-title">Timeline</div>
-				{{ field("Expected Start Date", "exp_start_date", type="datetime-local") }}
-				{{ field("Expected End Date", "exp_end_date", type="datetime-local") }}
+				{{ field("Expected Start Date", "exp_start_date", type="date") }}
+				{{ field("Expected End Date", "exp_end_date", type="date") }}
 				{{ field("Expected Time (hours)", "expected_time", type="number", placeholder="0") }}
 				{{ field("% Progress", "progress", type="number", placeholder="0") }}
-				{{ field("Parent Task", "parent_task", placeholder="Link to parent task") }}
+				{%- if task_form.parent_tasks %}
+				<div class="field">
+					<label>Parent Task</label>
+					<select name="parent_task">
+						<option value="">No parent</option>
+						{%- for t in task_form.parent_tasks %}<option value="{{ t.value }}">{{ t.label }}</option>{%- endfor %}
+					</select>
+				</div>
+				{%- endif %}
 				{{ field("Color", "color", type="color", value="#ec2e5d") }}
 				<div class="field"><label>Options</label><label class="check"><input type="checkbox" name="is_milestone"> Is Milestone</label></div>
 				<div class="fieldset-title">Details</div>
@@ -416,8 +436,37 @@
 			.then(function () { closeAll(); }).catch(fail).then(function () { submitting(document.getElementById("note-form"), false); });
 	});
 
-	// Add Task modal (demo create — not wired to backend yet)
-	document.getElementById("task-form").addEventListener("submit", function (e) { e.preventDefault(); closeAll(); });
+	// Add Task → inserts a real ERPNext Task, then reloads so the new task appears
+	// in its priority group (and in every other count that reads Tasks).
+	var taskForm = document.getElementById("task-form");
+	function tval(name) {
+		var el = taskForm.elements[name];
+		if (!el) return "";
+		return el.type === "checkbox" ? (el.checked ? 1 : 0) : el.value.trim();
+	}
+	taskForm.addEventListener("submit", function (e) {
+		e.preventDefault();
+		var subject = tval("subject");
+		if (!subject) { alert("Subject is required."); return; }
+		submitting(this, true);
+		callMethod("garagedesk.api.daily_planner.create_task", {
+			subject: subject,
+			project: tval("project"),
+			task_type: tval("task_type"),
+			status: tval("status"),
+			priority: tval("priority"),
+			exp_start_date: tval("exp_start_date"),
+			exp_end_date: tval("exp_end_date"),
+			expected_time: tval("expected_time"),
+			progress: tval("progress"),
+			parent_task: tval("parent_task"),
+			color: tval("color"),
+			is_milestone: tval("is_milestone"),
+			description: tval("description")
+		})
+			.then(function () { closeAll(); window.location.reload(); })
+			.catch(function (err) { submitting(taskForm, false); fail(err); });
+	});
 
 	// Mark Completed → status=Completed, then remove the row (irreversible in UI)
 	document.querySelectorAll(".act-btn[data-complete]").forEach(function (b) {

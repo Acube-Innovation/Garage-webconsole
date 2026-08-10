@@ -3,15 +3,15 @@
 
 {% block page_content %}
 
-<!-- 6. Daily Productivity -->
+<!-- 6. Daily Productivity — every tile is a real count from garagedesk.api.telecalling,
+     rendered server-side. The JS below only refreshes them; nothing here is a placeholder. -->
 <div class="tc-stats">
-	<div class="stat-card stat-card--sm"><div class="label">Assigned Calls</div><div class="value" id="s-assigned">32</div></div>
-	<div class="stat-card stat-card--sm stat-card--navy"><div class="label">Completed</div><div class="value" id="s-completed">18</div></div>
-	<div class="stat-card stat-card--sm stat-card--purple"><div class="label">Pending</div><div class="value" id="s-pending">14</div></div>
-	<div class="stat-card stat-card--sm"><div class="label">Connected</div><div class="value" id="s-connected">12</div></div>
-	<div class="stat-card stat-card--sm stat-card--navy"><div class="label">Follow-ups</div><div class="value" id="s-followups">9</div></div>
-	<div class="stat-card stat-card--sm stat-card--purple"><div class="label">Conversions</div><div class="value" id="s-conversions">5</div></div>
-	<div class="stat-card stat-card--sm"><div class="label">Appointments</div><div class="value" id="s-bookings">3</div></div>
+	<div class="stat-card stat-card--sm"><div class="label">Open Calls</div><div class="value" id="s-assigned">{{ productivity.assigned }}</div><div class="sub">In today's queue</div></div>
+	<div class="stat-card stat-card--sm stat-card--navy"><div class="label">Calls Logged</div><div class="value" id="s-completed">{{ productivity.completed }}</div><div class="sub">Closed by you today</div></div>
+	<div class="stat-card stat-card--sm"><div class="label">Connected</div><div class="value" id="s-connected">{{ productivity.connected }}</div><div class="sub">Customer reached</div></div>
+	<div class="stat-card stat-card--sm stat-card--purple"><div class="label">Follow-ups</div><div class="value" id="s-followups">{{ productivity.followups }}</div><div class="sub">Scheduled ahead</div></div>
+	<div class="stat-card stat-card--sm stat-card--navy"><div class="label">Conversions</div><div class="value" id="s-conversions">{{ productivity.conversions }}</div><div class="sub">Dispositioned today</div></div>
+	<div class="stat-card stat-card--sm stat-card--purple"><div class="label">Appointments</div><div class="value" id="s-bookings">{{ productivity.bookings }}</div><div class="sub">Booked by you today</div></div>
 </div>
 
 <div class="tc-grid">
@@ -29,7 +29,7 @@
 		</div>
 		<div class="card__body">
 			<div class="field" style="margin-bottom:12px"><input id="tc-search" placeholder="Search name / mobile / vehicle…"></div>
-			<div class="tc-list" id="tc-list"></div>
+			<div class="tc-list" id="tc-list"><div class="empty">Loading calls…</div></div>
 		</div>
 	</div>
 
@@ -229,7 +229,9 @@
 						'<button class="btn btn--primary btn--sm" data-log="' + q.id + '">Log Call</button>' +
 					'</div>' +
 				'</div></div>';
-		}).join("") : '<div class="empty">No calls match this filter.</div>';
+		}).join("") : '<div class="empty">' + (queue.length
+			? 'No calls match this filter.'
+			: 'No calls due — service reminders, leads, scheduled follow-ups and open complaints will appear here.') + '</div>';
 	}
 
 	function renderContext(q) {
@@ -286,12 +288,18 @@
 			listEl.innerHTML = '<div class="empty">Could not load calls' + (err && err.message ? ": " + err.message : "") + '.</div>';
 		});
 	}
-	function setTile(id, val) { var el = document.getElementById(id); if (el) el.textContent = (val === null || val === undefined) ? "—" : val; }
+	// Tiles are already rendered server-side from real counts; a missing value leaves
+	// the server number in place rather than replacing it with anything invented.
+	function setTile(id, val) {
+		if (val === null || val === undefined) return;
+		var el = document.getElementById(id); if (el) el.textContent = val;
+	}
 	function loadProductivity() {
 		return callMethod("garagedesk.api.telecalling.get_productivity", {}).then(function (p) {
 			p = p || {};
-			setTile("s-assigned", p.assigned); setTile("s-completed", p.completed); setTile("s-pending", p.pending);
-			setTile("s-connected", p.connected); setTile("s-followups", p.followups); setTile("s-conversions", p.conversions); setTile("s-bookings", p.bookings);
+			setTile("s-assigned", p.assigned); setTile("s-completed", p.completed);
+			setTile("s-connected", p.connected); setTile("s-followups", p.followups);
+			setTile("s-conversions", p.conversions); setTile("s-bookings", p.bookings);
 		}).catch(function () {});
 	}
 

@@ -10,4 +10,12 @@ def get_context(context):
 	context.page_icon = "fa-users"
 	context.subtitle = "Customer profiles"
 	context.breadcrumb = "Customers"
+
+	# One read-only call builds the whole grid: real Customers plus their visit
+	# count, billed total and contact details (garagedesk.api.front_office).
+	from garagedesk.api.front_office import list_customer_cards
+
+	# ?q= filters server-side, the same pattern the Vehicles page uses.
+	context.search = (frappe.form_dict.get("q") or "").strip()
+	context.customers = list_customer_cards(search=context.search or None, limit=120)
 	return context
