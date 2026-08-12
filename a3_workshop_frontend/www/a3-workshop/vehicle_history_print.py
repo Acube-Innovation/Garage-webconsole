@@ -29,6 +29,12 @@ def get_context(context):
 	context.printed_by = (
 		frappe.db.get_value("User", frappe.session.user, "full_name") or frappe.session.user
 	)
+	# Passed through the context rather than read from the parent template's
+	# {% set %}: Jinja does not expose a parent's module-level variables inside a
+	# block the child overrides, so the handover declaration would render blank.
+	context.company = frappe.db.get_default("company") or (
+		frappe.get_all("Company", pluck="name", order_by="creation", limit_page_length=1) or [""]
+	)[0]
 
 	if handover and frappe.db.exists("Driver Vehicle Handover", handover):
 		context.mode = "handover"

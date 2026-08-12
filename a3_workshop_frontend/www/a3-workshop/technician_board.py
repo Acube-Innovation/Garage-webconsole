@@ -1,4 +1,5 @@
 import frappe
+from frappe.sessions import get_csrf_token
 from frappe.utils import cint, flt, formatdate
 
 from a3_workshop_frontend.website_utils import require_login
@@ -33,6 +34,29 @@ _TASK_BADGE = {
 
 def get_context(context):
 	require_login(context)
+
+	# Ship a CSRF token that is guaranteed to be valid.
+	#
+	# `frappe.session.csrf_token` (the usual template idiom) reads whatever is
+	# already on the session and renders the literal "None" when nothing has
+	# generated one yet — which is the normal state right after login. The POST
+	# still succeeds at that point, because Frappe skips CSRF validation when the
+	# session holds no token at all. But as soon as anything else on that session
+	# generates one (opening /app in another tab, for instance), the token baked
+	# into this already-rendered page no longer matches and every write from it
+	# fails with "Invalid Request".
+	#
+	# get_csrf_token() generates and persists a token when the session lacks one,
+	# so the value rendered here always matches what validation will compare against.
+	# get_csrf_token() persists through frappe.local.session_obj, which only exists
+	# inside a real HTTP request. Fall back to whatever the session already carries
+	# rather than letting a token lookup 500 the whole board.
+	try:
+		context.csrf_token = get_csrf_token()
+	except Exception:
+		session = getattr(frappe.local, "session", None)
+		context.csrf_token = (getattr(session, "data", None) or {}).get("csrf_token") or ""
+
 	context.title = "Technician Board"
 	context.page_icon = "fa-screwdriver-wrench"
 	context.breadcrumb = "Technician Board"
@@ -62,7 +86,63 @@ def get_context(context):
 	# enforces Task write permission server-side. Hide the control from users who
 	# do not hold that permission rather than render a button that cannot work.
 	context.can_update = frappe.has_permission("Task", "write")
+
+	_tool_context(context, me)
 	return context
+
+
+# --------------------------------------------------------------------- tools
+
+
+def _tool_context(context, me):
+	"""Tools tab: who is holding which physical tool, and what is overdue.
+
+	Everything here degrades to an empty board rather than breaking the page —
+	the Tools tab is an addition to a board that already works, so a missing
+	doctype (app not migrated) or a user without the custody roles must not take
+	the Assignments tab down with it.
+	"""
+	context.tools = {"groups": [], "totals": {}}
+	context.tool_kits = []
+	context.tool_technicians = []
+	context.can_manage_tools = False
+	context.tools_error = ""
+
+	if not frappe.db.exists("DocType", "Tool Custody"):
+		context.tools_error = "Tool custody is not installed on this site yet."
+		return
+
+	try:
+		from garagedesk.api.tool_custody import get_tool_board
+
+		context.tools = get_tool_board(me.name if me else None)
+	except frappe.PermissionError:
+		context.tools_error = "You do not have access to the tool register."
+		return
+	except Exception:
+		frappe.log_error(title="technician-board: tool tab")
+		context.tools_error = "The tool register could not be read."
+		return
+
+	# Issue/return are real submitted documents, so mirror the server-side
+	# permission rather than rendering buttons that will be rejected.
+	context.can_manage_tools = frappe.has_permission("Tool Custody", "submit")
+
+	if context.can_manage_tools:
+		context.tool_kits = frappe.get_all(
+			"Tool Kit Template",
+			filters={"is_active": 1},
+			fields=["name", "grade", "replacement_value"],
+			order_by="name asc",
+			limit_page_length=0,
+		)
+		context.tool_technicians = frappe.get_all(
+			"Employee",
+			filters={"status": "Active"},
+			fields=["name", "employee_name", "designation"],
+			order_by="employee_name asc",
+			limit_page_length=0,
+		)
 
 
 def _assigned_work(employee):

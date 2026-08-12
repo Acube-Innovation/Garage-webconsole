@@ -141,6 +141,18 @@
 	.ho-chk-row input[data-val] { width:170px; display:none; border:1px solid var(--border);
 		border-radius:8px; padding:6px 10px; font:inherit; font-size:13px; }
 	.ho-chk-row.is-checked { border-color:var(--green); background:#f3fbf6; }
+	/* Quantity + per-unit serials (Check + Quantity items, e.g. 3 trailers) */
+	.ho-chk-row .ho-qty { display:none; align-items:center; gap:6px; }
+	.ho-chk-row .ho-qty-lbl { font-size:12px; color:var(--muted); font-weight:600; }
+	.ho-chk-row input[data-qty] { width:68px; border:1px solid var(--border); border-radius:8px;
+		padding:6px 8px; font:inherit; font-size:13px; text-align:center; }
+	.ho-serials { display:none; margin:8px 0 0 14px; padding-left:12px;
+		border-left:2px solid var(--green); }
+	.ho-serial { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+	.ho-serial .n { width:20px; flex:none; text-align:center; font-size:11px; font-weight:700;
+		color:var(--muted); background:var(--bg); border-radius:5px; padding:2px 0; }
+	.ho-serial input { flex:1; border:1px solid var(--border); border-radius:8px;
+		padding:6px 10px; font:inherit; font-size:13px; }
 	.vh-dmg { border:1px solid var(--border); border-radius:var(--radius-sm,9px); padding:8px 12px; margin-bottom:8px; font-size:13px; }
 	.vh-dmg.is-new { border-color:var(--red); background:var(--red-soft); }
 	.vh-dmg .t { font-weight:700; }
@@ -283,15 +295,56 @@
 			return;
 		}
 		box.innerHTML = items.map(function (it) {
-			var needsVal = it.response_type === "Check + Value";
-			return '<div class="ho-chk-row" data-item="' + esc(it.name) + '" data-type="' + esc(it.response_type || "Check") + '">' +
-				'<label class="check"><input type="checkbox" data-chk> ' + esc(it.item_name || it.name) + "</label>" +
-				(needsVal ? '<input data-val placeholder="' + esc(it.value_label || "Value") + '">' : "") +
+			var type = it.response_type || "Check";
+			var label = esc(it.value_label || "Value");
+			var body =
+				'<label class="check"><input type="checkbox" data-chk> ' + esc(it.item_name || it.name) + "</label>";
+			if (type === "Check + Value") {
+				body += '<input data-val placeholder="' + label + '">';
+			} else if (type === "Check + Quantity") {
+				// Qty drives how many serial boxes appear below — three trailers,
+				// three plates. min=1 because ticking it means at least one is on.
+				body += '<span data-qtywrap class="ho-qty"><span class="ho-qty-lbl">Qty</span>' +
+					'<input data-qty type="number" min="1" step="1" value="1"></span>';
+			}
+			return '<div class="ho-chk-row-wrap">' +
+				'<div class="ho-chk-row" data-item="' + esc(it.name) + '" data-type="' + esc(type) + '"' +
+				' data-label="' + label + '">' + body + "</div>" +
+				'<div class="ho-serials" data-serials></div>' +
 				"</div>";
 		}).join("");
 	}
+
+	// Rebuild the serial boxes for one row, preserving anything already typed so
+	// nudging the qty from 3 to 4 does not wipe the first three.
+	function syncSerials(row) {
+		var wrap = row.parentNode;
+		var box = wrap.querySelector("[data-serials]");
+		if (!box) return;
+		var chk = row.querySelector("[data-chk]");
+		var qtyEl = row.querySelector("[data-qty]");
+		if (row.getAttribute("data-type") !== "Check + Quantity" || !chk.checked) {
+			box.innerHTML = ""; box.style.display = "none"; return;
+		}
+		var qty = Math.max(1, parseInt(qtyEl && qtyEl.value, 10) || 1);
+		if (qtyEl && String(qty) !== qtyEl.value) qtyEl.value = qty;
+		var kept = Array.prototype.map.call(box.querySelectorAll("[data-serial]"), function (i) { return i.value; });
+		var label = row.getAttribute("data-label") || "Serial";
+		var html = "";
+		for (var i = 0; i < qty; i++) {
+			html += '<div class="ho-serial"><span class="n">' + (i + 1) + '</span>' +
+				'<input data-serial value="' + esc(kept[i] || "") + '" placeholder="' + esc(label) + ' #' + (i + 1) + '"></div>';
+		}
+		box.innerHTML = html;
+		// Must be an explicit value: style.display = "" only clears the INLINE
+		// style, so the element falls straight back to the stylesheet's
+		// `.ho-serials { display:none }` and the boxes stay invisible.
+		box.style.display = "block";
+	}
+
 	function wireTicks(box) {
 		box.addEventListener("change", function (e) {
+			if (e.target.matches("[data-qty]")) { syncSerials(e.target.closest(".ho-chk-row")); return; }
 			if (!e.target.matches("[data-chk]")) return;
 			var row = e.target.closest(".ho-chk-row");
 			row.classList.toggle("is-checked", e.target.checked);
@@ -301,20 +354,52 @@
 				if (e.target.checked) valEl.focus();
 				else valEl.value = "";
 			}
+			var qtyWrap = row.querySelector("[data-qtywrap]");
+			if (qtyWrap) qtyWrap.style.display = e.target.checked ? "inline-flex" : "none";
+			syncSerials(row);
+			if (e.target.checked && qtyWrap) row.querySelector("[data-qty]").focus();
+		});
+		// `change` on a number input only fires on blur; `input` keeps the serial
+		// boxes in step as the spinner is clicked.
+		box.addEventListener("input", function (e) {
+			if (e.target.matches("[data-qty]")) syncSerials(e.target.closest(".ho-chk-row"));
 		});
 	}
 	wireTicks(chkBox);
 	wireTicks(attBox);
+
 	function collectTicks(box) {
 		var out = [], missing = null;
 		box.querySelectorAll(".ho-chk-row").forEach(function (row) {
 			var chk = row.querySelector("[data-chk]");
+			var type = row.getAttribute("data-type");
+			var item = row.getAttribute("data-item");
 			var valEl = row.querySelector("[data-val]");
 			var value = valEl ? valEl.value.trim() : "";
-			if (chk.checked && row.getAttribute("data-type") === "Check + Value" && !value && !missing) {
-				missing = row.getAttribute("data-item");
+			var entry = { item: item, checked: chk.checked ? 1 : 0, value: value };
+
+			if (chk.checked && type === "Check + Value" && !value && !missing) missing = item;
+
+			if (type === "Check + Quantity") {
+				var qtyEl = row.querySelector("[data-qty]");
+				var qty = Math.max(1, parseInt(qtyEl && qtyEl.value, 10) || 1);
+				var serials = Array.prototype.map.call(
+					row.parentNode.querySelectorAll("[data-serial]"),
+					function (i) { return i.value.trim(); });
+				if (chk.checked) {
+					entry.qty = qty;
+					entry.serials = serials;
+					if (!missing && (serials.length !== qty || serials.some(function (s) { return !s; }))) {
+						missing = item + " — fill in all " + qty + " " +
+							(row.getAttribute("data-label") || "serial") + " box(es)";
+					}
+					var lower = serials.map(function (s) { return s.toLowerCase(); });
+					if (!missing && new Set(lower).size !== lower.length) {
+						missing = item + " — the same serial is entered twice";
+					}
+				}
 			}
-			out.push({ item: row.getAttribute("data-item"), checked: chk.checked ? 1 : 0, value: value });
+			out.push(entry);
 		});
 		return { rows: out, missing: missing };
 	}

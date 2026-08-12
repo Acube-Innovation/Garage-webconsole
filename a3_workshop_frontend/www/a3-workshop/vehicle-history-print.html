@@ -232,7 +232,9 @@
 <h2 class="sec">Attachments</h2>
 <div class="kv">
 	{% for a in h.attachment_items %}
-	<div><div class="k">{{ a.item }}</div><div class="v">{{ "✔ Attached" if a.checked else "✘ Not attached" }}{% if a.value %} — {{ a.value }}{% endif %}</div></div>
+	<div><div class="k">{{ a.item }}{% if a.qty %} &times;{{ a.qty }}{% endif %}</div>
+		<div class="v">{{ "✔ Attached" if a.checked else "✘ Not attached" }}{% if a.value %} — {{ a.value }}{% endif %}
+		{%- if a.serials %}<br><span style="font-size:10px;color:#4a5468">{{ a.serials | join(" · ") }}</span>{% endif %}</div></div>
 	{% endfor %}
 </div>
 {% endif %}
@@ -282,7 +284,39 @@
 </div>
 {% endif %}
 
-<div class="sigs">
+<div class="decl">
+	<h3>Declaration of Responsibility</h3>
+	{%- if h.to_driver and h.to_driver != "—" %}
+	<p>
+		I, <b>{{ h.to_driver }}</b>, confirm that I have inspected
+		{{ h_meta.model }}{% if h_meta.plate and h_meta.plate != "—" %} (plate {{ h_meta.plate }}){% endif %}
+		on {{ h.date }} at {{ num(h.odometer) }} km, and that I accept the vehicle in the condition recorded
+		in this report, including every damage listed above. I declare that:
+	</p>
+	{%- else %}
+	<p>
+		The driver named below confirms the vehicle described in this report was inspected on {{ h.date }}
+		at {{ num(h.odometer) }} km and handed over in the condition recorded, including every damage listed
+		above. The driver declares that:
+	</p>
+	{%- endif %}
+	<ol>
+		<li>The vehicle, its keys, documents, tools, spare tyre and accessories remain the property of {{ company }} and are entrusted to me solely for authorised work use.</li>
+		<li>I am responsible for the vehicle while it is in my custody, including its safe operation, security, cleanliness and fuel, and I will not permit any unauthorised person to drive it.</li>
+		<li>I hold a valid UAE driving licence for this class of vehicle and will produce it on demand.</li>
+		<li>I will report any accident, new damage, warning light or mechanical fault to the fleet office immediately, and will not carry out or authorise repairs without approval.</li>
+		<li><b>Any damage found at the next handover that is not recorded in this report may be attributed to me</b>, and traffic fines, Salik and impound charges incurred during my custody remain my responsibility.</li>
+		<li>I will return the vehicle with all items listed, in the same condition allowing for fair wear and tear, on demand or at the end of my assignment.</li>
+	</ol>
+	{%- if h.damages %}
+	<p class="muted">
+		This handover records <b>{{ h.damages | length }}</b> pre-existing damage item{{ "" if (h.damages|length) == 1 else "s" }}.
+		The receiving driver is not held responsible for those, only for damage arising after this inspection.
+	</p>
+	{%- endif %}
+</div>
+
+<div class="sigs sigs--tight">
 	<div class="sig"><b>{{ h.from_driver if h.from_driver != "—" else "Returning Driver" }}</b>From Driver — signature &amp; date</div>
 	<div class="sig"><b>{{ h.to_driver if h.to_driver != "—" else "Receiving Driver" }}</b>To Driver — signature &amp; date</div>
 	<div class="sig"><b>{{ h_meta.inspected_by }}</b>Inspector — signature &amp; date</div>

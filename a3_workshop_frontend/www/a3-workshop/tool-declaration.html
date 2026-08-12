@@ -1,0 +1,229 @@
+{% extends "templates/print_base.html" %}
+
+{% block doc_title %}
+{%- if mode == "statement" %}Tool Responsibility Declaration
+{%- elif mode == "slip" %}Tool {{ doc.purpose }} — Declaration
+{%- else %}Tool Responsibility Declaration{% endif %}
+{% endblock %}
+
+{% block doc_subtitle %}
+{%- if mode == "statement" %}{{ emp.employee_name }} ({{ emp.name }}) · {{ rows|length }} tool{{ "" if rows|length == 1 else "s" }} in custody as at {{ as_of }}
+{%- elif mode == "slip" %}{{ doc.name }} · {{ emp.employee_name }} · {{ txn_date }}
+{%- endif %}
+{% endblock %}
+
+{% block content %}
+
+{%- if not mode %}
+<p class="muted">Nothing to print — open this page with <b>?technician=&lt;Employee&gt;</b> or <b>?custody=&lt;Tool Custody&gt;</b>.</p>
+
+{%- elif mode == "cancelled" %}
+<p class="muted">
+	<b>{{ doc.name }} was cancelled.</b> A cancelled custody document carries no declaration —
+	the tools it covered were reversed to their previous holder.
+</p>
+
+{# ==================================================== PER-TECHNICIAN STATEMENT #}
+{%- elif mode == "statement" %}
+
+<h2 class="sec">Technician</h2>
+<div class="kv">
+	<div><div class="k">Name</div><div class="v">{{ emp.employee_name }}</div></div>
+	<div><div class="k">Employee ID</div><div class="v">{{ emp.name }}</div></div>
+	<div><div class="k">Designation</div><div class="v">{{ emp.designation or "—" }}</div></div>
+	<div><div class="k">Department</div><div class="v">{{ emp.department or "—" }}</div></div>
+</div>
+
+<h2 class="sec">Tools In Custody ({{ rows|length }})</h2>
+{%- if rows %}
+<table class="t">
+	<thead><tr>
+		<th style="width:26px">#</th>
+		<th style="width:150px">Serial Tag</th>
+		<th>Tool</th>
+		<th style="width:92px">Held Since</th>
+		<th style="width:96px">Due Back</th>
+		<th style="width:88px" class="right">Replacement</th>
+	</tr></thead>
+	<tbody>
+		{%- for r in rows %}
+		<tr>
+			<td>{{ loop.index }}</td>
+			<td><b>{{ r.serial_no }}</b></td>
+			<td>{{ r.item_name or r.item_code }}</td>
+			<td style="white-space:nowrap">{{ r.since_fmt }}</td>
+			<td>
+				{{ r.due_fmt }}
+				{%- if r.overdue %} <span class="pill pill--red">{{ r.days_overdue }}d late</span>{% endif %}
+			</td>
+			<td class="right">{{ "{:,.2f}".format(r.replacement_rate) }}</td>
+		</tr>
+		{%- endfor %}
+	</tbody>
+	<tfoot><tr>
+		<td colspan="5" class="right"><b>Total replacement value</b></td>
+		<td class="right"><b>AED {{ "{:,.2f}".format(total_value) }}</b></td>
+	</tr></tfoot>
+</table>
+{%- if overdue_count %}
+<p class="muted" style="margin-top:8px">
+	<span class="pill pill--red">{{ overdue_count }} overdue</span>
+	Tools past their expected return date are listed above and remain the technician's responsibility until booked back in.
+</p>
+{%- endif %}
+{%- else %}
+<p class="muted">No tools are currently in this technician's custody.</p>
+{%- endif %}
+
+{%- if rows %}
+<div class="decl">
+	<h3>Declaration of Responsibility</h3>
+	<p>
+		I, <b>{{ emp.employee_name }}</b> (Employee ID {{ emp.name }}), confirm that the
+		{{ rows|length }} tool{{ "" if rows|length == 1 else "s" }} listed above
+		{{ "is" if rows|length == 1 else "are" }} in my custody as at {{ as_of }}, and I declare that:
+	</p>
+	<ol>
+		<li>These tools remain at all times the property of {{ company }} and are issued to me for use in the course of my work only.</li>
+		<li>I received them in serviceable condition and I am personally responsible for their safe keeping, correct use and security while they are in my custody.</li>
+		<li>I will return them on demand, on the expected return date shown, or on the last day of my employment, whichever comes first.</li>
+		<li>I will report any loss, theft or damage to my supervisor immediately, and I will not lend, sell, alter or take these tools off site without written authorisation.</li>
+		<li>I accept that any tool lost or damaged through my negligence may be recovered from me at the replacement value shown above, subject to management approval and to the limits set by applicable UAE labour law.</li>
+	</ol>
+</div>
+
+<div class="sigs sigs--2 sigs--tight">
+	<div class="sig"><b>{{ emp.employee_name }}</b>Technician — signature &amp; date</div>
+	<div class="sig"><b>&nbsp;</b>Tool Crib / Workshop Manager — signature &amp; date</div>
+</div>
+{%- endif %}
+
+{# ========================================================= PER-DOCUMENT SLIP #}
+{%- elif mode == "slip" %}
+
+{%- if is_draft %}
+<p class="muted" style="margin-bottom:14px">
+	<span class="pill pill--amber">Draft</span>
+	This document has not been submitted. Nothing has changed hands and this declaration is not yet binding.
+</p>
+{%- endif %}
+
+<h2 class="sec">Handover</h2>
+<div class="kv">
+	<div><div class="k">Document</div><div class="v">{{ doc.name }}</div></div>
+	<div><div class="k">Type</div><div class="v">{{ doc.purpose }}</div></div>
+	<div><div class="k">Date</div><div class="v">{{ txn_date }}</div></div>
+	<div><div class="k">Due Back</div><div class="v">{{ due_fmt }}</div></div>
+	<div>
+		<div class="k">{{ "Handed Over By" if doc.purpose != "Issue" else "Issued To" }}</div>
+		<div class="v">{{ emp.employee_name }} ({{ emp.name }})</div>
+	</div>
+	{%- if to_emp %}
+	<div><div class="k">Received By</div><div class="v">{{ to_emp.employee_name }} ({{ to_emp.name }})</div></div>
+	{%- endif %}
+	<div><div class="k">Kit</div><div class="v">{{ doc.kit_template or "—" }}</div></div>
+	<div><div class="k">Job Card</div><div class="v">{{ doc.reference_job_card or "—" }}</div></div>
+</div>
+
+<h2 class="sec">Tools ({{ rows|length }})</h2>
+<table class="t">
+	<thead><tr>
+		<th style="width:26px">#</th>
+		<th style="width:150px">Serial Tag</th>
+		<th>Tool</th>
+		<th style="width:76px">Condition</th>
+		<th>Remarks</th>
+		<th style="width:88px" class="right">Replacement</th>
+	</tr></thead>
+	<tbody>
+		{%- for r in rows %}
+		<tr>
+			<td>{{ loop.index }}</td>
+			<td><b>{{ r.serial_no }}</b></td>
+			<td>{{ r.item_name or r.item_code }}</td>
+			<td>
+				{%- if r.condition == "Good" %}<span class="pill pill--green">Good</span>
+				{%- elif r.condition == "Lost" %}<span class="pill pill--red">Lost</span>
+				{%- else %}<span class="pill pill--amber">{{ r.condition }}</span>{% endif %}
+			</td>
+			<td>{{ r.remarks or "—" }}</td>
+			<td class="right">{{ "{:,.2f}".format(r.replacement_rate) }}</td>
+		</tr>
+		{%- endfor %}
+	</tbody>
+	<tfoot><tr>
+		<td colspan="5" class="right"><b>Total replacement value</b></td>
+		<td class="right"><b>AED {{ "{:,.2f}".format(total_value) }}</b></td>
+	</tr></tfoot>
+</table>
+
+{%- if doc.remarks %}
+<h2 class="sec">Remarks</h2>
+<p>{{ doc.remarks }}</p>
+{%- endif %}
+
+<div class="decl">
+	{%- if doc.purpose == "Issue" %}
+	<h3>Declaration — Receipt of Tools</h3>
+	<p>
+		I, <b>{{ emp.employee_name }}</b> (Employee ID {{ emp.name }}), acknowledge that I have received the
+		{{ rows|length }} tool{{ "" if rows|length == 1 else "s" }} listed above from {{ company }} on {{ txn_date }},
+		in the condition recorded, and I declare that:
+	</p>
+	<ol>
+		<li>These tools remain the property of {{ company }} and are issued to me for use in the course of my work only.</li>
+		<li>I am personally responsible for their safe keeping, correct use and security while they are in my custody.</li>
+		<li>I will return them {% if doc.expected_return_date %}by <b>{{ due_fmt }}</b>{% else %}on demand{% endif %}, or on the last day of my employment, whichever comes first.</li>
+		<li>I will report any loss, theft or damage to my supervisor immediately.</li>
+		<li>I accept that any tool lost or damaged through my negligence may be recovered from me at the replacement value shown, subject to management approval and to the limits set by applicable UAE labour law.</li>
+	</ol>
+
+	{%- elif doc.purpose == "Return" %}
+	<h3>Declaration — Return of Tools</h3>
+	<p>
+		The {{ rows|length }} tool{{ "" if rows|length == 1 else "s" }} listed above
+		{{ "was" if rows|length == 1 else "were" }} returned by <b>{{ emp.employee_name }}</b>
+		(Employee ID {{ emp.name }}) on {{ txn_date }} and received into the tool crib in the condition recorded
+		against each item.
+	</p>
+	<p>
+		Both parties confirm the condition recorded above is accurate. Any item marked
+		<b>Damaged</b> or <b>Lost</b> remains open pending a management decision on liability, and the
+		technician's custody of that item is not discharged by this document.
+	</p>
+
+	{%- else %}
+	<h3>Declaration — Transfer of Custody</h3>
+	<p>
+		Custody of the {{ rows|length }} tool{{ "" if rows|length == 1 else "s" }} listed above passed directly from
+		<b>{{ emp.employee_name }}</b> ({{ emp.name }}) to
+		<b>{{ to_emp.employee_name if to_emp else "—" }}</b>{% if to_emp %} ({{ to_emp.name }}){% endif %}
+		on {{ txn_date }}.
+	</p>
+	<p>
+		The receiving technician confirms the tools were inspected and accepted in the condition recorded,
+		and assumes full responsibility for them from that moment. The releasing technician is discharged
+		of responsibility for these items from the same moment.
+	</p>
+	{%- endif %}
+</div>
+
+{%- if doc.purpose == "Transfer" %}
+<div class="sigs sigs--tight">
+	<div class="sig"><b>{{ emp.employee_name }}</b>Releasing Technician — signature &amp; date</div>
+	<div class="sig"><b>{{ to_emp.employee_name if to_emp else "&nbsp;" }}</b>Receiving Technician — signature &amp; date</div>
+	{#- Only name the witness when it is genuinely a third party. Printing the
+	    receiving technician's own name over a "Witnessed By" line reads as though
+	    they witnessed their own handover. -#}
+	{%- set witness = doc.acknowledged_by if doc.acknowledged_by not in [emp.employee_name, (to_emp.employee_name if to_emp else None)] else "" %}
+	<div class="sig"><b>{{ witness or "&nbsp;" }}</b>Witnessed By — signature &amp; date</div>
+</div>
+{%- else %}
+<div class="sigs sigs--2 sigs--tight">
+	<div class="sig"><b>{{ emp.employee_name }}</b>Technician — signature &amp; date</div>
+	<div class="sig"><b>{{ doc.acknowledged_by or "&nbsp;" }}</b>Tool Crib — signature &amp; date</div>
+</div>
+{%- endif %}
+
+{%- endif %}
+{% endblock %}
