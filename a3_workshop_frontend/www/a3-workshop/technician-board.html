@@ -2,7 +2,11 @@
 {% from "templates/macros/workshop.html" import badge, statcard %}
 
 {% block page_content %}
-<script>window.csrf_token = "{{ frappe.session.csrf_token }}";</script>
+{#- csrf_token comes from get_csrf_token() in the controller, which generates one
+    when the session has none. Reading frappe.session.csrf_token directly renders
+    the literal "None" on a fresh session and every write from the page then fails
+    once anything else generates a real token. -#}
+<script>window.csrf_token = "{{ csrf_token }}";</script>
 
 <div class="toolbar">
 	<div class="muted">
@@ -16,6 +20,18 @@
 		<a class="btn btn--outline btn--sm" href="/a3-workshop/job-cards"><i class="fa-solid fa-clipboard-list"></i> Job Cards</a>
 	</div>
 </div>
+
+<div class="tb-tabs" id="tb-tabs">
+	<button type="button" class="tb-tab is-active" data-tab="work"><i class="fa-solid fa-list-check"></i> Assignments</button>
+	<button type="button" class="tb-tab" data-tab="tools">
+		<i class="fa-solid fa-toolbox"></i> Tools
+		{%- if tools.totals.issued %}<span class="tb-tabcount">{{ tools.totals.issued }}</span>{% endif %}
+		{%- if tools.totals.overdue %}<span class="tb-tabcount tb-tabcount--alert">{{ tools.totals.overdue }} late</span>{% endif %}
+	</button>
+</div>
+
+<!-- ======================================================= ASSIGNMENTS -->
+<div class="tb-pane is-active" id="pane-work">
 
 <div class="tc-stats">
 	{{ statcard("Open Tasks", totals.tasks, "stat-card--sm", "Assigned service lines") }}
@@ -112,6 +128,244 @@
 </div>
 {%- endif %}
 
+</div><!-- /pane-work -->
+
+<!-- ============================================================= TOOLS -->
+<div class="tb-pane" id="pane-tools">
+
+{%- if tools_error %}
+<div class="card"><div class="card__body">
+	<div class="empty">
+		<i class="fa-solid fa-toolbox" style="font-size:30px;display:block;margin-bottom:12px"></i>
+		<b>{{ tools_error }}</b>
+	</div>
+</div></div>
+{%- else %}
+
+<div class="tc-stats">
+	{{ statcard("Tools Issued", tools.totals.issued, "stat-card--sm", "On technicians right now") }}
+	{{ statcard("Overdue", tools.totals.overdue, "stat-card--sm", "Past their return date") }}
+	{{ statcard("In Store", tools.totals.in_store, "stat-card--sm", "Free to issue") }}
+	{{ statcard("Out of Service", (tools.totals.under_repair or 0) + (tools.totals.lost or 0), "stat-card--sm", (tools.totals.under_repair or 0) ~ " under repair · " ~ (tools.totals.lost or 0) ~ " lost") }}
+</div>
+
+<div class="toolbar">
+	<div class="muted">
+		{%- if tools.scoped_to %}
+		<i class="fa-solid fa-toolbox"></i> Tools signed out to you
+		{%- else %}
+		<i class="fa-solid fa-toolbox"></i> Every tool currently signed out, by technician
+		{%- endif %}
+	</div>
+	{%- if can_manage_tools %}
+	<div class="toolbar__right">
+		<a class="btn btn--outline btn--sm" href="/app/serial-no?custom_custody_status=Issued" target="_blank" rel="noopener"><i class="fa-solid fa-table-list"></i> Tool Register</a>
+		<button type="button" class="btn btn--primary btn--sm" id="tl-issue-open"><i class="fa-solid fa-hand-holding-hand"></i> Issue Tools</button>
+	</div>
+	{%- endif %}
+</div>
+
+{%- if tools.groups %}
+<div class="stack">
+	{%- for g in tools.groups %}
+	<div class="card">
+		<div class="card__head">
+			<h3><i class="fa-solid fa-user-gear"></i> {{ g.technician_name }}</h3>
+			<div class="row-between" style="gap:10px">
+				<span class="muted">{{ g.count }} tool{{ "" if g.count == 1 else "s" }} signed out</span>
+				{%- if g.overdue %}{{ badge(g.overdue ~ " overdue", "badge--danger") }}{% endif %}
+				<a class="btn btn--outline btn--sm" target="_blank" rel="noopener"
+				   href="/a3-workshop/tool-declaration?technician={{ g.technician }}"
+				   title="Printable declaration listing every tool {{ g.technician_name }} is responsible for">
+					<i class="fa-solid fa-file-signature"></i> Declaration
+				</a>
+				{%- if can_manage_tools %}
+				<button type="button" class="btn btn--outline btn--sm tl-return-open" data-tech="{{ g.technician }}" data-techname="{{ g.technician_name }}">
+					<i class="fa-solid fa-rotate-left"></i> Return / Transfer
+				</button>
+				{%- endif %}
+			</div>
+		</div>
+		<div class="card__body" style="padding:0">
+			<div style="overflow-x:auto">
+			<table class="table">
+				<thead><tr>
+					<th style="width:190px">Serial Tag</th>
+					<th>Tool</th>
+					<th style="width:120px">Held</th>
+					<th style="width:150px">Due Back</th>
+				</tr></thead>
+				<tbody>
+					{%- for t in g.tools %}
+					<tr>
+						<td><b class="tl-serial">{{ t.serial_no }}</b></td>
+						<td>{{ t.item_name or t.item_code }}</td>
+						<td class="muted">{{ t.days_held }} day{{ "" if t.days_held == 1 else "s" }}</td>
+						<td>
+							{%- if t.overdue %}
+							{{ badge(t.days_overdue ~ " day" ~ ("" if t.days_overdue == 1 else "s") ~ " late", "badge--danger") }}
+							{%- elif t.custom_expected_return_date %}
+							{{ badge(t.custom_expected_return_date, "badge--pending") }}
+							{%- else %}
+							<span class="muted">Permanent</span>
+							{%- endif %}
+						</td>
+					</tr>
+					{%- endfor %}
+				</tbody>
+			</table>
+			</div>
+		</div>
+	</div>
+	{%- endfor %}
+</div>
+{%- else %}
+<div class="card"><div class="card__body">
+	<div class="empty">
+		<i class="fa-solid fa-toolbox" style="font-size:30px;display:block;margin-bottom:12px"></i>
+		<b>No tools are signed out{% if tools.scoped_to %} to you{% endif %}.</b>
+		<div style="margin-top:6px">Every tagged tool is in the crib. Issue one and the technician becomes answerable for it from that moment.</div>
+		{%- if can_manage_tools %}
+		<button type="button" class="btn btn--primary btn--sm" style="margin-top:14px" id="tl-issue-open-2"><i class="fa-solid fa-hand-holding-hand"></i> Issue Tools</button>
+		{%- endif %}
+	</div>
+</div></div>
+{%- endif %}
+
+{%- endif %}
+</div><!-- /pane-tools -->
+
+{%- if can_manage_tools and not tools_error %}
+<!-- ------------------------------------------------------- issue modal -->
+<div class="modal-overlay" id="tl-issue-modal" role="dialog" aria-modal="true">
+	<div class="modal" style="max-width:720px">
+		<div class="modal__head">
+			<div><h3>Issue Tools</h3><div class="sub">The technician is answerable from the moment this is submitted</div></div>
+			<button type="button" class="modal__close" data-close aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+		</div>
+		<div class="modal__body">
+			<div class="form-grid">
+				<div class="field">
+					<label>Technician <span class="req">*</span></label>
+					<select id="tl-i-tech">
+						<option value="">Select technician</option>
+						{%- for e in tool_technicians %}
+						<option value="{{ e.name }}">{{ e.employee_name }}{% if e.designation %} — {{ e.designation }}{% endif %}</option>
+						{%- endfor %}
+					</select>
+				</div>
+				<div class="field">
+					<label>Kit (optional)</label>
+					<select id="tl-i-kit">
+						<option value="">No kit — pick tools by hand</option>
+						{%- for k in tool_kits %}
+						<option value="{{ k.name }}">{{ k.name }}{% if k.grade %} ({{ k.grade }}){% endif %}</option>
+						{%- endfor %}
+					</select>
+				</div>
+				<div class="field">
+					<label>Expected Return</label>
+					<input type="date" id="tl-i-due">
+					<div class="muted" style="font-size:11px;margin-top:4px">Leave blank for permanent custody</div>
+				</div>
+				<div class="field">
+					<label>Acknowledged By <span class="req">*</span></label>
+					<input type="text" id="tl-i-ack" placeholder="Who signed for them">
+				</div>
+			</div>
+
+			<div class="fieldset-title" style="margin-top:16px">Tools in the crib</div>
+			<input type="search" id="tl-i-search" placeholder="Search by tag or tool name…" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius-sm,9px);background:var(--surface);color:var(--text);font-size:13px;margin-bottom:10px">
+			<div id="tl-i-list" class="tl-picklist"><div class="empty">Loading tools…</div></div>
+			<div class="muted" id="tl-i-count" style="font-size:12px;margin-top:8px">0 selected</div>
+			<div class="muted" id="tl-i-msg" style="font-size:12px;margin-top:6px"></div>
+		</div>
+		<div class="modal__foot">
+			<button type="button" class="btn btn--ghost btn--sm" data-close>Cancel</button>
+			<button type="button" class="btn btn--primary btn--sm" id="tl-i-submit"><i class="fa-solid fa-check"></i> Issue &amp; Sign</button>
+			<a class="btn btn--outline btn--sm" id="tl-i-print" style="display:none" target="_blank" rel="noopener" href="#"><i class="fa-solid fa-file-signature"></i> Print Declaration</a>
+			<button type="button" class="btn btn--primary btn--sm" id="tl-i-done" style="display:none">Done</button>
+		</div>
+	</div>
+</div>
+
+<!-- ------------------------------------------------------ return modal -->
+<div class="modal-overlay" id="tl-return-modal" role="dialog" aria-modal="true">
+	<div class="modal" style="max-width:720px">
+		<div class="modal__head">
+			<div><h3>Return / Transfer</h3><div class="sub" id="tl-r-sub">—</div></div>
+			<button type="button" class="modal__close" data-close aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+		</div>
+		<div class="modal__body">
+			<div class="form-grid">
+				<div class="field">
+					<label>Action</label>
+					<select id="tl-r-mode">
+						<option value="Return">Return to the crib</option>
+						<option value="Transfer">Transfer to another technician</option>
+					</select>
+				</div>
+				<div class="field" id="tl-r-towrap" style="display:none">
+					<label>To Technician <span class="req">*</span></label>
+					<select id="tl-r-to">
+						<option value="">Select technician</option>
+						{%- for e in tool_technicians %}
+						<option value="{{ e.name }}">{{ e.employee_name }}</option>
+						{%- endfor %}
+					</select>
+				</div>
+				<div class="field">
+					<label>Acknowledged By <span class="req">*</span></label>
+					<input type="text" id="tl-r-ack" placeholder="Who received them">
+				</div>
+			</div>
+
+			<div class="fieldset-title" style="margin-top:16px">Tools on this technician</div>
+			<div id="tl-r-list" class="tl-picklist"><div class="empty">Loading…</div></div>
+			<div class="muted" id="tl-r-count" style="font-size:12px;margin-top:8px">0 selected</div>
+			<div class="muted" id="tl-r-msg" style="font-size:12px;margin-top:6px"></div>
+		</div>
+		<div class="modal__foot">
+			<button type="button" class="btn btn--ghost btn--sm" data-close>Cancel</button>
+			<button type="button" class="btn btn--primary btn--sm" id="tl-r-submit"><i class="fa-solid fa-check"></i> Confirm</button>
+			<a class="btn btn--outline btn--sm" id="tl-r-print" style="display:none" target="_blank" rel="noopener" href="#"><i class="fa-solid fa-file-signature"></i> Print Declaration</a>
+			<button type="button" class="btn btn--primary btn--sm" id="tl-r-done" style="display:none">Done</button>
+		</div>
+	</div>
+</div>
+{%- endif %}
+
+<style>
+	.tb-tabs { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:18px; }
+	.tb-tab { border:1px solid var(--border); background:var(--surface); border-radius:999px;
+		padding:8px 16px; font-size:13px; font-weight:600; color:var(--muted); cursor:pointer;
+		font-family:var(--font); display:inline-flex; align-items:center; gap:8px; }
+	.tb-tab:hover { color:var(--text); }
+	.tb-tab.is-active { background:var(--red); border-color:var(--red); color:#fff; }
+	.tb-tab:focus-visible { outline:2px solid var(--navy); outline-offset:2px; }
+	.tb-tabcount { background:rgba(0,0,0,.10); border-radius:999px; padding:1px 8px; font-size:11px; }
+	.tb-tab.is-active .tb-tabcount { background:rgba(255,255,255,.24); }
+	.tb-tabcount--alert { background:var(--red-soft); color:var(--red); }
+	.tb-tab.is-active .tb-tabcount--alert { background:rgba(255,255,255,.24); color:#fff; }
+	.tb-pane { display:none; }
+	.tb-pane.is-active { display:block; }
+
+	.tl-serial { font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; font-size:12.5px; }
+	.tl-picklist { border:1px solid var(--border); border-radius:var(--radius-sm,9px);
+		max-height:290px; overflow-y:auto; background:var(--surface); }
+	.tl-row { display:flex; align-items:center; gap:10px; padding:9px 12px;
+		border-bottom:1px solid var(--border); font-size:13px; }
+	.tl-row:last-child { border-bottom:none; }
+	.tl-row:hover { background:var(--bg); }
+	.tl-row input[type=checkbox] { flex:0 0 auto; width:15px; height:15px; }
+	.tl-row .tl-name { flex:1 1 auto; min-width:0; }
+	.tl-row .tl-name b { display:block; font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; font-size:12px; }
+	.tl-row .tl-name span { color:var(--muted); font-size:12px; }
+	.tl-row select { flex:0 0 auto; padding:5px 8px; border-radius:8px; border:1px solid var(--border);
+		background:var(--surface); color:var(--text); font-size:12px; }
+	.tl-row .tl-late { color:var(--red); font-size:11px; font-weight:700; }
+</style>
+
 <script>
 (function () {
 	"use strict";
@@ -131,19 +385,57 @@
 	}
 
 	// Frappe returns errors as a JSON array of JSON strings in _server_messages.
+	// "Invalid Request" is its CSRF rejection, which reads as nonsense to a user —
+	// it means this page was rendered against a session that has since changed, so
+	// say the thing that actually fixes it.
 	function readError(data) {
 		var raw = data && data._server_messages;
-		if (!raw) return (data && data.exception) || "";
-		try {
-			return JSON.parse(raw).map(function (m) {
-				try { return JSON.parse(m).message; } catch (e) { return m; }
-			}).join(" ").replace(/<[^>]*>/g, "");
-		} catch (e) { return String(raw); }
+		var msg = "";
+		if (raw) {
+			try {
+				msg = JSON.parse(raw).map(function (m) {
+					try { return JSON.parse(m).message; } catch (e) { return m; }
+				}).join(" ").replace(/<[^>]*>/g, "");
+			} catch (e) { msg = String(raw); }
+		} else {
+			msg = (data && data.exception) || "";
+		}
+		if (/Invalid Request|CSRFTokenError/i.test(msg)) {
+			return "Your session changed since this page was opened. Reload the page and try again.";
+		}
+		return msg;
 	}
 
-	// "Update Progress" writes the linked ERPNext Task's `progress` through core
-	// Frappe's whitelisted frappe.client.set_value, which saves the Task and so
-	// enforces Task write permission server-side.
+	function esc(s) {
+		return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+			return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+		});
+	}
+
+	// ------------------------------------------------------------- tabs
+	var tabs = document.getElementById("tb-tabs");
+	if (tabs) {
+		tabs.addEventListener("click", function (ev) {
+			var btn = ev.target.closest(".tb-tab");
+			if (!btn) return;
+			var name = btn.getAttribute("data-tab");
+			tabs.querySelectorAll(".tb-tab").forEach(function (b) { b.classList.toggle("is-active", b === btn); });
+			document.querySelectorAll(".tb-pane").forEach(function (p) {
+				p.classList.toggle("is-active", p.id === "pane-" + name);
+			});
+			// Deep-linkable, and survives a refresh after issuing a tool.
+			try { history.replaceState(null, "", "#" + name); } catch (e) {}
+		});
+		if (location.hash === "#tools") {
+			var t = tabs.querySelector('[data-tab="tools"]');
+			if (t) t.click();
+		}
+	}
+
+	// --------------------------------------------------- progress update
+	// Writes the linked ERPNext Task's `progress` through core Frappe's whitelisted
+	// frappe.client.set_value, which saves the Task and so enforces Task write
+	// permission server-side.
 	document.addEventListener("click", function (ev) {
 		var btn = ev.target.closest && ev.target.closest(".tb-save");
 		if (!btn || btn.disabled) return;
@@ -169,6 +461,266 @@
 			btn.disabled = false;
 		});
 	});
+
+	// ------------------------------------------------------------ modals
+	function openModal(id) {
+		var m = document.getElementById(id);
+		if (m) m.classList.add("is-open");
+	}
+	function closeModal(m) { m.classList.remove("is-open"); }
+
+	document.addEventListener("click", function (ev) {
+		if (ev.target.closest("[data-close]")) {
+			var m = ev.target.closest(".modal-overlay");
+			if (m) closeModal(m);
+			return;
+		}
+		if (ev.target.classList && ev.target.classList.contains("modal-overlay")) closeModal(ev.target);
+	});
+	document.addEventListener("keydown", function (ev) {
+		if (ev.key === "Escape") {
+			document.querySelectorAll(".modal-overlay.is-open").forEach(closeModal);
+		}
+	});
+
+	// ------------------------------------------------------- issue tools
+	var issueModal = document.getElementById("tl-issue-modal");
+	if (issueModal) {
+		var iList = document.getElementById("tl-i-list");
+		var iSearch = document.getElementById("tl-i-search");
+		var iCount = document.getElementById("tl-i-count");
+		var iMsg = document.getElementById("tl-i-msg");
+		var preselect = {};
+
+		function renderAvailable(rows) {
+			if (!rows.length) {
+				iList.innerHTML = '<div class="empty" style="padding:18px">No tools free in the crib.</div>';
+				return;
+			}
+			iList.innerHTML = rows.map(function (r) {
+				var checked = preselect[r.serial_no] ? " checked" : "";
+				return '<label class="tl-row"><input type="checkbox" value="' + esc(r.serial_no) + '"' + checked + '>' +
+					'<span class="tl-name"><b>' + esc(r.serial_no) + '</b><span>' + esc(r.item_name || r.item_code) + '</span></span></label>';
+			}).join("");
+			updateCount();
+		}
+
+		function updateCount() {
+			var n = iList.querySelectorAll("input[type=checkbox]:checked").length;
+			iCount.textContent = n + " selected";
+		}
+
+		function loadAvailable(search) {
+			iList.innerHTML = '<div class="empty" style="padding:18px">Loading tools…</div>';
+			return callMethod("garagedesk.api.tool_custody.get_available_tools", { search: search || "", limit: 200 })
+				.then(renderAvailable)
+				.catch(function (err) {
+					iList.innerHTML = '<div class="empty" style="padding:18px">Could not load tools: ' + esc(err.message) + "</div>";
+				});
+		}
+
+		function openIssue() {
+			preselect = {};
+			iMsg.textContent = "";
+			iSearch.value = "";
+			document.getElementById("tl-i-kit").value = "";
+			resetFoot("tl-i");
+			openModal("tl-issue-modal");
+			loadAvailable("");
+		}
+
+		var btn1 = document.getElementById("tl-issue-open");
+		var btn2 = document.getElementById("tl-issue-open-2");
+		if (btn1) btn1.addEventListener("click", openIssue);
+		if (btn2) btn2.addEventListener("click", openIssue);
+
+		iList.addEventListener("change", updateCount);
+
+		var searchTimer = null;
+		iSearch.addEventListener("input", function () {
+			clearTimeout(searchTimer);
+			searchTimer = setTimeout(function () { loadAvailable(iSearch.value.trim()); }, 220);
+		});
+
+		// Picking a kit resolves it into concrete in-store serials and pre-ticks
+		// them, and says plainly what it could not find rather than issuing a
+		// partial kit silently.
+		document.getElementById("tl-i-kit").addEventListener("change", function () {
+			var kit = this.value;
+			if (!kit) { preselect = {}; loadAvailable(iSearch.value.trim()); return; }
+			iMsg.textContent = "Resolving kit…";
+			callMethod("garagedesk.api.tool_custody.get_kit_serials", { kit_template: kit })
+				.then(function (res) {
+					preselect = {};
+					(res.serials || []).forEach(function (s) { preselect[s.serial_no] = 1; });
+					iSearch.value = "";
+					return loadAvailable("").then(function () {
+						if (res.shortfall && res.shortfall.length) {
+							iMsg.innerHTML = '<span style="color:var(--red)">Short: ' +
+								res.shortfall.map(function (s) {
+									return esc(s.item_name || s.item_code) + " (" + s.found + " of " + s.wanted + ")";
+								}).join(", ") + "</span>";
+						} else {
+							iMsg.textContent = "Kit resolved — " + (res.serials || []).length + " tools pre-selected.";
+						}
+					});
+				})
+				.catch(function (err) { iMsg.textContent = "Could not resolve kit: " + err.message; });
+		});
+
+		document.getElementById("tl-i-submit").addEventListener("click", function () {
+			var btn = this;
+			var tech = document.getElementById("tl-i-tech").value;
+			var ack = document.getElementById("tl-i-ack").value.trim();
+			var due = document.getElementById("tl-i-due").value;
+			var kit = document.getElementById("tl-i-kit").value;
+			var serials = Array.prototype.map.call(
+				iList.querySelectorAll("input[type=checkbox]:checked"), function (c) { return c.value; }
+			);
+
+			if (!tech) { iMsg.textContent = "Pick the technician receiving the tools."; return; }
+			if (!ack) { iMsg.textContent = "Nobody has signed. Fill Acknowledged By."; return; }
+			if (!serials.length) { iMsg.textContent = "Select at least one tool."; return; }
+
+			btn.disabled = true;
+			iMsg.textContent = "Issuing " + serials.length + " tool(s)…";
+			callMethod("garagedesk.api.tool_custody.issue_tools", {
+				technician: tech, serials: serials, expected_return_date: due || null,
+				kit_template: kit || null, acknowledged_by: ack
+			}).then(function (res) {
+				// Deliberately no auto-reload and no auto-popup: the counter still has
+				// to print the declaration and get it signed, and a popup opened after
+				// an async call gets blocked. Show the link, let them close when done.
+				iMsg.innerHTML = 'Issued — <b>' + esc(res.name) + '</b> · ' + res.count +
+					' tool(s). Print the declaration for signature.';
+				showDone("tl-i", "/a3-workshop/tool-declaration?custody=" + encodeURIComponent(res.name));
+			}).catch(function (err) {
+				iMsg.innerHTML = '<span style="color:var(--red)">' + esc(err.message) + "</span>";
+				btn.disabled = false;
+			});
+		});
+	}
+
+	// Put a modal's footer back into its "ready to submit" state, so a second
+	// issue in the same page session is not stuck showing the previous result.
+	function resetFoot(prefix) {
+		var submit = document.getElementById(prefix + "-submit");
+		var print = document.getElementById(prefix + "-print");
+		var done = document.getElementById(prefix + "-done");
+		if (submit) { submit.style.display = ""; submit.disabled = false; }
+		if (print) print.style.display = "none";
+		if (done) done.style.display = "none";
+	}
+
+	// Swap a modal's footer from "submit" to "print + done" after a successful write.
+	function showDone(prefix, printHref) {
+		var submit = document.getElementById(prefix + "-submit");
+		var print = document.getElementById(prefix + "-print");
+		var done = document.getElementById(prefix + "-done");
+		if (submit) submit.style.display = "none";
+		if (print) { print.href = printHref; print.style.display = ""; }
+		if (done) {
+			done.style.display = "";
+			done.onclick = function () { location.hash = "#tools"; location.reload(); };
+		}
+	}
+
+	// ---------------------------------------------------- return/transfer
+	var returnModal = document.getElementById("tl-return-modal");
+	if (returnModal) {
+		var rList = document.getElementById("tl-r-list");
+		var rCount = document.getElementById("tl-r-count");
+		var rMsg = document.getElementById("tl-r-msg");
+		var rMode = document.getElementById("tl-r-mode");
+		var rTech = "";
+
+		function rUpdateCount() {
+			var n = rList.querySelectorAll("input[type=checkbox]:checked").length;
+			rCount.textContent = n + " selected";
+		}
+
+		rMode.addEventListener("change", function () {
+			var transfer = this.value === "Transfer";
+			document.getElementById("tl-r-towrap").style.display = transfer ? "" : "none";
+			// Condition only means something when a tool comes back to the crib.
+			rList.querySelectorAll("select").forEach(function (s) { s.style.display = transfer ? "none" : ""; });
+		});
+
+		document.addEventListener("click", function (ev) {
+			var btn = ev.target.closest && ev.target.closest(".tl-return-open");
+			if (!btn) return;
+			rTech = btn.getAttribute("data-tech");
+			document.getElementById("tl-r-sub").textContent = btn.getAttribute("data-techname");
+			rMsg.textContent = "";
+			rMode.value = "Return";
+			resetFoot("tl-r");
+			document.getElementById("tl-r-towrap").style.display = "none";
+			rList.innerHTML = '<div class="empty" style="padding:18px">Loading…</div>';
+			openModal("tl-return-modal");
+
+			callMethod("garagedesk.api.tool_custody.get_technician_tools", { technician: rTech })
+				.then(function (rows) {
+					if (!rows.length) {
+						rList.innerHTML = '<div class="empty" style="padding:18px">Nothing signed out.</div>';
+						return;
+					}
+					rList.innerHTML = rows.map(function (r) {
+						var late = r.overdue ? '<span class="tl-late">' + r.days_overdue + "d late</span>" : "";
+						return '<label class="tl-row"><input type="checkbox" value="' + esc(r.serial_no) + '">' +
+							'<span class="tl-name"><b>' + esc(r.serial_no) + '</b><span>' + esc(r.item_name || r.item_code) + "</span></span>" +
+							late +
+							'<select data-serial="' + esc(r.serial_no) + '">' +
+							'<option value="Good">Good</option>' +
+							'<option value="Damaged">Damaged</option>' +
+							'<option value="Lost">Lost</option>' +
+							"</select></label>";
+					}).join("");
+					rUpdateCount();
+				})
+				.catch(function (err) {
+					rList.innerHTML = '<div class="empty" style="padding:18px">Could not load: ' + esc(err.message) + "</div>";
+				});
+		});
+
+		rList.addEventListener("change", rUpdateCount);
+
+		document.getElementById("tl-r-submit").addEventListener("click", function () {
+			var btn = this;
+			var ack = document.getElementById("tl-r-ack").value.trim();
+			var transfer = rMode.value === "Transfer";
+			var to = document.getElementById("tl-r-to").value;
+			var checked = Array.prototype.slice.call(rList.querySelectorAll("input[type=checkbox]:checked"));
+			var serials = checked.map(function (c) { return c.value; });
+
+			if (!serials.length) { rMsg.textContent = "Select at least one tool."; return; }
+			if (!ack) { rMsg.textContent = "Nobody has signed. Fill Acknowledged By."; return; }
+			if (transfer && !to) { rMsg.textContent = "Pick the technician receiving the tools."; return; }
+
+			var conditions = {};
+			checked.forEach(function (c) {
+				var sel = rList.querySelector('select[data-serial="' + c.value.replace(/"/g, '\\"') + '"]');
+				conditions[c.value] = sel ? sel.value : "Good";
+			});
+
+			btn.disabled = true;
+			rMsg.textContent = "Submitting…";
+
+			var call = transfer
+				? callMethod("garagedesk.api.tool_custody.transfer_tools", {
+					technician: rTech, to_technician: to, serials: serials, acknowledged_by: ack })
+				: callMethod("garagedesk.api.tool_custody.return_tools", {
+					technician: rTech, serials: serials, conditions: conditions, acknowledged_by: ack });
+
+			call.then(function (res) {
+				rMsg.innerHTML = (transfer ? "Transferred" : "Returned") + ' — <b>' + esc(res.name) +
+					'</b> · ' + res.count + " tool(s). Print the declaration for signature.";
+				showDone("tl-r", "/a3-workshop/tool-declaration?custody=" + encodeURIComponent(res.name));
+			}).catch(function (err) {
+				rMsg.innerHTML = '<span style="color:var(--red)">' + esc(err.message) + "</span>";
+				btn.disabled = false;
+			});
+		});
+	}
 })();
 </script>
 {% endblock %}

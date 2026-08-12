@@ -384,9 +384,20 @@
 				function kv(k, v) { return '<div><div class="k">' + esc(k) + '</div><div class="v">' + v + "</div></div>"; }
 				function ticks(rows) {
 					return rows.map(function (c) {
-						return '<span style="white-space:nowrap;margin-right:10px;font-size:12px">' +
+						// A Check + Quantity row carries a count and one serial per unit
+						// ("Trailer x3 — TRL-1, TRL-2, TRL-3"); the others carry at most one value.
+						var extra = "";
+						if (c.serials && c.serials.length) {
+							extra = ' <b>&times;' + c.serials.length + '</b> <span style="color:var(--muted)">' +
+								c.serials.map(esc).join(", ") + "</span>";
+						} else if (c.qty) {
+							extra = " <b>&times;" + c.qty + "</b>";
+						} else if (c.value) {
+							extra = ": <b>" + esc(c.value) + "</b>";
+						}
+						return '<span style="margin-right:10px;font-size:12px">' +
 							(c.checked ? '<i class="fa-solid fa-check" style="color:var(--green)"></i>' : '<i class="fa-solid fa-xmark" style="color:var(--muted)"></i>') +
-							" " + esc(c.item) + (c.value ? ": <b>" + esc(c.value) + "</b>" : "") + "</span>";
+							" " + esc(c.item) + extra + "</span>";
 					}).join(" ");
 				}
 				var html = '<div class="vh-kv">' +
