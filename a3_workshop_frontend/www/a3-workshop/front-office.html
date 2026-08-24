@@ -139,6 +139,18 @@
 		</div>
 		<div class="card__body">
 			<div class="field" style="margin-bottom:12px"><input id="opp-search" placeholder="Search enquiries…"></div>
+			{#- The box above already narrows by name / mobile / interest; these chips
+			    cut the same list down by Opportunity status. -#}
+			<div class="filter-bar" id="opp-bar" style="margin-bottom:10px">
+				<div class="filter-bar__group" data-filter-key="status" role="group" aria-label="Filter enquiries by status" style="margin-left:0">
+					<button type="button" class="chip" data-val="all">All</button>
+					<button type="button" class="chip" data-val="Open">Open</button>
+					<button type="button" class="chip" data-val="Quotation">Quotation</button>
+					<button type="button" class="chip" data-val="Replied">Replied</button>
+					<button type="button" class="chip" data-val="Converted">Converted</button>
+					<button type="button" class="chip" data-val="Lost">Lost</button>
+				</div>
+			</div>
 			<div class="dir-list" id="opp-list"></div>
 		</div>
 	</div>
@@ -368,6 +380,8 @@
 	// ---- Box 3: incoming enquiries — real CRM Opportunities ---------
 	var opportunities = [];
 	var oppList = document.getElementById("opp-list");
+	// Built after renderOpportunities exists; the renderer re-applies it on redraw.
+	var oppFilter = null;
 
 	function renderOpportunities(filter) {
 		filter = (filter || "").toLowerCase();
@@ -377,11 +391,12 @@
 		});
 		oppList.innerHTML = list.length ? list.map(function (o) {
 			var meta = [o.mobile, o.interest].filter(Boolean).join(" · ");
-			return '<div class="dir-item" data-opp="' + esc(o.name) + '">' +
+			return '<div class="dir-item" data-opp="' + esc(o.name) + '" data-row data-f-status="' + esc(o.status) + '">' +
 				'<div class="list-row__avatar" style="background:var(--navy)">' + esc(o.customer_name[0] || "?") + '</div>' +
 				'<div style="flex:1;min-width:0"><div class="nm">' + esc(o.customer_name) + '</div><div class="ph">' + esc(meta) + '</div></div>' +
 				'<span class="badge ' + variant(o.status) + '">' + esc(o.status) + '</span></div>';
 		}).join("") : '<div class="empty">No enquiries found.</div>';
+		if (oppFilter) { oppFilter.apply(); }
 	}
 
 	// STATE D — enquiry detail in the middle panel. The list row already carries
@@ -408,6 +423,11 @@
 		if (o) showEnquiry(o);
 	});
 	document.getElementById("opp-search").addEventListener("input", function () { renderOpportunities(this.value); });
+	if (window.WorkshopFilter) {
+		// syncUrl off: this panel is one of four on the page, and its chip state is
+		// not worth owning the address bar for.
+		oppFilter = new WorkshopFilter({ root: "#opp-list", bar: "#opp-bar", syncUrl: false });
+	}
 
 	function loadOpportunities() {
 		return callMethod("garagedesk.api.front_office.list_opportunities", {}).then(function (rows) {

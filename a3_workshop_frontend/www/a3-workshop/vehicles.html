@@ -1,15 +1,41 @@
 {% extends "templates/workshop_base.html" %}
 
 {% block page_content %}
-<div class="toolbar">
-	<form method="get" style="margin:0;max-width:340px;flex:1">
-		<div class="field"><input name="q" value="{{ search or '' }}" placeholder="Search vehicles..."></div>
-	</form>
+{#- Typing narrows the loaded rows instantly and mirrors the term into ?q=, which
+    vehicles.py reads server-side -- so reloading that URL widens the search to
+    every Vehicle rather than the 200 already rendered. The Customer and Fuel
+    dropdowns are filled from the rows themselves (WorkshopFilter.populate), so
+    their options can never list something the page cannot show. -#}
+<div class="filter-bar" id="vh-bar">
+	<div class="filter-bar__search">
+		<i class="fa-solid fa-magnifying-glass"></i>
+		<input id="vh-search" value="{{ search or '' }}" placeholder="Search vehicles..." autocomplete="off" aria-label="Search vehicles">
+	</div>
+	<div class="filter-bar__group" data-filter-key="fleet" role="group" aria-label="Filter by owner type">
+		<button type="button" class="chip" data-val="all">All</button>
+		<button type="button" class="chip" data-val="fleet"><i class="fa-solid fa-truck"></i> Own Fleet</button>
+		<button type="button" class="chip" data-val="outside"><i class="fa-solid fa-user"></i> Outside</button>
+	</div>
+	<div class="filter-bar__group" data-filter-key="workshop" role="group" aria-label="Filter by workshop presence">
+		<button type="button" class="chip" data-val="all">Any</button>
+		<button type="button" class="chip" data-val="in"><i class="fa-solid fa-warehouse"></i> In Workshop</button>
+	</div>
+	<div class="filter-bar__group">
+		<select class="chip-select" data-filter-key="customer" aria-label="Filter by customer"></select>
+		<select class="chip-select" data-filter-key="fuel" aria-label="Filter by fuel type"></select>
+	</div>
+	<span class="filter-count" data-filter-count></span>
 	<a class="btn btn--primary" href="/a3-workshop/vehicle-entry"><i class="fa-solid fa-plus"></i> Register Vehicle</a>
 </div>
-<div class="list-rows">
+<div class="list-rows" id="vh-rows">
 	{%- for v in vehicles %}
-	<div class="list-row" style="grid-template-columns:2fr 1.6fr 1.4fr auto">
+	<div class="list-row" data-row
+	     data-f-fleet="{{ 'fleet' if v.is_own_fleet else 'outside' }}"
+	     data-f-workshop="{{ 'in' if v.in_workshop else 'out' }}"
+	     data-f-customer="{{ v.customer_id }}" data-l-customer="{{ v.customer }}"
+	     data-f-fuel="{{ v.fuel_slug }}" data-l-fuel="{{ v.fuel }}"
+	     data-search="{{ (v.model ~ ' ' ~ v.plate ~ ' ' ~ v.chassis ~ ' ' ~ v.customer ~ ' ' ~ v.name) | lower }}"
+	     style="grid-template-columns:2fr 1.6fr 1.4fr auto">
 		<div class="list-row__party">
 			<div class="list-row__avatar" style="background:var(--navy)"><i class="fa-solid fa-car"></i></div>
 			<div>
@@ -19,7 +45,7 @@
 		</div>
 		<div class="list-row__col">
 			<div class="k">Customer</div>
-			<div style="font-weight:600">{{ v.customer }}</div>
+			<div style="font-weight:600">{{ v.customer }}{% if v.in_workshop %} <span class="badge badge--progress" style="font-size:10px;padding:2px 8px">In Workshop</span>{% endif %}</div>
 			<div class="muted">{% if v.customer_contact_is_email %}<i class="fa-solid fa-envelope"></i> {% elif v.customer_contact != '—' %}<i class="fa-solid fa-phone"></i> {% endif %}{{ v.customer_contact }}</div>
 		</div>
 		<div class="list-row__col">
@@ -33,6 +59,24 @@
 	<div class="empty">{% if search %}No vehicles match "{{ search }}".{% else %}No vehicles yet. Register one, or add a vehicle while creating a customer in Front Office.{% endif %}</div>
 	{%- endfor %}
 </div>
+<div class="card" data-filter-empty style="display:none;margin-top:14px"><div class="card__body">
+	<div class="empty">
+		<div style="font-weight:700;color:var(--text)">No loaded vehicle matches these filters</div>
+		<div style="margin-top:6px">This page holds the 200 most recently updated vehicles.</div>
+		<button type="button" class="btn btn--outline btn--sm" style="margin-top:16px" onclick="location.reload()">
+			<i class="fa-solid fa-magnifying-glass"></i> Search every vehicle
+		</button>
+	</div>
+</div></div>
+
+<script>
+	(function () {
+		var f = new WorkshopFilter({ root: "#vh-rows", bar: "#vh-bar", search: "#vh-search", searchParam: "q" });
+		f.populate("customer", "All customers");
+		f.populate("fuel", "All fuel types");
+		f.apply();  // re-run: populate() restores the saved dropdown values.
+	})();
+</script>
 
 <!-- View Details modal -->
 <div class="modal-overlay" id="vehicle-modal" role="dialog" aria-modal="true" aria-labelledby="vehicle-modal-title">
