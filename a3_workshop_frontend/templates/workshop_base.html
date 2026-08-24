@@ -79,5 +79,206 @@
 			</main>
 		</div>
 	</div>
+
+	{#- Shared list-filter helper. Every list page in the portal drives its search
+	    box and filter chips through this, so the behaviour (debounced live search,
+	    AND across filter groups, chip state mirrored into the query string so a
+	    filtered view survives a refresh and can be pasted to someone) is written
+	    once instead of per page.
+
+	    Contract, all declarative:
+	      * a row carries  data-row  plus  data-search="<lowercased haystack>"
+	        and one  data-f-<key>="<value>"  per filterable dimension.
+	      * a chip group is  <div class="filter-bar__group" data-filter-key="<key>">
+	        holding  <button class="chip" data-val="...">  ("all" clears it), or a
+	        <select class="chip-select" data-filter-key="<key>"> for open-ended lists.
+	      * optional  [data-filter-count]  gets "<n> of <total>",  [data-filter-empty]
+	        is shown only when nothing matches.
+
+	    Pages whose rows are rendered by JS just call .apply() again after redrawing. -#}
+	<script>
+	(function (w, d) {
+		"use strict";
+
+		function debounce(fn, ms) {
+			var t = null;
+			return function () {
+				var self = this, args = arguments;
+				clearTimeout(t);
+				t = setTimeout(function () { fn.apply(self, args); }, ms);
+			};
+		}
+
+		function WorkshopFilter(cfg) {
+			cfg = cfg || {};
+			this.root = typeof cfg.root === "string" ? d.querySelector(cfg.root) : (cfg.root || d);
+			this.rowSelector = cfg.rowSelector || "[data-row]";
+			this.searchInput = typeof cfg.search === "string" ? d.querySelector(cfg.search) : cfg.search;
+			this.searchParam = cfg.searchParam || "q";
+			this.syncUrl = cfg.syncUrl !== false;
+			this.onApply = cfg.onApply || null;
+			this.countEl = cfg.count ? d.querySelector(cfg.count) : null;
+			this.emptyEl = cfg.empty ? d.querySelector(cfg.empty) : null;
+			this.groups = [];
+
+			var self = this;
+			var scope = cfg.bar ? (typeof cfg.bar === "string" ? d.querySelector(cfg.bar) : cfg.bar) : d;
+			this.bar = cfg.bar ? scope : null;
+			if (scope) {
+				scope.querySelectorAll("[data-filter-key]").forEach(function (el) {
+					var key = el.getAttribute("data-filter-key");
+					var isSelect = el.tagName === "SELECT";
+					var g = { key: key, el: el, isSelect: isSelect, value: "all" };
+					self.groups.push(g);
+					if (isSelect) {
+						el.addEventListener("change", function () {
+							g.value = el.value || "all";
+							self.commit();
+						});
+					} else {
+						el.addEventListener("click", function (e) {
+							var b = e.target.closest(".chip");
+							if (!b || !el.contains(b)) { return; }
+							g.value = b.getAttribute("data-val") || "all";
+							self.commit();
+						});
+					}
+				});
+			}
+
+			if (this.searchInput) {
+				var run = debounce(function () { self.commit(); }, 200);
+				this.searchInput.addEventListener("input", run);
+				// Enter re-filters in place; it must not submit and reload the page.
+				var form = this.searchInput.closest("form");
+				if (form) { form.addEventListener("submit", function (e) { e.preventDefault(); self.commit(); }); }
+			}
+
+			if (this.syncUrl) { this.readUrl(); }
+			this.apply();
+		}
+
+		// Restore state from the query string so a filtered view can be linked/refreshed.
+		WorkshopFilter.prototype.readUrl = function () {
+			var params = new URLSearchParams(w.location.search);
+			if (this.searchInput) {
+				var q = params.get(this.searchParam);
+				if (q && !this.searchInput.value) { this.searchInput.value = q; }
+			}
+			this.groups.forEach(function (g) {
+				var v = params.get(g.key);
+				if (v) { g.value = v; }
+			});
+		};
+
+		WorkshopFilter.prototype.writeUrl = function () {
+			if (!this.syncUrl) { return; }
+			var params = new URLSearchParams(w.location.search);
+			var q = this.searchInput ? this.searchInput.value.trim() : "";
+			if (q) { params.set(this.searchParam, q); } else { params.delete(this.searchParam); }
+			this.groups.forEach(function (g) {
+				if (g.value && g.value !== "all") { params.set(g.key, g.value); } else { params.delete(g.key); }
+			});
+			var qs = params.toString();
+			// Keep the fragment: pages like the technician board park their open tab
+			// in the hash, and filtering must not throw that away.
+			w.history.replaceState(null, "", w.location.pathname + (qs ? "?" + qs : "") + w.location.hash);
+		};
+
+		WorkshopFilter.prototype.paintControls = function () {
+			this.groups.forEach(function (g) {
+				if (g.isSelect) {
+					g.el.value = g.value === "all" ? "" : g.value;
+					g.el.classList.toggle("is-active", g.value !== "all");
+				} else {
+					g.el.querySelectorAll(".chip").forEach(function (c) {
+						c.classList.toggle("is-active", (c.getAttribute("data-val") || "all") === g.value);
+					});
+				}
+			});
+		};
+
+		WorkshopFilter.prototype.values = function () {
+			var out = {};
+			this.groups.forEach(function (g) { out[g.key] = g.value; });
+			out[this.searchParam] = this.searchInput ? this.searchInput.value.trim().toLowerCase() : "";
+			return out;
+		};
+
+		WorkshopFilter.prototype.apply = function () {
+			this.paintControls();
+			var groups = this.groups;
+			var needle = this.searchInput ? this.searchInput.value.trim().toLowerCase() : "";
+			var rows = (this.root || d).querySelectorAll(this.rowSelector);
+			var shown = 0;
+
+			rows.forEach(function (row) {
+				var ok = true;
+				for (var i = 0; i < groups.length && ok; i++) {
+					var g = groups[i];
+					if (!g.value || g.value === "all") { continue; }
+					// Compared whole, not tokenised: facet values are routinely
+					// multi-word ("Redlines International Services", "Natural Gas").
+					// A row that belongs to several values of one key separates them
+					// with "|", which no value of ours contains.
+					var raw = row.getAttribute("data-f-" + g.key) || "";
+					var have = raw.indexOf("|") !== -1 ? raw.split("|") : [raw];
+					ok = have.indexOf(g.value) !== -1;
+				}
+				if (ok && needle) {
+					var hay = row.getAttribute("data-search");
+					if (hay === null) { hay = row.textContent; }
+					ok = hay.toLowerCase().indexOf(needle) !== -1;
+				}
+				row.classList.toggle("is-filtered-out", !ok);
+				if (ok) { shown++; }
+			});
+
+			// Default to the bar's own count/empty slots, so two filtered lists on one
+			// page never write into each other's.
+			var countEl = this.countEl || (this.bar || d).querySelector("[data-filter-count]");
+			if (countEl) {
+				countEl.textContent = rows.length
+					? (shown === rows.length ? shown + " shown" : shown + " of " + rows.length)
+					: "";
+			}
+			var emptyEl = this.emptyEl || d.querySelector("[data-filter-empty]");
+			if (emptyEl) { emptyEl.style.display = (rows.length && !shown) ? "" : "none"; }
+
+			if (this.onApply) { this.onApply(shown, rows.length, this.values()); }
+			return shown;
+		};
+
+		WorkshopFilter.prototype.commit = function () {
+			this.writeUrl();
+			this.apply();
+		};
+
+		// Fill a <select data-filter-key> from the values present in the rows, so the
+		// options can never drift from the data actually on the page.
+		WorkshopFilter.prototype.populate = function (key, placeholder) {
+			var g = null;
+			this.groups.forEach(function (x) { if (x.key === key) { g = x; } });
+			if (!g || !g.isSelect) { return; }
+			var seen = {};
+			(this.root || d).querySelectorAll(this.rowSelector).forEach(function (row) {
+				var v = row.getAttribute("data-f-" + key);
+				var label = row.getAttribute("data-l-" + key) || v;
+				if (v) { seen[v] = label; }
+			});
+			var keys = Object.keys(seen).sort(function (a, b) {
+				return String(seen[a]).localeCompare(String(seen[b]));
+			});
+			g.el.innerHTML = '<option value="">' + (placeholder || "All") + "</option>" +
+				keys.map(function (k) {
+					return '<option value="' + k.replace(/"/g, "&quot;") + '">' +
+						String(seen[k]).replace(/[<>&]/g, "") + "</option>";
+				}).join("");
+			g.el.value = g.value === "all" ? "" : g.value;
+		};
+
+		w.WorkshopFilter = WorkshopFilter;
+	})(window, document);
+	</script>
 </body>
 </html>

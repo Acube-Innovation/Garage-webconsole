@@ -43,14 +43,20 @@ def get_context(context):
 	status = (frappe.form_dict.get("status") or "").strip()
 	context.status = status if status in context.statuses else ""
 
+	# ?q= searches server-side, across every job card rather than the page in view
+	# -- this list is paged at 20, so a client-side box would only ever look at the
+	# rows already on screen.
+	context.search = (frappe.form_dict.get("q") or "").strip()
+	or_filters = _search_or_filters(context.search)
+
 	filters = {"status": context.status} if context.status else {}
-	context.total = frappe.db.count("Workshop Job Card", filters)
+	context.total = _count(filters, or_filters)
 	context.pages = max(1, -(-context.total // PAGE_SIZE))  # ceil
 	context.page = max(1, min(cint(frappe.form_dict.get("page")) or 1, context.pages))
 	context.page_links = _page_links(context.page, context.pages)
 
 	start = (context.page - 1) * PAGE_SIZE
-	context.rows = _job_card_rows(filters, start, PAGE_SIZE)
+	context.rows = _job_card_rows(filters, start, PAGE_SIZE, or_filters)
 	context.range_from = start + 1 if context.rows else 0
 	context.range_to = start + len(context.rows)
 
@@ -94,10 +100,52 @@ def _currency():
 	) or frappe.db.get_default("currency")
 
 
-def _job_card_rows(filters, start, limit):
+def _search_or_filters(search):
+	"""or_filters for the ?q= box: job card id, phone, and customer by id or name.
+
+	customer_name lives on Customer rather than the job card, so a typed name is
+	resolved to customer ids first — one extra query, and only when something has
+	actually been typed.
+	"""
+	if not search:
+		return None
+
+	like = f"%{search}%"
+	ors = [
+		["name", "like", like],
+		["mobile_no", "like", like],
+		["customer", "like", like],
+		# Vehicle is the docname, which on this site is the plate — searching a job
+		# card by the car in front of you is the common case on the counter.
+		["vehicle", "like", like],
+	]
+	by_name = frappe.get_all(
+		"Customer",
+		filters={"customer_name": ["like", like]},
+		pluck="name",
+		limit_page_length=200,
+	)
+	if by_name:
+		ors.append(["customer", "in", by_name])
+	return ors
+
+
+def _count(filters, or_filters):
+	"""Matching row count. frappe.db.count takes no or_filters, so aggregate."""
+	rows = frappe.get_all(
+		"Workshop Job Card",
+		filters=filters,
+		or_filters=or_filters,
+		fields=["count(name) as n"],
+	)
+	return cint(rows[0].n) if rows else 0
+
+
+def _job_card_rows(filters, start, limit, or_filters=None):
 	cards = frappe.get_all(
 		"Workshop Job Card",
 		filters=filters,
+		or_filters=or_filters,
 		fields=[
 			"name",
 			"customer",

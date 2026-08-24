@@ -6,9 +6,16 @@
 <div class="toolbar">
 	<a class="btn btn--primary" href="/a3-workshop/job-card/new"><i class="fa-solid fa-plus"></i> Create Job Card</a>
 	<div class="toolbar__right">
-		<!-- Real, server-side filter: the options are the Workshop Job Card status
-		     Select options, and submitting reloads the list with ?status=. -->
+		<!-- Both controls are real server-side filters and share one form, so a
+		     search and a status can be applied together. The status options are the
+		     Workshop Job Card Select options, so the control can never offer a state
+		     the data cannot hold. Submitting drops ?page=, which is right: page 4 of
+		     the old result set is meaningless against a new one. -->
 		<form method="get" class="jc-filter">
+			<div class="filter-bar__search" style="flex:0 0 240px">
+				<i class="fa-solid fa-magnifying-glass"></i>
+				<input name="q" value="{{ search or '' }}" placeholder="Search job card, customer, plate, phone…" autocomplete="off" aria-label="Search job cards">
+			</div>
 			<select name="status" aria-label="Filter by status">
 				<option value="">All statuses</option>
 				{%- for s in statuses %}
@@ -17,21 +24,21 @@
 			</select>
 			<button class="btn btn--outline" type="submit"><i class="fa-solid fa-filter"></i> Filter</button>
 		</form>
-		{%- if status %}
+		{%- if status or search %}
 		<a class="btn btn--outline btn--sm" href="/a3-workshop/job-cards"><i class="fa-solid fa-xmark"></i> Clear</a>
 		{%- endif %}
 		{%- if pages > 1 %}
 		<div class="pager">
 			{%- if page > 1 %}
-			<a class="page" href="?page={{ page - 1 }}{% if status %}&status={{ status|urlencode }}{% endif %}">Prev</a>
+			<a class="page" href="?page={{ page - 1 }}{% if status %}&status={{ status|urlencode }}{% endif %}{% if search %}&q={{ search|urlencode }}{% endif %}">Prev</a>
 			{%- else %}<span class="page is-disabled">Prev</span>{% endif %}
 			{%- for p in page_links %}
 				{%- if p is none %}<span class="page is-gap">…</span>
 				{%- elif p == page %}<span class="page is-active">{{ p }}</span>
-				{%- else %}<a class="page" href="?page={{ p }}{% if status %}&status={{ status|urlencode }}{% endif %}">{{ p }}</a>{% endif %}
+				{%- else %}<a class="page" href="?page={{ p }}{% if status %}&status={{ status|urlencode }}{% endif %}{% if search %}&q={{ search|urlencode }}{% endif %}">{{ p }}</a>{% endif %}
 			{%- endfor %}
 			{%- if page < pages %}
-			<a class="page" href="?page={{ page + 1 }}{% if status %}&status={{ status|urlencode }}{% endif %}">Next</a>
+			<a class="page" href="?page={{ page + 1 }}{% if status %}&status={{ status|urlencode }}{% endif %}{% if search %}&q={{ search|urlencode }}{% endif %}">Next</a>
 			{%- else %}<span class="page is-disabled">Next</span>{% endif %}
 		</div>
 		{%- endif %}
@@ -43,7 +50,7 @@
 	<!-- LEFT (70%) — job cards list -->
 	<div class="list-rows" id="jc-list" data-can-update="{{ 1 if can_update else 0 }}">
 		{%- if rows %}
-		<div class="muted jc-count">Showing {{ range_from }}–{{ range_to }} of {{ total }} job card{{ "" if total == 1 else "s" }}{% if status %} with status “{{ status }}”{% endif %}.</div>
+		<div class="muted jc-count">Showing {{ range_from }}–{{ range_to }} of {{ total }} job card{{ "" if total == 1 else "s" }}{% if status %} with status “{{ status }}”{% endif %}{% if search %} matching “{{ search }}”{% endif %}.</div>
 		{%- endif %}
 		{%- for r in rows %}
 		<div class="list-row" data-no="{{ r.no }}" data-next="{{ r.next_status }}">
@@ -104,7 +111,11 @@
 		{%- else %}
 		<div class="card"><div class="card__body">
 			<div class="empty">
-				{%- if status %}
+				{%- if search %}
+				<div style="font-weight:700;color:var(--text)">No job cards match “{{ search }}”{% if status %} with status “{{ status }}”{% endif %}</div>
+				<div style="margin-top:6px">Searches cover the job card number, the customer, the vehicle plate and the phone on the card.</div>
+				<a class="btn btn--outline btn--sm" style="margin-top:16px" href="/a3-workshop/job-cards"><i class="fa-solid fa-xmark"></i> Clear filters</a>
+				{%- elif status %}
 				<div style="font-weight:700;color:var(--text)">No job cards with status “{{ status }}”</div>
 				<div style="margin-top:6px">Nothing on the board is in that state right now.</div>
 				<a class="btn btn--outline btn--sm" style="margin-top:16px" href="/a3-workshop/job-cards"><i class="fa-solid fa-xmark"></i> Clear filter</a>

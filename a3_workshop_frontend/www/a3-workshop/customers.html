@@ -1,11 +1,22 @@
 {% extends "templates/workshop_base.html" %}
 
 {% block page_content %}
-<div class="toolbar">
-	<form method="get" style="margin:0;max-width:340px;flex:1">
-		<div class="field"><input name="q" value="{{ search or '' }}" placeholder="Search customers..." autocomplete="off"></div>
-	</form>
-	<div class="toolbar__right">
+{#- Typing narrows the loaded cards instantly, and the helper mirrors the term
+    into ?q= -- which customers.py reads server-side. So a reload of that same URL
+    re-runs the search across every Customer, not just the ones already on screen.
+    That is what the "search all" button in the empty state below does. -#}
+<div class="filter-bar" id="cu-bar">
+	<div class="filter-bar__search">
+		<i class="fa-solid fa-magnifying-glass"></i>
+		<input id="cu-search" value="{{ search or '' }}" placeholder="Search customers..." autocomplete="off" aria-label="Search customers">
+	</div>
+	<div class="filter-bar__group" data-filter-key="fleet" role="group" aria-label="Filter by customer type">
+		<button type="button" class="chip" data-val="all">All</button>
+		<button type="button" class="chip" data-val="fleet"><i class="fa-solid fa-truck"></i> Own Fleet</button>
+		<button type="button" class="chip" data-val="outside"><i class="fa-solid fa-user"></i> Outside Customers</button>
+	</div>
+	<span class="filter-count" data-filter-count></span>
+	<div class="filter-bar__group">
 		{%- if search %}
 		<a class="btn btn--outline btn--sm" href="/a3-workshop/customers"><i class="fa-solid fa-xmark"></i> Clear</a>
 		{%- endif %}
@@ -13,13 +24,15 @@
 	</div>
 </div>
 {%- if customers %}
-<div class="type-grid" style="grid-template-columns:repeat(3,1fr)">
+<div class="type-grid" id="cu-grid" style="grid-template-columns:repeat(3,1fr)">
 	{%- for c in customers %}
-	<div class="card"><div class="card__body">
+	<div class="card" data-row
+	     data-f-fleet="{{ 'fleet' if c.is_own_fleet else 'outside' }}"
+	     data-search="{{ (c.customer_name ~ ' ' ~ (c.mobile_no or '') ~ ' ' ~ (c.email_id or '') ~ ' ' ~ c.name) | lower }}"><div class="card__body">
 		<div class="list-row__party" style="align-items:center">
 			<div class="list-row__avatar">{{ c.initial }}</div>
 			<div style="min-width:0">
-				<div style="font-weight:700">{{ c.customer_name }}</div>
+				<div style="font-weight:700">{{ c.customer_name }}{% if c.is_own_fleet %} <span class="badge badge--navy" style="font-size:10px;padding:2px 8px">Own Fleet</span>{% endif %}</div>
 				<div class="muted" style="font-size:12px">{{ c.mobile_no or "No phone on file" }}</div>
 			</div>
 		</div>
@@ -33,6 +46,15 @@
 	</div></div>
 	{%- endfor %}
 </div>
+<div class="card" data-filter-empty style="display:none"><div class="card__body">
+	<div class="empty">
+		<div style="font-weight:700;color:var(--text)">No loaded customer matches these filters</div>
+		<div style="margin-top:6px">This page holds the 120 most recently updated customers.</div>
+		<button type="button" class="btn btn--outline btn--sm" style="margin-top:16px" onclick="location.reload()">
+			<i class="fa-solid fa-magnifying-glass"></i> Search every customer
+		</button>
+	</div>
+</div></div>
 {%- else %}
 <div class="card"><div class="card__body">
 	<div class="empty">
@@ -46,4 +68,8 @@
 	</div>
 </div></div>
 {%- endif %}
+
+<script>
+	new WorkshopFilter({ root: "#cu-grid", bar: "#cu-bar", search: "#cu-search", searchParam: "q" });
+</script>
 {% endblock %}

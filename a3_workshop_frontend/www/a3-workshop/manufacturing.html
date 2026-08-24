@@ -58,6 +58,19 @@
 		</div>
 		<div class="card__body">
 			<div class="field" style="margin-bottom:12px"><input id="wo-search" placeholder="Search item / work order…"></div>
+			{#- The search box above already filters server-side. These chips narrow
+			    what came back, by production stage, without another round trip. -#}
+			<div class="filter-bar" id="wo-bar" style="margin-bottom:12px">
+				<div class="filter-bar__group" data-filter-key="stage" role="group" aria-label="Filter by production stage" style="margin-left:0">
+					<button type="button" class="chip" data-val="all">All</button>
+					<button type="button" class="chip" data-val="Material">Material</button>
+					<button type="button" class="chip" data-val="Fabrication">Fabrication</button>
+					<button type="button" class="chip" data-val="Assembly">Assembly</button>
+					<button type="button" class="chip" data-val="Paint">Paint</button>
+					<button type="button" class="chip" data-val="QC">QC</button>
+					<button type="button" class="chip" data-val="Delivery">Delivery</button>
+				</div>
+			</div>
 			<div class="mfg-list" id="wo-list"><div class="empty">Loading…</div></div>
 		</div>
 	</div>
@@ -136,6 +149,7 @@
 	function money(n) { return CURRENCY + " " + (Number(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
 	var listEl = document.getElementById("wo-list");
+	var woFilter = null;  // set once the DOM below is wired; renderList re-applies it
 	var detailEl = document.getElementById("wo-detail");
 	var titleEl = document.getElementById("wo-title");
 	var tagEl = document.getElementById("wo-tag");
@@ -149,12 +163,15 @@
 	// ---- Work Orders list ----------------------------------------------
 	function renderList(rows) {
 		listEl.innerHTML = (rows || []).map(function (o) {
-			return '<div class="tc-row' + (current === o.name ? ' is-active' : '') + '" data-id="' + esc(o.name) + '">' +
+			return '<div class="tc-row' + (current === o.name ? ' is-active' : '') + '" data-id="' + esc(o.name) + '"' +
+				' data-row data-f-stage="' + esc(o.stage) + '"' +
+				' data-search="' + esc((o.item_name + " " + o.name).toLowerCase()) + '">' +
 				'<div class="row-between"><div class="list-row__title">' + esc(o.item_name) + '</div><span class="badge ' + o.badge + '">' + esc(o.status) + '</span></div>' +
 				'<div class="sub">' + esc(o.name) + ' · Qty ' + o.qty + '</div>' +
 				'<div class="bar"><span style="width:' + o.progress + '%"></span></div>' +
 				'<div class="muted" style="font-size:11px;margin-top:5px">' + esc(o.stage) + ' · ' + o.progress + '%</div></div>';
 		}).join("") || '<div class="empty">No work orders yet. Click “New” to manufacture an item.</div>';
+		if (woFilter) { woFilter.apply(); }
 	}
 
 	// ---- Detail panel --------------------------------------------------
@@ -482,6 +499,11 @@
 		var row = e.target.closest("[data-id]");
 		if (row) select(row.dataset.id);
 	});
+
+	// ---- stage chips ---------------------------------------------------
+	if (window.WorkshopFilter) {
+		woFilter = new WorkshopFilter({ root: "#wo-list", bar: "#wo-bar" });
+	}
 
 	// ---- search --------------------------------------------------------
 	var searchTimer = null;

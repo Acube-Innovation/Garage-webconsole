@@ -45,9 +45,28 @@
 </div>
 
 {%- if groups %}
-<div class="stack">
+{#- Everything on this board is already loaded, so the toolbar filters in place --
+    no reload. A technician group whose cards are all filtered out hides itself
+    (see the onApply callback), otherwise you get a wall of empty headings. -#}
+<div class="filter-bar" id="tb-bar">
+	<div class="filter-bar__search">
+		<i class="fa-solid fa-magnifying-glass"></i>
+		<input id="tb-search" placeholder="Search job card, vehicle, customer…" autocomplete="off" aria-label="Search assignments">
+	</div>
+	<div class="filter-bar__group" data-filter-key="state" role="group" aria-label="Filter by progress">
+		<button type="button" class="chip" data-val="all">All</button>
+		<button type="button" class="chip" data-val="todo">Not started</button>
+		<button type="button" class="chip" data-val="active">In progress</button>
+		<button type="button" class="chip" data-val="done">At 100%</button>
+	</div>
+	<div class="filter-bar__group">
+		<select class="chip-select" data-filter-key="tech" aria-label="Filter by technician"></select>
+	</div>
+	<span class="filter-count" data-filter-count></span>
+</div>
+<div class="stack" id="tb-groups">
 	{%- for g in groups %}
-	<div class="card">
+	<div class="card" data-group>
 		<div class="card__head">
 			<h3><i class="fa-solid fa-user-gear"></i> {{ g.technician_name }}</h3>
 			<div class="muted">{{ g.count }} open task{{ "" if g.count == 1 else "s" }} · {{ g.hours }} h · {{ g.done }} at 100%</div>
@@ -55,7 +74,12 @@
 		<div class="card__body">
 			<div class="type-grid" style="grid-template-columns:repeat(auto-fill,minmax(280px,1fr))">
 				{%- for t in g["rows"] %}
-				<div class="card tb-card"><div class="card__body">
+				{#- state: untracked cards and 0% both read as "not started" -- a card
+				    with no linked task has no progress to be part-way through. -#}
+				<div class="card tb-card" data-row
+				     data-f-tech="{{ g.technician }}" data-l-tech="{{ g.technician_name }}"
+				     data-f-state="{{ 'done' if (t.tracked and t.progress >= 100) else ('active' if (t.tracked and t.progress > 0) else 'todo') }}"
+				     data-search="{{ ((t.job_card or '') ~ ' ' ~ (t.vehicle or '') ~ ' ' ~ (t.customer or '') ~ ' ' ~ (t.label or '') ~ ' ' ~ (g.technician_name or '')) | lower }}"><div class="card__body">
 					<div class="row-between"><b>{{ t.job_card }}</b>{{ badge(t.qc, t.qc_variant) }}</div>
 					<div class="muted" style="margin:6px 0"><i class="fa-solid fa-car"></i> {{ t.vehicle or "No vehicle on card" }}</div>
 					<div style="font-weight:600">{{ t.label }}</div>
@@ -410,6 +434,27 @@
 		return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
 			return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
 		});
+	}
+
+	// ------------------------------------------------------------- assignment filters
+	var tbGroups = document.getElementById("tb-groups");
+	if (tbGroups && window.WorkshopFilter) {
+		var tbFilter = new WorkshopFilter({
+			root: "#tb-groups",
+			bar: "#tb-bar",
+			search: "#tb-search",
+			searchParam: "q",
+			onApply: function () {
+				// A technician heading with nothing left under it is noise, so the
+				// whole group card goes rather than leaving an empty shell.
+				tbGroups.querySelectorAll("[data-group]").forEach(function (grp) {
+					var any = grp.querySelector("[data-row]:not(.is-filtered-out)");
+					grp.classList.toggle("is-filtered-out", !any);
+				});
+			},
+		});
+		tbFilter.populate("tech", "All technicians");
+		tbFilter.apply();
 	}
 
 	// ------------------------------------------------------------- tabs
