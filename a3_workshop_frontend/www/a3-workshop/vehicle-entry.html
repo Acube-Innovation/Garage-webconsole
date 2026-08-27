@@ -51,17 +51,9 @@
 </div>
 
 <style>
-	.jc-ac { position:absolute; left:0; right:0; top:100%; z-index:60; margin-top:2px; background:var(--surface,#fff);
-		border:1px solid var(--border,#d8dde6); border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.12);
-		max-height:240px; overflow:auto; }
-	.jc-ac-item { padding:8px 12px; cursor:pointer; }
-	.jc-ac-item:hover, .jc-ac-item.is-active { background:var(--bg,#f1f4f8); }
-	.jc-ac-label { font-weight:600; font-size:13px; }
-	.jc-ac-sub { font-size:12px; color:var(--muted,#7a8598); }
-	.jc-ac-empty { padding:8px 12px; font-size:12px; color:var(--muted,#7a8598); }
-	/* "Create …" row — separated and tinted so it reads as an action, not a match. */
-	.jc-ac-item.is-create { border-top:1px solid var(--border,#e3e8ef); color:var(--red,#ec2e5d); }
-	.jc-ac-item.is-create .jc-ac-label { display:flex; align-items:center; gap:7px; font-weight:600; }
+	/* .jc-ac* (typeahead dropdown) now lives in the shared design system —
+	   public/scss/workshop.bundle.scss — because the Register Vehicle modal on
+	   Vehicle History uses the same widget for its driver picker. */
 	.file-chip { display:flex; align-items:center; gap:10px; padding:8px 12px; border:1px solid var(--border);
 		border-radius:var(--radius-sm,8px); background:var(--surface); margin-bottom:8px; font-size:13px; }
 	.file-chip i.type { color:var(--muted); }

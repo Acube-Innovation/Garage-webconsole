@@ -81,6 +81,19 @@
 </div>
 
 <!-- Camera capture: live preview, shoot as many frames as needed -->
+<!-- Photo viewer for the inline field widgets: shows what was captured, with
+     Retake / Upload / Remove. -->
+<div class="modal-overlay" id="ho-photo-modal" role="dialog" aria-modal="true">
+	<div class="modal modal--sm">
+		<div class="modal__head">
+			<div><h3 id="ho-photo-title">Photo</h3></div>
+			<button type="button" class="modal__close" data-close aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+		</div>
+		<div class="modal__body" id="ho-photo-body"></div>
+		<div class="modal__foot" id="ho-photo-foot"></div>
+	</div>
+</div>
+
 <div class="modal-overlay" id="ho-cam-modal" role="dialog" aria-modal="true">
 	<div class="modal" style="max-width:640px">
 		<div class="modal__head">
@@ -163,6 +176,31 @@
 	.ho-cam-shots { display:grid; grid-template-columns:repeat(auto-fill,minmax(84px,1fr)); gap:8px; margin-top:12px; }
 	.ho-cam-shots img { width:100%; height:62px; object-fit:cover; border-radius:6px; border:1px solid var(--border); display:block; }
 	.ho-cam-shots:empty { display:none; }
+
+	/* ---- inline per-field photo widget ---- */
+	/* The host sits inside the field, so the control has to line up with the input
+	   rather than push it around. */
+	.ho-ph { display:inline-flex; align-items:center; gap:6px; vertical-align:middle; }
+	.ho-ph-btn { border:1px solid var(--border); background:var(--surface); color:var(--muted);
+		width:32px; height:32px; border-radius:8px; cursor:pointer; font-size:13px; flex:0 0 32px; }
+	.ho-ph-btn:hover { border-color:var(--red); color:var(--red); }
+	.ho-ph-add { width:26px; height:26px; flex:0 0 26px; font-size:11px; }
+	.ho-ph-strip { display:inline-flex; align-items:center; gap:3px; cursor:pointer; }
+	.ho-ph-strip img { width:30px; height:30px; object-fit:cover; border-radius:6px;
+		border:1px solid var(--border); display:block; }
+	.ho-ph-strip:hover img { border-color:var(--red); }
+	.ho-ph-more { font-size:11px; font-weight:700; color:var(--muted); padding-left:2px; }
+	/* Anchored chooser — body-level so a field with overflow cannot clip it. */
+	.ho-ph-menu { position:absolute; z-index:1200; background:var(--surface); border:1px solid var(--border);
+		border-radius:9px; box-shadow:0 8px 24px rgba(0,0,0,.16); padding:4px; min-width:158px; }
+	.ho-ph-menu button { display:flex; align-items:center; gap:9px; width:100%; border:none; background:none;
+		padding:9px 11px; border-radius:7px; cursor:pointer; font:inherit; font-size:13px; color:var(--text); text-align:left; }
+	.ho-ph-menu button:hover { background:var(--bg); color:var(--red); }
+	.ho-ph-view { margin:0 0 14px; }
+	.ho-ph-view img { width:100%; border-radius:9px; border:1px solid var(--border); display:block; }
+	.ho-ph-view figcaption { display:flex; justify-content:flex-end; margin-top:7px; }
+	/* A field whose label carries the widget keeps the label and control on one line. */
+	.ho-lbl-row { display:flex; align-items:center; justify-content:space-between; gap:8px; }
 </style>
 
 <script>
@@ -328,14 +366,29 @@
 		}
 		var qty = Math.max(1, parseInt(qtyEl && qtyEl.value, 10) || 1);
 		if (qtyEl && String(qty) !== qtyEl.value) qtyEl.value = qty;
-		var kept = Array.prototype.map.call(box.querySelectorAll("[data-serial]"), function (i) { return i.value; });
 		var label = row.getAttribute("data-label") || "Serial";
-		var html = "";
-		for (var i = 0; i < qty; i++) {
-			html += '<div class="ho-serial"><span class="n">' + (i + 1) + '</span>' +
-				'<input data-serial value="' + esc(kept[i] || "") + '" placeholder="' + esc(label) + ' #' + (i + 1) + '"></div>';
+		var item = row.getAttribute("data-item");
+		// Rows are added/removed one at a time rather than regenerated. Rebuilding
+		// innerHTML would preserve the typed serials (they used to be copied out
+		// first) but would silently throw away each row's captured photos, which
+		// only exist as blobs in the widget bound to that DOM node.
+		var existing = box.querySelectorAll(".ho-serial");
+		for (var i = existing.length; i < qty; i++) {
+			var line = document.createElement("div");
+			line.className = "ho-serial";
+			line.innerHTML = '<span class="n">' + (i + 1) + "</span>" +
+				'<input data-serial placeholder="' + esc(label) + " #" + (i + 1) + '">';
+			var host = document.createElement("span");
+			host.className = "ho-ph";
+			line.appendChild(host);
+			box.appendChild(line);
+			photoWidget(host, { target: "unit", item: item, unit_no: i + 1 },
+				{ title: label + " #" + (i + 1) + " photos", multi: true });
 		}
-		box.innerHTML = html;
+		for (var j = existing.length - 1; j >= qty; j--) {
+			dropWidgetsIn(existing[j]);
+			existing[j].remove();
+		}
 		// Must be an explicit value: style.display = "" only clears the INLINE
 		// style, so the element falls straight back to the stylesheet's
 		// `.ho-serials { display:none }` and the boxes stay invisible.
@@ -419,6 +472,25 @@
 				"No checklist items configured yet. Add them in Desk &rarr; Handover Checklist Item.");
 			renderTicks(attBox, p.attachments,
 				"No attachments configured yet. Add them in Desk &rarr; Handover Attachment Item.");
+			// One camera per attachment row — multi-shot, same as Tyre Condition.
+			//
+			// A "Check + Quantity" item is skipped: its photos belong to the unit
+			// rows the qty spinner creates (Trailer #1, Trailer #2), each of which
+			// gets its own camera in syncSerials. A camera on the heading as well
+			// would be a second, ambiguous place to put the same picture.
+			attBox.querySelectorAll(".ho-chk-row").forEach(function (row) {
+				if (row.getAttribute("data-type") === "Check + Quantity") return;
+				var host = document.createElement("span");
+				host.className = "ho-ph";
+				row.appendChild(host);
+				photoWidget(host, { target: "attachment", item: row.getAttribute("data-item") },
+					{ title: (row.textContent || "Attachment").trim() + " photos", multi: true });
+			});
+			// Odometer and fuel take one shot each; tyres take as many as there are
+			// wheels worth photographing.
+			attachFieldPhoto("odometer", { target: "odometer" }, { title: "Odometer photo" });
+			attachFieldPhoto("fuel_level", { target: "fuel" }, { title: "Fuel gauge photo" });
+			attachFieldPhoto("tyre_condition", { target: "tyre" }, { title: "Tyre photos", multi: true });
 			ctx.innerHTML = "<b>" + esc(p.model) + "</b> · Plate " + esc(p.plate) +
 				(p.current_driver && p.current_driver.driver_name ? " · Current driver: <b>" + esc(p.current_driver.driver_name) + "</b>" : "") +
 				(p.odometer ? " · Last odometer " + p.odometer.toLocaleString() + " km" : "");
@@ -481,6 +553,35 @@
 	var camSub = document.getElementById("ho-cam-sub");
 	var camFallback = document.getElementById("cam-fallback-input");
 	var camStream = null, camFacing = "environment", camShotNo = 0;
+	// Where the next capture goes. Set by openCamera(); the bulk Photo Evidence
+	// dropzone is just one more caller of it.
+	var camSink = null, camOnce = false;
+
+	function bulkSink(file) { files.push(file); renderFiles(); }
+
+	function openCamera(sink, opts) {
+		opts = opts || {};
+		camSink = sink || bulkSink;
+		camOnce = !!opts.once;          // single-slot widgets close after one shot
+		if (!camSupported()) { camFallback.click(); return; }
+		camShots.innerHTML = ""; camShotNo = 0;
+		// Reset from any previous failure before reopening.
+		camMsg.style.display = "none";
+		camMsg.innerHTML = "";
+		camVideo.style.display = "";
+		camShoot.style.display = "";
+		camSub.textContent = opts.sub || "Frame the vehicle and capture";
+		camOverlay.classList.add("is-open");
+		camStart().then(function () {
+			// Only worth offering the flip once we know there are two cameras.
+			if (navigator.mediaDevices.enumerateDevices) {
+				navigator.mediaDevices.enumerateDevices().then(function (ds) {
+					var cams = ds.filter(function (d) { return d.kind === "videoinput"; });
+					camFlip.style.display = cams.length > 1 ? "" : "none";
+				}).catch(function () {});
+			}
+		}).catch(camFail);
+	}
 
 	function camSupported() {
 		return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
@@ -492,6 +593,7 @@
 	function camClose() {
 		camStop();
 		camOverlay.classList.remove("is-open");
+		camSink = null; camOnce = false;
 	}
 	function camStart() {
 		camStop();
@@ -528,28 +630,15 @@
 	// Delegated: the button only exists after a failure.
 	camMsg.addEventListener("click", function (e) {
 		if (!e.target.closest("#ho-cam-native")) return;
+		// camClose() drops the sink, but the capture still belongs to whichever
+		// widget opened the camera — carry it across the close.
+		var sink = camSink, once = camOnce;
 		camClose();
+		camSink = sink; camOnce = once;
 		camFallback.click();  // real user activation — the chooser opens
 	});
 	document.getElementById("take-photo").addEventListener("click", function () {
-		if (!camSupported()) { camFallback.click(); return; }
-		camShots.innerHTML = ""; camShotNo = 0;
-		// Reset from any previous failure before reopening.
-		camMsg.style.display = "none";
-		camMsg.innerHTML = "";
-		camVideo.style.display = "";
-		camShoot.style.display = "";
-		camSub.textContent = "Frame the vehicle and capture";
-		camOverlay.classList.add("is-open");
-		camStart().then(function () {
-			// Only worth offering the flip once we know there are two cameras.
-			if (navigator.mediaDevices.enumerateDevices) {
-				navigator.mediaDevices.enumerateDevices().then(function (ds) {
-					var cams = ds.filter(function (d) { return d.kind === "videoinput"; });
-					camFlip.style.display = cams.length > 1 ? "" : "none";
-				}).catch(function () {});
-			}
-		}).catch(camFail);
+		openCamera(bulkSink);
 	});
 	camFlip.addEventListener("click", function () {
 		camFacing = camFacing === "environment" ? "user" : "environment";
@@ -576,8 +665,8 @@
 			camShotNo += 1;
 			var name = "handover-photo-" + Date.now() + "-" + camShotNo + ".jpg";
 			// A File (not a bare Blob) so it rides the same upload path as picked files.
-			files.push(new File([blob], name, { type: "image/jpeg" }));
-			renderFiles();
+			(camSink || bulkSink)(new File([blob], name, { type: "image/jpeg" }));
+			if (camOnce) { camClose(); return; }
 			var img = document.createElement("img");
 			img.src = URL.createObjectURL(blob);
 			img.alt = name;
@@ -585,8 +674,10 @@
 		}, "image/jpeg", 0.9);
 	});
 	camFallback.addEventListener("change", function () {
-		addFiles(camFallback.files);
+		var sink = camSink || bulkSink;
+		Array.prototype.forEach.call(camFallback.files, function (f) { sink(f); });
 		camFallback.value = "";
+		camSink = null;
 	});
 	function uploadFile(f, docname) {
 		var fd = new FormData();
@@ -605,6 +696,188 @@
 				return data.message;
 			});
 		});
+	}
+
+	// --------------------------------------------------- inline photo widget
+	// A camera button that lives inside a field. Click it and you get Camera or
+	// Upload; once there is a shot it becomes the shot — a thumbnail (single) or a
+	// small collage (multi) — and clicking that opens a viewer with Retake/Remove.
+	//
+	// Captures are held in the browser as Files and only uploaded after the
+	// handover exists, because /api/method/upload_file needs a docname. Each
+	// widget carries the routing (target/item/unit_no) that attach_handover_photos
+	// uses to drop the file into the right slot.
+	var photoWidgets = [];
+
+	function photoWidget(host, route, opts) {
+		opts = opts || {};
+		var multi = !!opts.multi;
+		var shots = [];                       // [{file, url}]
+		var w = {
+			host: host,
+			route: route,
+			multi: multi,
+			files: function () { return shots.map(function (s) { return s.file; }); },
+			routeFor: function (i) { return route; },
+			shots: function () { return shots; },
+		};
+		photoWidgets.push(w);
+
+		var picker = document.createElement("input");
+		picker.type = "file"; picker.accept = "image/*"; picker.style.display = "none";
+		if (multi) picker.multiple = true;
+		host.appendChild(picker);
+
+		function add(file) {
+			if (!multi) { revokeAll(); shots = []; }
+			shots.push({ file: file, url: URL.createObjectURL(file) });
+			render();
+		}
+        function revokeAll() {
+			shots.forEach(function (sh) { try { URL.revokeObjectURL(sh.url); } catch (e) {} });
+		}
+		picker.addEventListener("change", function () {
+			Array.prototype.forEach.call(picker.files, add);
+			picker.value = "";
+		});
+
+		function render() {
+			var body;
+			if (!shots.length) {
+				body = '<button type="button" class="ho-ph-btn" data-act="menu" title="' +
+					esc(opts.title || "Add photo") + '"><i class="fa-solid fa-camera"></i></button>';
+			} else {
+				body = '<span class="ho-ph-strip" data-act="open">' +
+					shots.slice(0, 4).map(function (sh) {
+						return '<img src="' + sh.url + '" alt="">';
+					}).join("") +
+					(shots.length > 4 ? '<span class="ho-ph-more">+' + (shots.length - 4) + "</span>" : "") +
+					"</span>";
+				if (multi) {
+					body += '<button type="button" class="ho-ph-btn ho-ph-add" data-act="menu" title="Add another photo">' +
+						'<i class="fa-solid fa-plus"></i></button>';
+				}
+			}
+			host.querySelectorAll(".ho-ph-ui").forEach(function (n) { n.remove(); });
+			var wrap = document.createElement("span");
+			wrap.className = "ho-ph-ui";
+			wrap.innerHTML = body;
+			host.appendChild(wrap);
+		}
+
+		host.addEventListener("click", function (e) {
+			var act = e.target.closest("[data-act]");
+			if (!act || !host.contains(act)) return;
+			e.preventDefault();
+			if (act.dataset.act === "menu") {
+				openPhotoMenu(act, {
+					camera: function () {
+						openCamera(add, { once: !multi, sub: opts.title || "Capture photo" });
+					},
+					upload: function () { picker.click(); },
+				});
+			} else if (act.dataset.act === "open") {
+				openPhotoViewer(shots, {
+					multi: multi,
+					title: opts.title || "Photo",
+					onRemove: function (i) {
+						try { URL.revokeObjectURL(shots[i].url); } catch (err) {}
+						shots.splice(i, 1); render();
+					},
+					onRetake: function () {
+						openCamera(add, { once: !multi, sub: opts.title || "Capture photo" });
+					},
+					onUpload: function () { picker.click(); },
+				});
+			}
+		});
+
+		render();
+		return w;
+	}
+
+	// Drop every widget whose host lives inside `node` — used when a qty is
+	// reduced and its unit rows go away, so their blobs are not uploaded.
+	function dropWidgetsIn(node) {
+		photoWidgets = photoWidgets.filter(function (w) {
+			if (!node.contains(w.host)) return true;
+			w.shots().forEach(function (sh) { try { URL.revokeObjectURL(sh.url); } catch (e) {} });
+			return false;
+		});
+	}
+
+	// Put a widget on the label line of a plain form field, so it lines up with
+	// the label rather than fighting the input (or a select's own chevron).
+	function attachFieldPhoto(fieldName, route, opts) {
+		var input = document.querySelector('#ho-form [name="' + fieldName + '"]');
+		if (!input) return null;
+		var field = input.closest(".field");
+		var label = field && field.querySelector("label");
+		if (!label) return null;
+		label.classList.add("ho-lbl-row");
+		var host = document.createElement("span");
+		host.className = "ho-ph";
+		label.appendChild(host);
+		return photoWidget(host, route, opts);
+	}
+
+	// Camera / Upload chooser, anchored under the button that opened it.
+	var photoMenu = null;
+	function openPhotoMenu(anchorEl, handlers) {
+		closePhotoMenu();
+		photoMenu = document.createElement("div");
+		photoMenu.className = "ho-ph-menu";
+		photoMenu.innerHTML =
+			'<button type="button" data-m="camera"><i class="fa-solid fa-camera"></i> Camera</button>' +
+			'<button type="button" data-m="upload"><i class="fa-solid fa-image"></i> Upload</button>';
+		document.body.appendChild(photoMenu);
+		var r = anchorEl.getBoundingClientRect();
+		photoMenu.style.top = (window.scrollY + r.bottom + 6) + "px";
+		photoMenu.style.left = (window.scrollX + Math.min(r.left, window.innerWidth - 170)) + "px";
+		photoMenu.addEventListener("click", function (e) {
+			var b = e.target.closest("[data-m]"); if (!b) return;
+			var which = b.dataset.m;
+			closePhotoMenu();
+			handlers[which]();
+		});
+		setTimeout(function () { document.addEventListener("click", closePhotoMenu, { once: true }); }, 0);
+	}
+	function closePhotoMenu() {
+		if (photoMenu) { photoMenu.remove(); photoMenu = null; }
+	}
+
+	// Viewer: full shot, plus Retake / Upload / Remove for the one on screen.
+	var viewerOverlay = document.getElementById("ho-photo-modal");
+	var viewerBody = document.getElementById("ho-photo-body");
+	var viewerTitle = document.getElementById("ho-photo-title");
+	var viewerFoot = document.getElementById("ho-photo-foot");
+
+	function openPhotoViewer(shots, o) {
+		viewerTitle.textContent = o.title;
+		viewerBody.innerHTML = shots.map(function (sh, i) {
+			return '<figure class="ho-ph-view"><img src="' + sh.url + '" alt="">' +
+				'<figcaption><button type="button" class="btn btn--outline btn--sm" data-rm="' + i + '">' +
+				'<i class="fa-solid fa-trash"></i> Remove</button></figcaption></figure>';
+		}).join("") || '<div class="empty">No photo yet.</div>';
+		viewerFoot.innerHTML =
+			'<button type="button" class="btn btn--navy btn--sm" data-retake><i class="fa-solid fa-camera"></i> ' +
+			(o.multi ? "Take another" : "Retake") + "</button>" +
+			'<button type="button" class="btn btn--outline btn--sm" data-upload><i class="fa-solid fa-image"></i> Upload</button>' +
+			'<button type="button" class="btn btn--primary btn--sm" data-close>Done</button>';
+		viewerOverlay.classList.add("is-open");
+
+		function onClick(e) {
+			var rm = e.target.closest("[data-rm]");
+			if (rm) { o.onRemove(+rm.dataset.rm); close(); return; }
+			if (e.target.closest("[data-retake]")) { close(); o.onRetake(); return; }
+			if (e.target.closest("[data-upload]")) { close(); o.onUpload(); return; }
+			if (e.target.closest("[data-close]") || e.target === viewerOverlay) { close(); }
+		}
+		function close() {
+			viewerOverlay.classList.remove("is-open");
+			viewerOverlay.removeEventListener("click", onClick);
+		}
+		viewerOverlay.addEventListener("click", onClick);
 	}
 
 	// --------------------------------------------------------------- save
@@ -635,11 +908,35 @@
 			attachments: att.rows,
 			damages: collectDamages()
 		}).then(function (res) {
-			if (!files.length) return res;
+			// Uploads can only happen now: /api/method/upload_file needs a docname.
+			// Bulk Photo Evidence files carry no routing; the inline widgets each
+			// carry theirs, and attach_handover_photos drops them into their slots.
+			var jobs = files.map(function (f) { return { file: f, route: null }; });
+			photoWidgets.forEach(function (w) {
+				w.shots().forEach(function (sh) { jobs.push({ file: sh.file, route: w.route }); });
+			});
+			if (!jobs.length) return res;
+
 			saveBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Uploading photos…';
-			return files.reduce(function (chain, f) {
-				return chain.then(function () { return uploadFile(f, res.name); });
-			}, Promise.resolve()).then(function () { return res; });
+			var routed = [];
+			return jobs.reduce(function (chain, job) {
+				return chain.then(function () {
+					return uploadFile(job.file, res.name).then(function (info) {
+						if (job.route && info && info.file_url) {
+							// Object.assign is ES6; this page targets the same
+							// browsers as the rest of the portal, so build it plainly.
+							var entry = { file_url: info.file_url };
+							for (var k in job.route) { if (job.route.hasOwnProperty(k)) entry[k] = job.route[k]; }
+							routed.push(entry);
+						}
+					});
+				});
+			}, Promise.resolve()).then(function () {
+				if (!routed.length) return res;
+				return callMethod("garagedesk.api.fleet.attach_handover_photos", {
+					handover: res.name, photos: JSON.stringify(routed)
+				}).then(function () { return res; });
+			});
 		}).then(function (res) {
 			// Show the auto-diff outcome before leaving the page.
 			var overlay = document.getElementById("ho-result-modal");

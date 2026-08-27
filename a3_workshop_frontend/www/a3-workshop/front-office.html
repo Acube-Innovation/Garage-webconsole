@@ -209,7 +209,7 @@
 		{ key: "order", label: "Orders", icon: "fa-cart-shopping", cols: ["Order No", "Date", "Items", "Total", "Status"] },
 		{ key: "invoice", label: "Invoices", icon: "fa-file-invoice-dollar", cols: ["Invoice", "Date", "Amount", "Paid", "Balance", "Status"] },
 		{ key: "payment", label: "Payments", icon: "fa-money-bill-wave", cols: ["Receipt", "Date", "Mode", "Amount", "Ref"] },
-		{ key: "vehicles", label: "Vehicles", icon: "fa-car", cols: ["Plate", "Make / Model", "Chassis", "Odometer", "Fuel"] },
+		{ key: "vehicles", label: "Vehicles", icon: "fa-car", cols: ["Plate", "Make / Model", "Chassis", "Odometer", "Fuel", "Handover"] },
 		{ key: "calls", label: "Calls", icon: "fa-phone", cols: ["Date", "Type", "Purpose", "Outcome", "By"] },
 		{ key: "complaints", label: "Complaints", icon: "fa-triangle-exclamation", cols: ["Date", "Complaint", "Severity", "Status"] }
 	];
@@ -353,6 +353,15 @@
 		var tbody = "<tbody>" + rows.map(function (r) {
 			return "<tr>" + r.map(function (cell, i) {
 				if (statusCols.indexOf(s.cols[i]) >= 0) return '<td><span class="badge ' + variant(cell) + '">' + esc(cell) + "</span></td>";
+				// The Handover cell carries the Vehicle's docname, not display text:
+				// it becomes a button through to the handover checklist. The server
+				// leaves it blank for a customer who is not own-fleet.
+				if (s.cols[i] === "Handover") {
+					return "<td>" + (cell
+						? '<a class="btn btn--navy btn--sm" href="/a3-workshop/vehicle-history-handover?vehicle=' +
+						  encodeURIComponent(cell) + '"><i class="fa-solid fa-right-left"></i> Handover</a>'
+						: '<span class="muted" style="font-size:12px">—</span>') + "</td>";
+				}
 				return "<td>" + esc(cell) + "</td>";
 			}).join("") +
 			(pmode ? '<td style="width:34px"><a class="btn btn--outline btn--icon" style="width:26px;height:26px;font-size:11px" href="/a3-workshop/workshop-print?' + pmode + "=" + encodeURIComponent(r[0]) + '" target="_blank" rel="noopener" title="Print"><i class="fa-solid fa-print"></i></a></td>' : "") +

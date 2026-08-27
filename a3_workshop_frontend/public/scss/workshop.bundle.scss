@@ -268,6 +268,28 @@ h1, h2, h3, h4 { margin: 0; color: var(--text); }
 	.page.is-active { background: var(--red); color: #fff; border-color: var(--red); }
 }
 
+// ---------------------------------------------------------------- typeahead
+// Dropdown for the "search a master, or create it inline" inputs (vehicle make /
+// model, customer, driver). Lives here rather than in one page because more than
+// one page now uses it.
+.jc-ac {
+	position: absolute; left: 0; right: 0; top: 100%; z-index: 60; margin-top: 2px;
+	background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+	box-shadow: 0 8px 24px rgba(0, 0, 0, .12);
+	max-height: 240px; overflow: auto;
+}
+.jc-ac-item { padding: 8px 12px; cursor: pointer;
+	&:hover, &.is-active { background: var(--bg); }
+}
+.jc-ac-label { font-weight: 600; font-size: 13px; }
+.jc-ac-sub { font-size: 12px; color: var(--muted); }
+.jc-ac-empty { padding: 8px 12px; font-size: 12px; color: var(--muted); }
+// "Create …" row — separated and tinted so it reads as an action, not a match.
+.jc-ac-item.is-create {
+	border-top: 1px solid var(--border); color: var(--red);
+	.jc-ac-label { display: flex; align-items: center; gap: 7px; font-weight: 600; }
+}
+
 // ---------------------------------------------------------------- list filter bar
 // One toolbar shape for every list page: a search box on the left, chip groups
 // (and the occasional <select>, where the option list is open-ended like a
