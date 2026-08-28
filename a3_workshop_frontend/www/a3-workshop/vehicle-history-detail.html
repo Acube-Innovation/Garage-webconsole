@@ -56,7 +56,55 @@
 	</div>
 </div>
 
+<!-- Damage comparison: this handover's photographs beside the previous
+     handover's, slot for slot, with the damages the inspector finds noted below. -->
+<div class="modal-overlay" id="vh-cmp-modal" role="dialog" aria-modal="true">
+	<div class="modal" style="max-width:980px">
+		<div class="modal__head">
+			<div><h3>Damage Comparison</h3><div class="sub" id="vh-cmp-sub">—</div></div>
+			<button type="button" class="modal__close" data-close aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+		</div>
+		<div class="modal__body" id="vh-cmp-body"><div class="empty">Loading…</div></div>
+		<div class="modal__foot">
+			<span class="muted" id="vh-cmp-msg" style="margin-right:auto;font-size:12px"></span>
+			<button type="button" class="btn btn--outline btn--sm" id="vh-cmp-add"><i class="fa-solid fa-plus"></i> Add Damage</button>
+			<button type="button" class="btn btn--navy btn--sm" id="vh-cmp-save"><i class="fa-solid fa-floppy-disk"></i> Save Damages</button>
+			<a class="btn btn--primary btn--sm" id="vh-cmp-jc" href="#" style="display:none"><i class="fa-solid fa-plus"></i> Create Job Card</a>
+		</div>
+	</div>
+</div>
+
 <style>
+	/* ---- damage comparison ---- */
+	.vh-cmp-sec { margin-bottom:18px; }
+	.vh-cmp-sec h4 { margin:0 0 9px; font-size:11px; font-weight:700; letter-spacing:.09em;
+		text-transform:uppercase; color:var(--muted); display:flex; align-items:center; gap:9px; }
+	.vh-cmp-sec h4::after { content:""; flex:1; height:1px; background:var(--border); }
+	.vh-cmp-row { display:grid; grid-template-columns:150px 1fr 1fr; gap:12px; align-items:center;
+		padding:10px 0; border-bottom:1px solid var(--border); }
+	.vh-cmp-row:last-child { border-bottom:0; }
+	.vh-cmp-lbl { font-weight:700; font-size:13px; }
+	.vh-cmp-side { display:flex; flex-direction:column; gap:5px; }
+	.vh-cmp-side .cap { font-size:10px; font-weight:700; letter-spacing:.06em;
+		text-transform:uppercase; color:var(--muted); }
+	.vh-cmp-side img { width:100%; max-width:210px; aspect-ratio:4/3; object-fit:cover;
+		border:1px solid var(--border); border-radius:8px; display:block; cursor:zoom-in; }
+	.vh-cmp-side .none { width:100%; max-width:210px; aspect-ratio:4/3; border:1px dashed var(--border);
+		border-radius:8px; display:flex; align-items:center; justify-content:center;
+		font-size:11px; color:var(--muted); }
+	/* The two sides differing is the whole point — say so rather than making the
+	   inspector compare two words in small grey text. */
+	.vh-cmp-row.is-changed { background:var(--red-soft); }
+	.vh-cmp-row.is-changed .vh-cmp-lbl::after { content:" changed"; color:var(--red); font-size:10px;
+		letter-spacing:.06em; text-transform:uppercase; }
+	.vh-cmp-tbl { width:100%; border-collapse:collapse; }
+	.vh-cmp-tbl th { text-align:left; font-size:10px; letter-spacing:.05em; text-transform:uppercase;
+		color:var(--muted); font-weight:700; padding:0 8px 8px; border-bottom:1px solid var(--border); }
+	.vh-cmp-tbl td { padding:7px 8px; border-bottom:1px solid var(--border); }
+	.vh-cmp-tbl select, .vh-cmp-tbl input { width:100%; padding:6px 8px; font:inherit; font-size:12.5px;
+		color:var(--text); background:var(--surface); border:1px solid var(--border); border-radius:7px; }
+	.vh-cmp-rm { background:none; border:none; color:var(--muted); cursor:pointer; font-size:13px; }
+	.vh-cmp-rm:hover { color:var(--red); }
 	.vh-tabs { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:18px; }
 	.vh-tab { border:1px solid var(--border); background:var(--surface); border-radius:999px;
 		padding:8px 16px; font-size:13px; font-weight:600; color:var(--muted); cursor:pointer; font-family:var(--font); }
@@ -309,16 +357,64 @@
 					esc(h.handover_date_fmt), esc(h.handover_type || "—"),
 					esc(h.from_driver_name || "—"), esc(h.to_driver_name || "—"),
 					h.odometer ? h.odometer.toLocaleString() : "—",
-					h.discrepancy_found
+					'<span data-dmgcell="' + esc(h.name) + '">' + (h.discrepancy_found
 						? '<span class="badge badge--danger">' + h.new_damage_count + " new</span>"
-						: '<span class="badge badge--success">None</span>',
-					jobCardCell(h),
+						: '<span class="badge badge--success">None</span>') + "</span>",
+					'<span data-jccell="' + esc(h.name) + '">' + jobCardCell(h) + "</span>",
 					h.discrepancy_found ? statusBadge(h.rectification_status || "Pending") : '<span class="muted">—</span>',
-					'<button type="button" class="btn btn--outline btn--sm" data-handover="' + esc(h.name) + '">View</button>'
+					'<button type="button" class="btn btn--outline btn--sm" data-handover="' + esc(h.name) + '">View</button> ' +
+					'<button type="button" class="btn btn--outline btn--sm" data-cmp="' + esc(h.name) + '"><i class="fa-solid fa-images"></i> Damages</button>'
 				];
 			}),
 			"No handover inspections recorded for this vehicle yet.");
+		mergeHandoverLinks(d.handovers.map(function (h) { return h.name; }));
 	}
+
+	// The row data describes only the auto-diff. Damage found by eye in the
+	// Damages popup, and the job card it raised, live in places
+	// fleet.get_vehicle_history does not read — merged in here rather than by
+	// widening that function.
+	function mergeHandoverLinks(names) {
+		if (!names || !names.length) return;
+		callMethod("garagedesk.api.handover_comparison.get_handover_links", {
+			handovers: JSON.stringify(names)
+		}).then(function (map) {
+			Object.keys(map || {}).forEach(function (n) {
+				var info = map[n] || {};
+				var cards = info.job_cards || [];
+
+				if (info.noted) {
+					var dc = document.querySelector('[data-dmgcell="' + cssEsc(n) + '"]');
+					// Only relabel a cell the auto-diff left as "None" — a real
+					// discrepancy count must not be overwritten by this.
+					if (dc && dc.querySelector(".badge--success")) {
+						dc.innerHTML = '<span class="badge badge--danger">' + info.noted +
+							" found</span>";
+					}
+				}
+
+				var jcc = document.querySelector('[data-jccell="' + cssEsc(n) + '"]');
+				if (!jcc) return;
+				if (cards.length) {
+					jcc.innerHTML = cards.map(function (c) {
+						return '<a class="vh-jc-link" href="/a3-workshop/job-card/detail?id=' +
+							encodeURIComponent(c.name) + '">' + esc(c.name) + "</a>";
+					}).join(" ");
+				} else if (info.noted) {
+					// Damage noted but nothing raised yet — offer the same button
+					// the auto-diff path offers.
+					jcc.innerHTML = '<button type="button" class="btn btn--navy btn--sm" data-newjc="' +
+						esc(n) + '"><i class="fa-solid fa-plus"></i> Create Job Card</button>';
+				}
+			});
+		}).catch(function (err) {
+			console.warn("Could not merge handover links:", err);
+		});
+	}
+
+	// Handover ids are safe today (HND-YYYY-#####) but the selector is built from
+	// data, so quote it rather than trusting that.
+	function cssEsc(v) { return String(v).replace(/["\\]/g, "\\$&"); }
 
 	// Hand the wizard everything it needs to open pre-filled, plus the handover it
 	// is rectifying — the wizard links back via fleet.link_rectification_job_card
@@ -368,7 +464,146 @@
 			'</div>' + (x.description ? '<div class="s">' + esc(x.description) + "</div>" : "") + "</div>";
 	}
 
+	// ------------------------------------------------- damage comparison
+	// This handover's photographs beside the previous one's, slot for slot, with
+	// the damages found written down underneath. Kept apart from the auto-diff
+	// that already fills new_damages on save: that compares recorded damage
+	// lines, this is a person comparing pictures.
+	var cmpModal = wireModal(document.getElementById("vh-cmp-modal"));
+	var cmpHandover = null, cmpOpts = { areas: [], damage_types: [], severities: [] };
+
+	function opts(list, sel) {
+		return '<option value=""></option>' + list.map(function (o) {
+			return '<option' + (o === sel ? " selected" : "") + ">" + esc(o) + "</option>";
+		}).join("");
+	}
+
+	function cmpAddRow(d) {
+		d = d || {};
+		var tb = document.getElementById("vh-cmp-dmg");
+		if (!tb) return;
+		var tr = document.createElement("tr");
+		tr.innerHTML =
+			'<td><select class="c-area">' + opts(cmpOpts.areas, d.area) + "</select></td>" +
+			'<td><select class="c-type">' + opts(cmpOpts.damage_types, d.damage_type) + "</select></td>" +
+			'<td><select class="c-sev">' + opts(cmpOpts.severities, d.severity) + "</select></td>" +
+			'<td><input class="c-desc" placeholder="What you can see" value="' + esc(d.description || "") + '"></td>' +
+			'<td style="width:32px"><button type="button" class="vh-cmp-rm" title="Remove"><i class="fa-solid fa-xmark"></i></button></td>';
+		tr.querySelector(".vh-cmp-rm").addEventListener("click", function () { tr.remove(); cmpSync(); });
+		tb.appendChild(tr);
+		cmpSync();
+	}
+
+	function cmpRows() {
+		var out = [];
+		document.querySelectorAll("#vh-cmp-dmg tr").forEach(function (tr) {
+			var area = (tr.querySelector(".c-area") || {}).value || "";
+			var type = (tr.querySelector(".c-type") || {}).value || "";
+			if (!area || !type) return;
+			out.push({
+				area: area, damage_type: type,
+				severity: (tr.querySelector(".c-sev") || {}).value || "Minor",
+				description: (tr.querySelector(".c-desc") || {}).value || "",
+			});
+		});
+		return out;
+	}
+
+	// Create Job Card only means anything once there is damage to repair.
+	function cmpSync() {
+		var link = document.getElementById("vh-cmp-jc");
+		link.style.display = cmpRows().length ? "" : "none";
+	}
+
+	function openComparison(handover) {
+		cmpHandover = handover;
+		var body = document.getElementById("vh-cmp-body");
+		body.innerHTML = '<div class="empty">Loading…</div>';
+		document.getElementById("vh-cmp-msg").textContent = "";
+		document.getElementById("vh-cmp-jc").style.display = "none";
+		cmpModal.open();
+
+		callMethod("garagedesk.api.handover_comparison.get_comparison", { handover: handover })
+			.then(function (c) {
+				cmpOpts = { areas: c.areas, damage_types: c.damage_types, severities: c.severities };
+				document.getElementById("vh-cmp-sub").textContent = c.previous
+					? c.handover + " (" + c.date + ")  vs  " + c.previous + " (" + c.previous_date + ")"
+					: c.handover + " (" + c.date + ")  —  no earlier handover to compare against";
+
+				var groups = [], seen = {};
+				c.pairs.forEach(function (p) {
+					if (!seen[p.group]) { seen[p.group] = []; groups.push(p.group); }
+					seen[p.group].push(p);
+				});
+
+				var html = "";
+				if (!c.pairs.length) {
+					html += '<div class="empty">No photographs on either handover to compare.</div>';
+				}
+				groups.forEach(function (g) {
+					html += '<div class="vh-cmp-sec"><h4>' + esc(g) + "</h4>";
+					seen[g].forEach(function (p) {
+						var changed = p.was.note && p.now.note && p.was.note !== p.now.note;
+						html += '<div class="vh-cmp-row' + (changed ? " is-changed" : "") + '">' +
+							'<div class="vh-cmp-lbl">' + esc(p.label) + "</div>" +
+							side("Previous", p.was) + side("This handover", p.now) + "</div>";
+					});
+					html += "</div>";
+				});
+
+				html += '<div class="vh-cmp-sec"><h4>Damages found</h4>' +
+					'<table class="vh-cmp-tbl"><thead><tr><th style="width:22%">Area</th>' +
+					'<th style="width:18%">Damage Type</th><th style="width:15%">Severity</th>' +
+					"<th>Description</th><th></th></tr></thead>" +
+					'<tbody id="vh-cmp-dmg"></tbody></table></div>';
+				body.innerHTML = html;
+
+				(c.damages || []).forEach(cmpAddRow);
+				cmpSync();
+				document.getElementById("vh-cmp-jc").href = newJobCardUrl(handover);
+			})
+			.catch(function (err) {
+				body.innerHTML = '<div class="empty">Could not load the comparison: ' +
+					esc(err && err.message ? err.message : err) + "</div>";
+			});
+	}
+
+	function side(cap, o) {
+		return '<div class="vh-cmp-side"><span class="cap">' + esc(cap) +
+			(o.note ? " — " + esc(o.note) : "") + "</span>" +
+			(o.photo
+				? '<img src="' + esc(o.photo) + '" alt="' + esc(cap) + '" data-zoom="' + esc(o.photo) + '">'
+				: '<span class="none">No photo</span>') + "</div>";
+	}
+
+	document.getElementById("vh-cmp-add").addEventListener("click", function () { cmpAddRow(); });
+
+	document.getElementById("vh-cmp-save").addEventListener("click", function () {
+		if (!cmpHandover) return;
+		var btn = this, original = btn.innerHTML;
+		btn.disabled = true;
+		btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving…';
+		callMethod("garagedesk.api.handover_comparison.save_comparison",
+			{ handover: cmpHandover, damages: JSON.stringify(cmpRows()) })
+			.then(function (r) {
+				document.getElementById("vh-cmp-msg").textContent =
+					r.count + " damage" + (r.count === 1 ? "" : "s") + " saved against this handover.";
+			})
+			.catch(function (err) {
+				alert("Could not save the damages: " + (err && err.message ? err.message : err));
+			})
+			.then(function () { btn.disabled = false; btn.innerHTML = original; });
+	});
+
+	// Full-size on click — a thumbnail cannot settle whether a panel is dented.
+	document.getElementById("vh-cmp-body").addEventListener("click", function (e) {
+		var img = e.target.closest("[data-zoom]");
+		if (img) window.open(img.getAttribute("data-zoom"), "_blank", "noopener");
+	});
+
 	document.getElementById("pane-handovers").addEventListener("click", function (e) {
+		var cmp = e.target.closest("[data-cmp]");
+		if (cmp) { openComparison(cmp.getAttribute("data-cmp")); return; }
 		var jc = e.target.closest("[data-newjc]");
 		if (jc) { window.location.href = newJobCardUrl(jc.getAttribute("data-newjc")); return; }
 		var b = e.target.closest("[data-handover]");
@@ -420,8 +655,13 @@
 				html += '<div class="vh-cmp">';
 				html += "<div><div class=\"vd-section-title\" style=\"font-size:12px;font-weight:800;text-transform:uppercase;color:var(--muted);margin-bottom:10px\">Recorded Condition (" + h.damages.length + ")</div>" +
 					(h.damages.length ? h.damages.map(dmgCard).join("") : '<div class="muted" style="font-size:13px">No damages recorded.</div>') + "</div>";
-				html += "<div><div class=\"vd-section-title\" style=\"font-size:12px;font-weight:800;text-transform:uppercase;color:var(--muted);margin-bottom:10px\">New vs Previous Handover (" + h.new_damages.length + ")</div>" +
-					(h.new_damages.length ? h.new_damages.map(function (x) { x.is_new = 1; return dmgCard(x); }).join("")
+				// Both kinds count here: the controller's automatic diff, and what
+				// the inspector found comparing photographs in the Damages popup.
+				// Counting only the first said "no new damage" on a handover that
+				// plainly had damage recorded against it.
+				var found = (h.new_damages || []).concat(h.comparison_damages || []);
+				html += "<div><div class=\"vd-section-title\" style=\"font-size:12px;font-weight:800;text-transform:uppercase;color:var(--muted);margin-bottom:10px\">New vs Previous Handover (" + found.length + ")</div>" +
+					(found.length ? found.map(function (x) { x.is_new = 1; return dmgCard(x); }).join("")
 						: '<div class="muted" style="font-size:13px">No new damage — matches the previous record.</div>') + "</div>";
 				html += "</div>";
 				if (h.discrepancy_found) {

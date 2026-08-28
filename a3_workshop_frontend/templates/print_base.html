@@ -39,6 +39,10 @@
 		.pill--amber { background: #fdf3e0; color: #b45309; }
 		.pill--navy { background: #e6ecf4; color: #003277; }
 		tr.newdmg td { background: #fde7ee; }
+		/* Inline evidence thumbnail inside a table cell — small enough that a
+		   five-tyre table still fits a page, big enough to see the damage. */
+		img.shot { width: 108px; height: 74px; object-fit: cover; border: 1px solid #e2e5ea;
+			border-radius: 4px; display: block; }
 		.photos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 8px; }
 		.photos figure { break-inside: avoid; }
 		.photos img { width: 100%; height: 150px; object-fit: cover; border: 1px solid #e2e5ea; border-radius: 6px; }
@@ -62,12 +66,28 @@
 		.muted { color: #8a94a6; }
 		.right { text-align: right; }
 		.doc-foot { margin-top: 28px; padding-top: 10px; border-top: 1px solid #e2e5ea; color: #8a94a6; font-size: 10px; text-align: center; }
+		/* Layout wrapper only — invisible, and collapsed to nothing on screen. */
+		.pagegrid { width: 100%; border-collapse: collapse; }
+		.pagegrid > thead > tr > td,
+		.pagegrid > tfoot > tr > td { height: 0; padding: 0; border: 0; }
+		.pagegrid > tbody > tr > td { padding: 0; border: 0; vertical-align: top; }
 		@media print {
 			body.printdoc { background: #fff; }
 			.print-toolbar { display: none; }
-			.sheet { box-shadow: none; margin: 0; max-width: none; padding: 0; }
+			/* @page carries no margin, so the browser has nowhere to print its own
+			   header and footer (the document title and the URL). Left and right
+			   come from the sheet's padding; top and bottom come from the repeating
+			   thead/tfoot above, which is what gives page 2 onwards a margin. */
+			.sheet { box-shadow: none; margin: 0; max-width: none; padding: 0 12mm; }
+			.pagegrid > thead > tr > td { height: 14mm; }
+			.pagegrid > tfoot > tr > td { height: 10mm; }
+			/* A heading stranded at the foot of a page with its table overleaf is
+			   the other thing that made the print look untidy. Chrome honours the
+			   legacy property more reliably than the modern one, so set both. */
+			h2.sec { page-break-after: avoid; break-after: avoid; }
+			.photos figure, .stat, table.t tr { page-break-inside: avoid; }
 		}
-		@page { size: A4; margin: 13mm 12mm; }
+		@page { size: A4; margin: 0; }
 	</style>
 </head>
 <body class="printdoc">
@@ -83,6 +103,11 @@
 	    the bare logo on a site that has no default Letter Head. -#}
 	{%- set letterhead = frappe.db.get_value("Letter Head", {"is_default": 1, "disabled": 0}, "content") -%}
 	<div class="sheet">
+	{#- A table wrapper, not decoration: browsers repeat a thead and tfoot on
+	    every printed page, so an empty one of each is the only way to get a top
+	    and bottom margin on continuation pages while @page margin stays 0 (which
+	    is what keeps the browser from printing its own header and footer). -#}
+	<table class="pagegrid"><thead><tr><td></td></tr></thead><tbody><tr><td>
 		{%- if letterhead %}
 		<div class="letterhead">{{ letterhead }}</div>
 		<header class="doc-head doc-head--lh">
@@ -110,6 +135,7 @@
 		{%- endif %}
 		{% block content %}{% endblock %}
 		<footer class="doc-foot">{{ company_name }} — Service Center CRM · Vehicle History &amp; Driver Performance</footer>
+	</td></tr></tbody><tfoot><tr><td></td></tr></tfoot></table>
 	</div>
 	<script>
 		// open the browser print dialog once images have loaded

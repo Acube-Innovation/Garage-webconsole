@@ -8,6 +8,12 @@
 {%- macro gradepill(g) -%}
 {%- if g -%}<span class="pill {{ 'pill--green' if g == 'A' else ('pill--navy' if g == 'B' else ('pill--amber' if g == 'C' else 'pill--red')) }}">{{ g }}</span>{%- else -%}<span class="muted">—</span>{%- endif -%}
 {%- endmacro -%}
+{%- macro condpill(c) -%}
+{%- if c -%}<span class="pill {{ 'pill--green' if c == 'Good' else ('pill--amber' if c in ('Worn', 'Requires Attention') else 'pill--red') }}">{{ c }}</span>{%- else -%}<span class="muted">Not assessed</span>{%- endif -%}
+{%- endmacro -%}
+{%- macro shot(url, alt) -%}
+{%- if url -%}<img src="{{ url }}" alt="{{ alt }}" class="shot">{%- else -%}<span class="muted">No photo</span>{%- endif -%}
+{%- endmacro -%}
 {%- macro rectpill(s) -%}
 <span class="pill {{ 'pill--green' if s == 'Rectified' else ('pill--amber' if s in ('Pending', 'In Progress') else '') }}">{{ s }}</span>
 {%- endmacro -%}
@@ -211,31 +217,97 @@
 	<div><div class="k">KM Since Previous</div><div class="v">{{ num(h.km_since_previous) }}</div></div>
 </div>
 
+{#- Only what is actually on the vehicle gets printed. A column of ✘ marks for
+    every item nobody ticked reads as a finding in its own right on a signed
+    record, and buries the handful of things that ARE present. -#}
+{%- set ticked = h.checklist_items | selectattr("checked") | list -%}
+{%- set legacy = [] -%}
+{%- if not h.checklist_items -%}
+	{%- if h.checklist.spare_tyre %}{% set _ = legacy.append(("Spare Tyre", "")) %}{% endif -%}
+	{%- if h.checklist.tools_present %}{% set _ = legacy.append(("Tools / Jack", "")) %}{% endif -%}
+	{%- if h.checklist.documents_present %}{% set _ = legacy.append(("Documents", "")) %}{% endif -%}
+	{%- if h.checklist.first_aid_kit %}{% set _ = legacy.append(("First Aid Kit", "")) %}{% endif -%}
+{%- endif -%}
+{#- The three readings are values the inspector recorded, not ticks, so they
+    survive on their own even when nothing was ticked. "—" means unrecorded. -#}
+{%- set readings = [] -%}
+{%- if h.fuel_level and h.fuel_level != "—" %}{% set _ = readings.append(("Fuel Level", h.fuel_level)) %}{% endif -%}
+{%- if h.overall_condition and h.overall_condition != "—" %}{% set _ = readings.append(("Overall Condition", h.overall_condition)) %}{% endif -%}
+{%- if h.tyre_condition and h.tyre_condition != "—" %}{% set _ = readings.append(("Tyre Condition", h.tyre_condition)) %}{% endif -%}
+
+{% if readings or ticked or legacy %}
 <h2 class="sec">Condition Checklist</h2>
 <div class="kv">
-	<div><div class="k">Fuel Level</div><div class="v">{{ h.fuel_level }}</div></div>
-	<div><div class="k">Overall Condition</div><div class="v">{{ h.overall_condition }}</div></div>
-	<div><div class="k">Tyre Condition</div><div class="v">{{ h.tyre_condition }}</div></div>
-	<div></div>
-	{% if h.checklist_items %}
-	{% for c in h.checklist_items %}
-	<div><div class="k">{{ c.item }}</div><div class="v">{{ "✔" if c.checked else "✘" }}{% if c.value %} {{ c.value }}{% endif %}</div></div>
+	{% for k, v in readings %}
+	<div><div class="k">{{ k }}</div><div class="v">{{ v }}{% if k == "Tyre Condition" and h.tyre_readings %} <span class="muted" style="font-weight:400">(worst of {{ h.tyre_readings | length }})</span>{% endif %}</div></div>
 	{% endfor %}
-	{% else %}
-	<div><div class="k">Spare Tyre</div><div class="v">{{ "✔ Present" if h.checklist.spare_tyre else "✘ Missing" }}</div></div>
-	<div><div class="k">Tools / Jack</div><div class="v">{{ "✔ Present" if h.checklist.tools_present else "✘ Missing" }}</div></div>
-	<div><div class="k">Documents</div><div class="v">{{ "✔ Present" if h.checklist.documents_present else "✘ Missing" }}</div></div>
-	<div><div class="k">First Aid Kit</div><div class="v">{{ "✔ Present" if h.checklist.first_aid_kit else "✘ Missing" }}</div></div>
-	{% endif %}
+	{% for c in ticked %}
+	<div><div class="k">{{ c.item }}</div><div class="v">✔{% if c.value %} {{ c.value }}{% endif %}</div></div>
+	{% endfor %}
+	{% for k, v in legacy %}
+	<div><div class="k">{{ k }}</div><div class="v">✔ Present</div></div>
+	{% endfor %}
 </div>
-{% if h.attachment_items %}
+{% endif %}
+
+{%- set attached = h.attachment_items | selectattr("checked") | list -%}
+{% if attached %}
 <h2 class="sec">Attachments</h2>
 <div class="kv">
-	{% for a in h.attachment_items %}
+	{% for a in attached %}
 	<div><div class="k">{{ a.item }}{% if a.qty %} &times;{{ a.qty }}{% endif %}</div>
-		<div class="v">{{ "✔ Attached" if a.checked else "✘ Not attached" }}{% if a.value %} — {{ a.value }}{% endif %}
+		<div class="v">✔ Attached{% if a.value %} — {{ a.value }}{% endif %}
 		{%- if a.serials %}<br><span style="font-size:10px;color:#4a5468">{{ a.serials | join(" · ") }}</span>{% endif %}</div></div>
 	{% endfor %}
+</div>
+{% endif %}
+
+{% if h.tyre_readings %}
+<h2 class="sec">Tyre Condition &amp; Tread ({{ h.tyre_readings | length }})</h2>
+<table class="t"><thead><tr><th style="width:24%">Tyre Position</th><th style="width:20%">Condition</th><th style="width:18%">Tread Depth</th><th>Photo</th></tr></thead><tbody>
+	{% for t in h.tyre_readings %}
+	<tr>
+		<td><b>{{ t.position }}</b></td>
+		<td>{{ condpill(t.condition) }}</td>
+		<td>{% if t.tread_depth_mm %}{{ t.tread_depth_mm }} mm{% else %}<span class="muted">Not measured</span>{% endif %}</td>
+		<td>{{ shot(t.photo, t.position) }}</td>
+	</tr>
+	{% endfor %}
+</tbody></table>
+{% endif %}
+
+{% if h.area_inspections %}
+<h2 class="sec">Vehicle Unit Condition &amp; Photo Record ({{ h.area_inspections | length }})</h2>
+<table class="t"><thead><tr><th style="width:32%">Inspection Area</th><th style="width:24%">Condition</th><th>Photo</th></tr></thead><tbody>
+	{% for a in h.area_inspections %}
+	<tr>
+		<td><b>{{ a.area }}</b></td>
+		<td>{{ condpill(a.condition) }}</td>
+		<td>{{ shot(a.photo, a.area) }}</td>
+	</tr>
+	{% endfor %}
+</tbody></table>
+{% endif %}
+
+{% if h.attachment_views %}
+<h2 class="sec">Attachment Condition By View ({{ h.attachment_views | length }})</h2>
+<table class="t"><thead><tr><th style="width:26%">Attachment</th><th style="width:18%">View</th><th style="width:22%">Condition</th><th>Photo</th></tr></thead><tbody>
+	{% for v in h.attachment_views %}
+	<tr>
+		<td><b>{{ v.attachment_item }}</b>{% if v.unit_no %} <span class="muted">#{{ v.unit_no }}</span>{% endif %}</td>
+		<td>{{ v.view }}</td>
+		<td>{{ condpill(v.condition) }}</td>
+		<td>{{ shot(v.photo, v.attachment_item ~ " " ~ v.view) }}</td>
+	</tr>
+	{% endfor %}
+</tbody></table>
+{% endif %}
+
+{% if h.odometer_photo or h.fuel_photo %}
+<h2 class="sec">Reading Photos</h2>
+<div class="photos">
+	{% if h.odometer_photo %}<figure><img src="{{ h.odometer_photo }}" alt="Odometer"><figcaption>Odometer — {{ num(h.odometer) }} km</figcaption></figure>{% endif %}
+	{% if h.fuel_photo %}<figure><img src="{{ h.fuel_photo }}" alt="Fuel gauge"><figcaption>Fuel gauge — {{ h.fuel_level }}</figcaption></figure>{% endif %}
 </div>
 {% endif %}
 
@@ -253,7 +325,8 @@
 </tbody></table>
 {% else %}<p class="muted">No damages — vehicle recorded clean.</p>{% endif %}
 
-<h2 class="sec">Comparison With Previous Handover {% if h.previous_handover %}({{ h.previous_handover }}){% endif %}</h2>
+{%- set found = (h.new_damages | length) + (h.comparison_damages | length) -%}
+<h2 class="sec">Comparison With Previous Handover {% if h.previous_handover %}({{ h.previous_handover }}){% endif %}{% if found %} — {{ found }} damage{{ "" if found == 1 else "s" }}{% endif %}</h2>
 {% if h.new_damages %}
 <table class="t"><thead><tr><th>#</th><th>Area</th><th>Damage Type</th><th>Severity</th><th>Finding</th></tr></thead><tbody>
 	{% for x in h.new_damages %}
@@ -269,14 +342,33 @@
 	{% if h.rectification_job_card %}<div><div class="k">Repair Job Card</div><div class="v">{{ h.rectification_job_card }}</div></div>{% endif %}
 	{% if h.rectification_notes %}<div style="grid-column:span 2"><div class="k">Notes</div><div class="v">{{ h.rectification_notes }}</div></div>{% endif %}
 </div>
-{% elif h.previous_handover %}
+{% elif not h.comparison_damages and h.previous_handover %}
 <p class="muted">No new damage — vehicle condition matches the previous handover record.</p>
-{% else %}
+{% elif not h.comparison_damages %}
 <p class="muted">First handover for this vehicle — nothing to compare against.</p>
 {% endif %}
 
+{#- Damage the inspector found by putting the two sets of photographs side by
+    side. Printed under the same heading as the automatic diff because it answers
+    the same question, but labelled apart: one is a field-by-field comparison of
+    recorded lines, the other is a person looking at pictures. -#}
+{% if h.comparison_damages %}
+<p class="muted" style="margin:10px 0 6px;font-size:11px">
+	Found on photograph comparison against
+	{% if h.previous_handover %}{{ h.previous_handover }}{% else %}the previous handover{% endif %}:
+</p>
+<table class="t"><thead><tr><th>#</th><th>Area</th><th>Damage Type</th><th>Severity</th><th>Description</th></tr></thead><tbody>
+	{% for x in h.comparison_damages %}
+	<tr class="newdmg">
+		<td>{{ loop.index }}</td><td><b>{{ x.area }}</b></td><td>{{ x.damage_type }}</td>
+		<td>{{ sevpill(x.severity) }}</td><td>{{ x.description or "—" }}</td>
+	</tr>
+	{% endfor %}
+</tbody></table>
+{% endif %}
+
 {% if h.attachments %}
-<h2 class="sec">Photo Evidence ({{ h.attachments | length }})</h2>
+<h2 class="sec">All Attached Files ({{ h.attachments | length }})</h2>
 <div class="photos">
 	{% for a in h.attachments %}
 	<figure><img src="{{ a.file_url }}" alt="{{ a.file_name }}"><figcaption>{{ a.file_name }}</figcaption></figure>
