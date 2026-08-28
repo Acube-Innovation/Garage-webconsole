@@ -43,6 +43,9 @@
 		</div>
 		{{ field("Mobile Number","mobile",placeholder="+971 ...") }}
 		{{ field("Job Number","job_no",placeholder="Auto (on save)") }}
+		<div class="field"><label>Handover</label>
+			<input name="handover_label" placeholder="Search handovers…" autocomplete="off">
+			<input type="hidden" name="handover"></div>
 		{{ field("Booking Date","booking_date",type="date",required=True) }}
 		{{ field("Promised Delivery","delivery",type="date") }}
 		{{ field("Service Advisor","advisor",type="select") }}
@@ -416,6 +419,8 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 	// Rectified and swaps the button for this card's id on the history page.
 	var handoverRef = qparam("handover");
 	var handoverLinked = false;
+	var handoverStamped = false;
+	var handoverHasDiscrepancy = false;
 	var hoBanner = document.getElementById('jc-handover-banner');
 	var hoNote = document.getElementById('jc-handover-note');
 	function backToVehicle() {
@@ -435,7 +440,24 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 			  '<a href="' + backToVehicle() + '" style="color:var(--red);font-weight:600">Cancel and go back</a>';
 	}
 	function linkHandover(jobCard) {
-		if (!handoverRef || handoverLinked || !jobCard) return;
+		if (!handoverRef || !jobCard) return;
+
+		// The card's own handover field, written once. Independent of the
+		// rectification link below — a card raised from a damage comparison still
+		// belongs to its handover even when the auto-diff found nothing.
+		if (!handoverStamped) {
+			handoverStamped = true;
+			callMethod("garagedesk.api.handover_comparison.set_job_card_handover", {
+				job_card: jobCard, handover: handoverRef
+			}).catch(function (err) {
+				handoverStamped = false; // let the next save retry
+				console.warn("Could not stamp handover on " + jobCard + ":", err);
+			});
+		}
+
+		// link_rectification_job_card throws on a handover the auto-diff found no
+		// discrepancy in, so only the ones it can actually close are sent to it.
+		if (!handoverHasDiscrepancy || handoverLinked) return;
 		handoverLinked = true;
 		callMethod("garagedesk.api.fleet.link_rectification_job_card", {
 			handover: handoverRef, job_card: jobCard
@@ -448,6 +470,18 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 		});
 	}
 	renderHandoverBanner(null);
+
+	// Opened from a handover: show which one on the form, and seed the Complaints
+	// step with the damage recorded against it so the advisor starts from the
+	// inspector's findings rather than retyping them. Comparison damages win;
+	// a handover with none falls back to the auto-diffed new_damages.
+	// Arrived from a handover's Damages popup (?handover=) — preset the picker.
+	function prefillFromHandover() {
+		if (!handoverRef) return;
+		setVal("handover", handoverRef);
+		setVal("handover_label", handoverRef);
+		loadHandoverComplaints();
+	}
 
 	function loadJobCardOptions() {
 		return callMethod("garagedesk.api.front_office.get_job_card_options", {}).then(function (o) {
@@ -541,6 +575,58 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 			Array.prototype.forEach.call(list.children, function (c, i) { c.classList.toggle("is-active", i === active); });
 		});
 	}
+	// Handover: pick any inspection, or arrive with one already chosen via
+	// ?handover=. Both routes end in applyHandover, so a hand-picked handover
+	// seeds Complaints exactly as one arrived at from the Damages popup does.
+	attachAutocomplete(document.querySelector('[name="handover_label"]'), function (q) {
+		return callMethod("garagedesk.api.handover_comparison.search_handovers", {
+			search: q, vehicle: val("vehicle_id"), limit: 15
+		}).then(function (rows) {
+			return (rows || []).map(function (h) {
+				var bits = [h.date, h.handover_type, h.vehicle].filter(Boolean);
+				if (h.to_driver) bits.push("to " + h.to_driver);
+				if (h.damages) bits.push(h.damages + " damage" + (h.damages === 1 ? "" : "s"));
+				return { label: h.name, sub: bits.join("  ·  "), value: h.name };
+			});
+		});
+	}, function (it) { applyHandover(it.value, it.label); });
+
+	// Clearing the box clears the link — otherwise the hidden id would outlive
+	// the text the user just deleted.
+	document.querySelector('[name="handover_label"]').addEventListener("input", function () {
+		if (!this.value.trim()) { setVal("handover", ""); handoverRef = null; }
+	});
+
+	function applyHandover(name, label) {
+		if (!name) return;
+		handoverRef = name;
+		setVal("handover", name);
+		setVal("handover_label", label || name);
+		renderHandoverBanner(jobCardName);
+		// Already saved? Stamp it now; otherwise the first save does it.
+		if (jobCardName) linkHandover(jobCardName);
+		loadHandoverComplaints();
+	}
+
+	function loadHandoverComplaints() {
+		if (!handoverRef) return;
+		callMethod("garagedesk.api.handover_comparison.get_job_card_complaints", {
+			handover: handoverRef
+		}).then(function (r) {
+			handoverHasDiscrepancy = !!r.discrepancy_found;
+			if (!r.complaints || !r.complaints.length) return;
+			// Only seed an empty table — a card being edited, or one the advisor
+			// has already typed into, must not be duplicated over.
+			if (cBody.children.length) return;
+			r.complaints.forEach(addComplaintRow);
+			hoNote.innerHTML += ' <br><span class="muted" style="font-size:12px">' +
+				r.complaints.length + " damage item" + (r.complaints.length === 1 ? "" : "s") +
+				" from that handover added to Complaints.</span>";
+		}).catch(function (err) {
+			console.warn("Could not load handover damages:", err);
+		});
+	}
+
 	// Customer Name: suggest from Customers; on pick, capture id + load their vehicles.
 	attachAutocomplete(document.querySelector('[name="customer"]'), function (q) {
 		return callMethod("garagedesk.api.front_office.list_customers", { search: q, limit: 10 }).then(function (rows) {
@@ -599,8 +685,13 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 	// Options first (so advisor / service / technician dropdowns exist), then either
 	// load an existing card for editing (?id=) or prefill from a lead's Save & Job Card.
 	loadJobCardOptions().then(function () {
-		if (qparam("id")) loadJobCard(qparam("id"));
-		else prefillFromUrl();
+		if (qparam("id")) return loadJobCard(qparam("id"));
+		prefillFromUrl();
+	}).then(function () {
+		// Chained, not fired alongside: loadJobCard is async, and seeding before
+		// it resolves would add the handover's damages on top of the complaints
+		// the saved card already has.
+		prefillFromHandover();
 	});
 
 	// Load a saved Workshop Job Card into every tab for editing.
