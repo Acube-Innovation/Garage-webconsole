@@ -504,7 +504,24 @@ input[type="range"] { width: 100%; accent-color: var(--red); }
 
 // ---------------------------------------------------------------- front office (customer 360)
 .fo-grid { display: grid; grid-template-columns: 320px minmax(0, 1fr) 340px; gap: 18px;
-	@media (max-width: 1200px) { grid-template-columns: 1fr; } }
+	transition: grid-template-columns .18s ease;
+	// Once the middle box is showing something — a 360 section table, an enquiry
+	// detail or one of the inline forms — it needs the room more than the two
+	// directories flanking it do, so they hand some of their width back.
+	// --wide keeps the Enquiries list on screen (it is what the middle box was
+	// opened from); --full drops it entirely so a 360 section or an inline form
+	// runs from the customer list to the right edge.
+	&.fo-grid--wide { grid-template-columns: 236px minmax(0, 1fr) 256px; }
+	&.fo-grid--full { grid-template-columns: 236px minmax(0, 1fr);
+		> .fo-enquiries { display: none; } }
+	// At those widths a card head can run out of room for its title *and* its
+	// button; let the button drop to its own line instead of overflowing.
+	.card__head { flex-wrap: wrap; row-gap: 8px; }
+	// Stacked on narrow screens there is no width to reclaim, so every mode is
+	// one column and Enquiries stays put rather than vanishing off the page.
+	@media (max-width: 1200px) { grid-template-columns: 1fr;
+		&.fo-grid--wide, &.fo-grid--full { grid-template-columns: 1fr; }
+		&.fo-grid--full > .fo-enquiries { display: block; } } }
 .dir-list { display: flex; flex-direction: column; gap: 3px; max-height: 540px; overflow: auto; }
 .dir-item { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 9px; cursor: pointer; }
 .dir-item:hover { background: var(--bg); }

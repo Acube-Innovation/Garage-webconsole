@@ -5,6 +5,29 @@ from a3_workshop_frontend.website_utils import require_login
 no_cache = 1
 
 
+def _driver_contact(driver, fallback_name):
+	"""Name, mobile and licence number for one side of a handover.
+
+	The declaration and the signature block are the part of this print that gets
+	signed and filed, so whoever took the vehicle has to be identifiable by more
+	than a first name. `driver` is the Driver link on the handover; the stored
+	`*_driver_name` rides along as the fallback for a record whose Driver row was
+	renamed or removed.
+	"""
+	info = {"name": fallback_name or "—", "phone": "", "license": ""}
+	if not driver:
+		return info
+	row = frappe.db.get_value(
+		"Driver", driver, ["full_name", "cell_number", "license_number"], as_dict=True
+	)
+	if not row:
+		return info
+	info["name"] = row.full_name or fallback_name or driver
+	info["phone"] = row.cell_number or ""
+	info["license"] = row.license_number or ""
+	return info
+
+
 def get_context(context):
 	"""Print view for the Vehicle History module. One route, four documents:
 
@@ -41,9 +64,12 @@ def get_context(context):
 		context.h = fleet.get_handover(handover)
 		meta = frappe.db.get_value(
 			"Driver Vehicle Handover", handover,
-			["vehicle", "branch", "inspected_by", "customer_name", "customer"],
+			["vehicle", "branch", "inspected_by", "customer_name", "customer",
+			 "from_driver", "from_driver_name", "to_driver", "to_driver_name"],
 			as_dict=True,
 		)
+		context.from_driver_info = _driver_contact(meta.from_driver, meta.from_driver_name)
+		context.to_driver_info = _driver_contact(meta.to_driver, meta.to_driver_name)
 		v = frappe.db.get_value(
 			"Vehicle", meta.vehicle,
 			["custom_model", "model", "custom_plate", "license_plate", "chassis_no", "custom_vin"],
