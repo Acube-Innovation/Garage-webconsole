@@ -132,7 +132,7 @@
 	</div>
 
 	<!-- BOX 3 — incoming enquiries list (real CRM Opportunities) -->
-	<div class="card">
+	<div class="card fo-enquiries">
 		<div class="card__head">
 			<h3>Enquiries</h3>
 			<button type="button" class="btn btn--primary btn--sm" id="create-opportunity"><i class="fa-solid fa-plus"></i> Create Opportunity</button>
@@ -264,9 +264,25 @@
 	var viewerTag = document.getElementById("viewer-tag");
 	var viewerClose = document.getElementById("viewer-close");
 	var middleState = "view";
+	var foGrid = document.querySelector(".fo-grid");
+
+	// How much room the middle box takes off the two side panels:
+	//   "rest" — three columns at their natural widths (nothing selected yet).
+	//   "wide" — both sides shrink but stay; for the enquiry detail, which is
+	//            opened from the Enquiries list and needs it to remain clickable.
+	//   "full" — Enquiries is hidden outright and the middle box runs to the right
+	//            edge; for 360 sections and the inline forms, both of which are
+	//            still escapable via "All customers" / the panel's close button.
+	// setMiddle picks "full" as every state's default; the two exceptions
+	// (restoreMiddle's empty state, showEnquiry) correct it immediately after.
+	function setWidth(mode) {
+		foGrid.classList.toggle("fo-grid--wide", mode === "wide");
+		foGrid.classList.toggle("fo-grid--full", mode === "full");
+	}
 
 	function setMiddle(state, title) {
 		middleState = state;
+		setWidth("full");
 		var isForm = (state === "opportunity" || state === "customer");
 		viewer.style.display = (state === "view") ? "block" : "none";
 		mOpportunity.style.display = (state === "opportunity") ? "block" : "none";
@@ -283,6 +299,7 @@
 			viewerTitle.textContent = "Customer 360";
 			viewer.innerHTML = '<div class="empty">Select a customer on the left, then choose a section to view.</div>';
 			setMiddle("view");
+			setWidth("rest");
 		}
 	}
 	viewerClose.addEventListener("click", restoreMiddle);
@@ -412,6 +429,7 @@
 	// every field shown here, so opening one costs no extra round-trip.
 	function showEnquiry(o) {
 		setMiddle("view", "Enquiry — " + o.customer_name);
+		setWidth("wide"); // keep the Enquiries list on screen — it is the way back
 		var rows = [
 			["Enquiry", esc(o.name)],
 			["Contact", esc(o.customer_name)],

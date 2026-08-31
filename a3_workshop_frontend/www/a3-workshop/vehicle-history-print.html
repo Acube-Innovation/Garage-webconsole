@@ -14,6 +14,21 @@
 {%- macro shot(url, alt) -%}
 {%- if url -%}<img src="{{ url }}" alt="{{ alt }}" class="shot">{%- else -%}<span class="muted">No photo</span>{%- endif -%}
 {%- endmacro -%}
+{#- Mobile + licence for one side of a handover, under the name it belongs to.
+    Renders nothing when the Driver record carries neither. -#}
+{%- macro contact(info) -%}
+{%- set bits = [] -%}
+{%- if info and info.phone %}{% set _ = bits.append(info.phone) %}{% endif -%}
+{%- if info and info.license %}{% set _ = bits.append("Licence " ~ info.license) %}{% endif -%}
+{%- if bits %}<span class="sub">{{ bits | join(" · ") }}</span>{% endif -%}
+{%- endmacro -%}
+{#- Same details, parenthesised, for use inside a sentence. -#}
+{%- macro contact_inline(info) -%}
+{%- set bits = [] -%}
+{%- if info and info.phone %}{% set _ = bits.append("mobile " ~ info.phone) %}{% endif -%}
+{%- if info and info.license %}{% set _ = bits.append("licence no. " ~ info.license) %}{% endif -%}
+{%- if bits %} ({{ bits | join(", ") }}){% endif -%}
+{%- endmacro -%}
 {%- macro rectpill(s) -%}
 <span class="pill {{ 'pill--green' if s == 'Rectified' else ('pill--amber' if s in ('Pending', 'In Progress') else '') }}">{{ s }}</span>
 {%- endmacro -%}
@@ -211,8 +226,8 @@
 	<div><div class="k">Type</div><div class="v">{{ h.handover_type }}</div></div>
 	<div><div class="k">Branch</div><div class="v">{{ h_meta.branch }}</div></div>
 	<div><div class="k">Inspected By</div><div class="v">{{ h_meta.inspected_by }}</div></div>
-	<div><div class="k">From Driver (returning)</div><div class="v">{{ h.from_driver }}</div></div>
-	<div><div class="k">To Driver (receiving)</div><div class="v">{{ h.to_driver }}</div></div>
+	<div><div class="k">From Driver (returning)</div><div class="v">{{ h.from_driver }}{{ contact(from_driver_info) }}</div></div>
+	<div><div class="k">To Driver (receiving)</div><div class="v">{{ h.to_driver }}{{ contact(to_driver_info) }}</div></div>
 	<div><div class="k">Odometer</div><div class="v">{{ num(h.odometer) }} km</div></div>
 	<div><div class="k">KM Since Previous</div><div class="v">{{ num(h.km_since_previous) }}</div></div>
 </div>
@@ -380,7 +395,7 @@
 	<h3>Declaration of Responsibility</h3>
 	{%- if h.to_driver and h.to_driver != "—" %}
 	<p>
-		I, <b>{{ h.to_driver }}</b>, confirm that I have inspected
+		I, <b>{{ h.to_driver }}</b>{{ contact_inline(to_driver_info) }}, confirm that I have inspected
 		{{ h_meta.model }}{% if h_meta.plate and h_meta.plate != "—" %} (plate {{ h_meta.plate }}){% endif %}
 		on {{ h.date }} at {{ num(h.odometer) }} km, and that I accept the vehicle in the condition recorded
 		in this report, including every damage listed above. I declare that:
@@ -409,8 +424,8 @@
 </div>
 
 <div class="sigs sigs--tight">
-	<div class="sig"><b>{{ h.from_driver if h.from_driver != "—" else "Returning Driver" }}</b>From Driver — signature &amp; date</div>
-	<div class="sig"><b>{{ h.to_driver if h.to_driver != "—" else "Receiving Driver" }}</b>To Driver — signature &amp; date</div>
+	<div class="sig"><b>{{ h.from_driver if h.from_driver != "—" else "Returning Driver" }}</b>{{ contact(from_driver_info) }}From Driver — signature &amp; date</div>
+	<div class="sig"><b>{{ h.to_driver if h.to_driver != "—" else "Receiving Driver" }}</b>{{ contact(to_driver_info) }}To Driver — signature &amp; date</div>
 	<div class="sig"><b>{{ h_meta.inspected_by }}</b>Inspector — signature &amp; date</div>
 </div>
 

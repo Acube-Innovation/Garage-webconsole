@@ -59,6 +59,10 @@
 		.sigs--tight { margin-top: 34px; }
 		.sig { border-top: 1.5px solid #1f2a44; padding-top: 6px; font-size: 11px; color: #5a6478; }
 		.sig b { display: block; color: #1f2a44; font-size: 12px; margin-bottom: 2px; }
+		/* Mobile / licence line printed under a name, so a signed record identifies
+		   the person by more than the name they sign with. */
+		.kv .v .sub, .sig .sub { display: block; font-weight: 500; font-size: 10px; color: #5a6478; margin-top: 1px; }
+		.sig .sub { margin-bottom: 3px; }
 		.stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
 		.stat { border: 1px solid #e2e5ea; border-radius: 8px; padding: 10px 12px; break-inside: avoid; }
 		.stat .l { font-size: 9.5px; text-transform: uppercase; color: #8a94a6; font-weight: 700; letter-spacing: .04em; }
