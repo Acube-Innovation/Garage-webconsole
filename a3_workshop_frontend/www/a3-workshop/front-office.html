@@ -367,7 +367,7 @@
 		var printModes = { invoice: "invoice", payment: "receipt", jobcard: "jobcard" };
 		var pmode = printModes[key];
 		var thead = "<thead><tr>" + s.cols.map(function (c) { return "<th>" + esc(c) + "</th>"; }).join("") + (pmode ? "<th></th>" : "") + "</tr></thead>";
-		var tbody = "<tbody>" + rows.map(function (r) {
+		function rowHtml(r) {
 			return "<tr>" + r.map(function (cell, i) {
 				if (statusCols.indexOf(s.cols[i]) >= 0) return '<td><span class="badge ' + variant(cell) + '">' + esc(cell) + "</span></td>";
 				// The Handover cell carries the Vehicle's docname, not display text:
@@ -383,8 +383,50 @@
 			}).join("") +
 			(pmode ? '<td style="width:34px"><a class="btn btn--outline btn--icon" style="width:26px;height:26px;font-size:11px" href="/a3-workshop/workshop-print?' + pmode + "=" + encodeURIComponent(r[0]) + '" target="_blank" rel="noopener" title="Print"><i class="fa-solid fa-print"></i></a></td>' : "") +
 			"</tr>";
-		}).join("") + "</tbody>";
-		viewer.innerHTML = '<div style="overflow:auto"><table class="table">' + thead + tbody + "</table></div>";
+		}
+
+		// A fleet customer's vehicle list is the one section long enough to need
+		// finding a row rather than reading down it, so it gets a search box.
+		// Only the tbody is repainted on each keystroke, so the field keeps focus.
+		var searchable = (key === "vehicles");
+		// The Handover cell holds the Vehicle's docname rather than anything on
+		// screen; matching it would return rows that look nothing like the query.
+		function rowText(r) {
+			return r.filter(function (cell, i) { return s.cols[i] !== "Handover"; }).join(" ").toLowerCase();
+		}
+
+		viewer.innerHTML =
+			(searchable
+				? '<div class="field--inline" style="margin-bottom:12px">' +
+				  '<div class="field"><input id="sec-search" placeholder="Search ' +
+				  esc(s.cols.slice(0, 3).join(", ").toLowerCase()) + '…" autocomplete="off"></div>' +
+				  '<button type="button" class="btn btn--primary btn--icon" id="sec-search-go" title="Search">' +
+				  '<i class="fa-solid fa-magnifying-glass"></i></button></div>'
+				: "") +
+			'<div style="overflow:auto"><table class="table">' + thead + '<tbody id="sec-rows"></tbody></table></div>';
+
+		var body = document.getElementById("sec-rows");
+		var span = s.cols.length + (pmode ? 1 : 0);
+		function paint(q) {
+			q = (q || "").trim().toLowerCase();
+			var list = q ? rows.filter(function (r) { return rowText(r).indexOf(q) >= 0; }) : rows;
+			body.innerHTML = list.length
+				? list.map(rowHtml).join("")
+				: '<tr><td colspan="' + span + '" class="muted" style="text-align:center;padding:18px">No ' +
+				  esc(s.label.toLowerCase()) + " match \u201c" + esc(q) + "\u201d.</td></tr>";
+		}
+		paint("");
+		if (searchable) {
+			var box = document.getElementById("sec-search");
+			box.addEventListener("input", function () { paint(this.value); });
+			// Rows are already filtered as you type; the button is here because the
+			// customer directory above has one, and it puts the caret back in the
+			// field so a second search does not need the mouse.
+			document.getElementById("sec-search-go").addEventListener("click", function () {
+				paint(box.value);
+				box.focus();
+			});
+		}
 	}
 
 	dirList.addEventListener("click", function (e) {
