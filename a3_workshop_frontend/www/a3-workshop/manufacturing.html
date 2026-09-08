@@ -171,6 +171,7 @@
 				'<div class="bar"><span style="width:' + o.progress + '%"></span></div>' +
 				'<div class="muted" style="font-size:11px;margin-top:5px">' + esc(o.stage) + ' · ' + o.progress + '%</div></div>';
 		}).join("") || '<div class="empty">No work orders yet. Click “New” to manufacture an item.</div>';
+		setPageCount((rows || []).length, (rows || []).length === 1 ? "work order" : "work orders");
 		if (woFilter) { woFilter.apply(); }
 	}
 

@@ -155,9 +155,25 @@ h1, h2, h3, h4 { margin: 0; color: var(--text); }
 	h1 { font-size: 20px; font-weight: 800; }
 	.sub { color: var(--navy); font-size: 12px; font-weight: 600; }
 }
+.workshop-topbar__aside {
+	display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
+}
 .workshop-breadcrumb { color: var(--muted); font-size: 13px;
 	b { color: var(--text); } .sep { margin: 0 6px; }
 	a { color: var(--navy); }
+}
+
+// The record total for the current page. Sits top-right on every list; hidden
+// (rather than blank) until a page actually supplies a number, so a screen with
+// nothing countable shows no empty chip.
+.workshop-count {
+	display: inline-flex; align-items: center; gap: 6px;
+	padding: 4px 12px; border-radius: 999px;
+	background: var(--red-soft); color: var(--red);
+	font-size: 12px; font-weight: 600; white-space: nowrap;
+	i { font-size: 11px; opacity: .8; }
+	b { font-size: 14px; font-weight: 800; }
+	&.is-empty { display: none; }
 }
 
 // ---------------------------------------------------------------- buttons
@@ -245,6 +261,20 @@ h1, h2, h3, h4 { margin: 0; color: var(--text); }
 	padding: 16px 20px;
 	@media (max-width: 1100px) { grid-template-columns: 1fr; }
 }
+// Vehicles list: Vehicle · Customer · Driver · Odometer · action. A class, not an
+// inline style, because an inline grid-template-columns outranks the media query
+// above it -- the row then kept all five columns on a narrow screen and ran off
+// the right edge instead of stacking.
+.list-row--vehicle {
+	grid-template-columns: 2fr 1.5fr 1.1fr 1fr auto;
+	@media (max-width: 1400px) { grid-template-columns: 1.6fr 1.3fr 1fr .9fr auto; }
+	@media (max-width: 1100px) { grid-template-columns: 1fr; }
+}
+// Grid items default to min-width:auto, so one long unbreakable token (a chassis
+// number) can push a whole row wider than its container. Let the text columns
+// shrink and wrap instead.
+.list-row__party, .list-row__col { min-width: 0; }
+.list-row__meta, .list-row__col > div { overflow-wrap: anywhere; }
 .list-row__party { display: flex; gap: 12px; align-items: flex-start; }
 .list-row__avatar {
 	width: 38px; height: 38px; border-radius: 50%;
@@ -534,6 +564,14 @@ input[type="range"] { width: 100%; accent-color: var(--red); }
 .sec-btn i { color: var(--red); width: 16px; text-align: center; }
 .sec-btn .count { margin-left: auto; color: var(--muted); font-size: 12px; background: var(--bg); border-radius: 999px; padding: 1px 8px; }
 .sec-btn:hover { border-color: var(--red); }
+// Row total above a Customer 360 table ("64 vehicles" / "12 of 64 vehicles").
+.sec-count { font-size: 12px; margin-bottom: 8px; b { color: var(--text); font-weight: 800; } }
+// Inline total beside a panel heading (Front Office Customers / Enquiries).
+.count-badge {
+	display: inline-block; margin-left: 8px; padding: 1px 9px; border-radius: 999px;
+	background: var(--red-soft); color: var(--red); font-size: 12px; font-weight: 700;
+	vertical-align: middle;
+}
 .sec-btn.is-active { border-color: var(--red); background: var(--red-soft); color: var(--red); .count { background: #fff; } }
 .fo-back { display: inline-flex; align-items: center; gap: 6px; background: none; border: none; color: var(--navy); cursor: pointer; font: inherit; padding: 0; margin-bottom: 12px; font-weight: 600; }
 .readonly-tag { font-size: 11px; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 2px 8px; }

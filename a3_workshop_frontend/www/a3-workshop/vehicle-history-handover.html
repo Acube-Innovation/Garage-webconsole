@@ -41,9 +41,14 @@
 		<!-- The structured walk-round: one condition + photo per area, with extra
 		     rows for damage the standard five do not cover. Every photo on this
 		     handover is captured against a row — there is no loose pile. -->
-		<!-- Fallback for browsers without getUserMedia (plain-HTTP LAN access):
-		     `capture` hands straight over to the device camera app. -->
-		<input type="file" id="cam-fallback-input" accept="image/*" capture="environment" style="display:none">
+		<!-- Every camera button on this page opens THIS, not an in-page preview:
+		     `capture` hands straight over to the device's own camera app, which is
+		     the only way the photographer gets tap-to-focus, zoom, torch and HDR. -->
+		<!-- Hidden by clipping, not display:none. Some Safari builds refuse to open
+		     the picker for an input that is display:none, and this one is now the
+		     only way to take a photo on an iPhone or iPad. -->
+		<input type="file" id="ho-cam-device-input" accept="image/*" capture="environment"
+		       style="position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:-9999px" tabindex="-1" aria-hidden="true">
 		<div class="ho-area-wrap">
 			<table class="ho-area-tbl">
 				<thead>
@@ -94,7 +99,29 @@
 	<button type="button" class="btn btn--primary" id="ho-save"><i class="fa-solid fa-clipboard-check"></i> Confirm Handover</button>
 </div>
 
-<!-- Camera capture: live preview, shoot as many frames as needed -->
+<!-- The webcam preview, used on a laptop/desktop only -- a phone or tablet is
+     handed to its own camera app instead (see openCamera). -->
+<div class="modal-overlay" id="ho-cam-modal" role="dialog" aria-modal="true">
+	<div class="modal" style="max-width:640px">
+		<div class="modal__head">
+			<div><h3>Take Photo</h3><div class="sub" id="ho-cam-sub">Frame the vehicle and capture</div></div>
+			<button type="button" class="modal__close" data-cam-close aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+		</div>
+		<div class="modal__body">
+			<div class="ho-cam-stage">
+				<video id="ho-cam-video" playsinline muted autoplay></video>
+				<div class="msg" id="ho-cam-msg" style="display:none"></div>
+			</div>
+			<div id="ho-cam-shots" class="ho-cam-shots"></div>
+		</div>
+		<div class="modal__foot">
+			<button type="button" class="btn btn--outline btn--sm" id="ho-cam-flip" style="display:none"><i class="fa-solid fa-camera-rotate"></i> Switch Camera</button>
+			<button type="button" class="btn btn--outline btn--sm" data-cam-close>Done</button>
+			<button type="button" class="btn btn--primary btn--sm" id="ho-cam-shoot"><i class="fa-solid fa-camera"></i> Capture</button>
+		</div>
+	</div>
+</div>
+
 <!-- Fullscreen photo viewer. A handover photograph is evidence — a thumbnail in
      a small dialog is not enough to judge whether a panel is actually damaged,
      so it opens full bleed and pages through every shot on the handover. -->
@@ -113,27 +140,6 @@
 			<button type="button" class="btn btn--navy btn--sm" data-lb-retake><i class="fa-solid fa-camera"></i> <span id="ho-lb-retake-lbl">Retake</span></button>
 			<button type="button" class="btn btn--outline btn--sm" data-lb-upload><i class="fa-solid fa-image"></i> Upload</button>
 			<button type="button" class="btn btn--outline btn--sm" data-lb-remove><i class="fa-solid fa-trash"></i> Remove</button>
-		</div>
-	</div>
-</div>
-
-<div class="modal-overlay" id="ho-cam-modal" role="dialog" aria-modal="true">
-	<div class="modal" style="max-width:640px">
-		<div class="modal__head">
-			<div><h3>Take Photo</h3><div class="sub" id="ho-cam-sub">Frame the vehicle and capture</div></div>
-			<button type="button" class="modal__close" data-cam-close aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
-		</div>
-		<div class="modal__body">
-			<div class="ho-cam-stage">
-				<video id="ho-cam-video" playsinline muted autoplay></video>
-				<div class="msg" id="ho-cam-msg" style="display:none"></div>
-			</div>
-			<div id="ho-cam-shots" class="ho-cam-shots"></div>
-		</div>
-		<div class="modal__foot">
-			<button type="button" class="btn btn--outline btn--sm" id="ho-cam-flip" style="display:none"><i class="fa-solid fa-camera-rotate"></i> Switch Camera</button>
-			<button type="button" class="btn btn--outline btn--sm" data-cam-close>Done</button>
-			<button type="button" class="btn btn--primary btn--sm" id="ho-cam-shoot"><i class="fa-solid fa-camera"></i> Capture</button>
 		</div>
 	</div>
 </div>
@@ -316,8 +322,8 @@
 		border-radius:8px; }
 	.ho-tyre-depth input:focus { outline:none; border-color:var(--red); box-shadow:0 0 0 3px var(--red-soft); }
 	.ho-tyre-depth .u { font-size:12px; color:var(--muted); }
-	/* The camera and the photo viewer are both launched from inside the tyre
-	   modal, so they have to outrank it. Every .modal-overlay shares one
+	/* The webcam preview and the photo viewer are both launched from inside the
+	   tyre modal, so they have to outrank it. Every .modal-overlay shares one
 	   z-index, which leaves DOM order deciding — and the tyre modal is written
 	   after both, so without this it covers the very camera it opened. */
 	#ho-cam-modal { z-index:1100; }
@@ -769,9 +775,44 @@
 		});
 
 	// ------------------------------------------------------ camera capture
-	// Live capture via getUserMedia (secure contexts: https and localhost). Where
-	// that is unavailable — plain-HTTP LAN access, or permission denied — we fall
-	// back to a file input with `capture`, which opens the device camera app.
+	// "Camera" must open a real camera on every device, so it dispatches:
+	//
+	//   phone / tablet -> the DEVICE's own camera app, via a file input carrying
+	//                     `capture`. That app has tap-to-focus, pinch zoom, torch,
+	//                     HDR and scene detection; an in-page <video> preview has
+	//                     none of them and produces the soft, washed-out frame a
+	//                     damage photo must never be.
+	//   laptop         -> the in-page webcam preview. Desktop browsers IGNORE
+	//                     `capture` and just open a file chooser, which is what
+	//                     Upload already does -- so routing a laptop down the
+	//                     device path gives it two menu items that do the same
+	//                     thing and no way to actually take a photo.
+	var camDevice = document.getElementById("ho-cam-device-input");
+
+	// Is this a device whose camera app will actually open?
+	//
+	// There is no feature test for it: `"capture" in input` is true on desktop
+	// Chrome too, where the attribute is then ignored. What separates the two is
+	// the pointer -- a phone or tablet's primary pointer is coarse and it reports
+	// touch points; a laptop reports a fine pointer even when it has a
+	// touchscreen. iPadOS 13+ claims to be a Mac in its user agent, so
+	// maxTouchPoints is what gives an iPad away.
+	function deviceCameraApp() {
+		var coarse = !!(window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
+		return coarse && (navigator.maxTouchPoints || 0) > 0;
+	}
+
+	// camDevice.click() MUST stay synchronous with the click that called this: a
+	// file chooser only opens while the user activation from that press is still
+	// live, and any await or promise in between spends it.
+	function openCamera(sink, opts) {
+		opts = opts || {};
+		if (!deviceCameraApp()) { openLiveCamera(sink, opts); return; }
+		camSink = sink || null;
+		camOnce = !!opts.once;
+		camDevice.click();
+	}
+
 	var camOverlay = document.getElementById("ho-cam-modal");
 	var camVideo = document.getElementById("ho-cam-video");
 	var camShots = document.getElementById("ho-cam-shots");
@@ -779,17 +820,18 @@
 	var camShoot = document.getElementById("ho-cam-shoot");
 	var camMsg = document.getElementById("ho-cam-msg");
 	var camSub = document.getElementById("ho-cam-sub");
-	var camFallback = document.getElementById("cam-fallback-input");
 	var camStream = null, camFacing = "environment", camShotNo = 0;
 	// Where the next capture goes — always the widget that opened the camera.
 	// Every photo belongs to a row, so there is no default sink to fall back on.
 	var camSink = null, camOnce = false;
 
-	function openCamera(sink, opts) {
+	function openLiveCamera(sink, opts) {
 		opts = opts || {};
 		camSink = sink || null;
 		camOnce = !!opts.once;          // single-slot widgets close after one shot
-		if (!camSupported()) { camFallback.click(); return; }
+		// No getUserMedia here either (plain-HTTP LAN): the file chooser is all
+		// that is left, and it at least accepts a photo taken on a phone.
+		if (!camSupported()) { camDevice.click(); return; }
 		camShots.innerHTML = ""; camShotNo = 0;
 		// Reset from any previous failure before reopening.
 		camMsg.style.display = "none";
@@ -861,7 +903,7 @@
 		var sink = camSink, once = camOnce;
 		camClose();
 		camSink = sink; camOnce = once;
-		camFallback.click();  // real user activation — the chooser opens
+		camDevice.click();  // real user activation — the chooser opens
 	});
 	camFlip.addEventListener("click", function () {
 		camFacing = camFacing === "environment" ? "user" : "environment";
@@ -896,12 +938,59 @@
 			camShots.appendChild(img);
 		}, "image/jpeg", 0.9);
 	});
-	camFallback.addEventListener("change", function () {
+
+	camDevice.addEventListener("change", function () {
 		var sink = camSink;
-		if (sink) Array.prototype.forEach.call(camFallback.files, function (f) { sink(f); });
-		camFallback.value = "";
-		camSink = null;
+		if (sink) Array.prototype.forEach.call(camDevice.files, function (f) { sink(f); });
+		// Cleared so picking the same file twice still fires `change`.
+		camDevice.value = "";
+		camSink = null; camOnce = false;
 	});
+	// Shots taken through the webcam preview are already canvas-sized (1920x1080,
+	// ~300KB). Shots from a phone or tablet's own camera app arrive at the
+	// sensor's full resolution, several megabytes each, and a handover carries
+	// dozens. Bring both paths to the same size before they leave the browser.
+	var MAX_EDGE = 1920;
+	// Formats a browser other than the one that took the photo can be relied on to
+	// render. An iPhone hands over HEIC, which Safari decodes happily and Chrome,
+	// Firefox and the printed handover report do not -- so a HEIC is re-encoded to
+	// JPEG even when it is already small enough to keep.
+	var WEB_SAFE = /^image\/(jpeg|png|gif|webp)$/i;
+	function downscale(f) {
+		if (!f || !/^image\//.test(f.type || "")) return Promise.resolve(f);
+		return new Promise(function (resolve) {
+			var url = URL.createObjectURL(f);
+			var img = new Image();
+			// Any failure here (an unreadable or exotic format) keeps the original
+			// file: shrinking is an optimisation, never a reason to lose the photo.
+			img.onerror = function () { URL.revokeObjectURL(url); resolve(f); };
+			img.onload = function () {
+				URL.revokeObjectURL(url);
+				var scale = Math.min(1, MAX_EDGE / Math.max(img.width, img.height));
+				// Re-encode when it is too big OR when the format itself would not
+				// travel; only a web-safe image that is already small is passed
+				// through untouched.
+				if (scale === 1 && WEB_SAFE.test(f.type || "")) { resolve(f); return; }
+				try {
+					var c = document.createElement("canvas");
+					c.width = Math.round(img.width * scale);
+					c.height = Math.round(img.height * scale);
+					c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+					c.toBlob(function (blob) {
+						if (!blob) { resolve(f); return; }
+						// A bigger file is only a reason to keep the original when the
+						// original was already renderable everywhere; a HEIC is
+						// converted regardless of what that costs in bytes.
+						if (blob.size >= f.size && WEB_SAFE.test(f.type || "")) { resolve(f); return; }
+						var name = (f.name || "photo.jpg").replace(/\.[^.]+$/, "") + ".jpg";
+						resolve(new File([blob], name, { type: "image/jpeg" }));
+					}, "image/jpeg", 0.85);
+				} catch (e) { resolve(f); }
+			};
+			img.src = url;
+		});
+	}
+
 	function uploadFile(f, docname) {
 		var fd = new FormData();
 		fd.append("file", f, f.name);
@@ -1543,6 +1632,7 @@
 		closePhotoMenu();
 		photoMenu = document.createElement("div");
 		photoMenu.className = "ho-ph-menu";
+		// "Camera" is the device's own camera app; "Upload" picks an existing file.
 		photoMenu.innerHTML =
 			'<button type="button" data-m="camera"><i class="fa-solid fa-camera"></i> Camera</button>' +
 			'<button type="button" data-m="upload"><i class="fa-solid fa-image"></i> Upload</button>';
@@ -1872,6 +1962,11 @@
 			checklist: chk.rows,
 			attachments: att.rows,
 			damages: collectDamages()
+		}).catch(function (err) {
+			// The handover itself did not get written. Nothing exists yet, so the
+			// inspector can correct whatever is wrong and press Confirm again.
+			err.ho_stage = "save";
+			throw err;
 		}).then(function (res) {
 			// Uploads can only happen now: /api/method/upload_file needs a docname.
 			// Every capture came from an inline widget, which carries its own
@@ -1882,11 +1977,21 @@
 			});
 			if (!jobs.length) return res;
 
-			confirmGo.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Uploading photos…';
-			var routed = [];
+			// Past this point the handover exists. A photo that will not upload must
+			// not take the other photos -- or the record -- down with it, so failures
+			// are counted and reported rather than thrown: retrying the whole save
+			// would file a second handover for the same inspection.
+			var routed = [], failed = 0, done = 0;
+			function progress() {
+				confirmGo.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Uploading photo ' +
+					(done + 1) + " of " + jobs.length + "…";
+			}
+			progress();
 			return jobs.reduce(function (chain, job) {
 				return chain.then(function () {
-					return uploadFile(job.file, res.name).then(function (info) {
+					return downscale(job.file).then(function (file) {
+						return uploadFile(file, res.name);
+					}).then(function (info) {
 						if (job.route && info && info.file_url) {
 							// Object.assign is ES6; this page targets the same
 							// browsers as the rest of the portal, so build it plainly.
@@ -1901,13 +2006,21 @@
 							}
 							routed.push(entry);
 						}
-					});
+					}).catch(function (e) {
+						failed += 1;
+						if (window.console) console.error("handover photo upload failed", e);
+					}).then(function () { done += 1; if (done < jobs.length) progress(); });
 				});
 			}, Promise.resolve()).then(function () {
-				if (!routed.length) return res;
+				if (!routed.length) { res.photos_failed = failed; return res; }
 				return callMethod("garagedesk.api.fleet.attach_handover_photos", {
 					handover: res.name, photos: JSON.stringify(routed)
-				}).then(function () { return res; });
+				}).catch(function (e) {
+					// The files uploaded and are attached to the handover; only the
+					// routing onto their slots failed. Say so rather than losing them.
+					failed += routed.length;
+					if (window.console) console.error("handover photo routing failed", e);
+				}).then(function () { res.photos_failed = failed; return res; });
 			});
 		}).then(function (res) {
 			// Show the auto-diff outcome before leaving the page.
@@ -1933,6 +2046,14 @@
 				body.innerHTML = '<div style="font-weight:700;color:var(--green)"><i class="fa-solid fa-circle-check"></i> ' +
 					"No new damage — vehicle condition matches the previous handover.</div>";
 			}
+			if (res.photos_failed) {
+				body.innerHTML +=
+					'<div style="margin-top:14px;font-weight:600;color:var(--amber,#d98324)">' +
+					'<i class="fa-solid fa-triangle-exclamation"></i> ' + res.photos_failed +
+					" photograph" + (res.photos_failed === 1 ? "" : "s") + " could not be uploaded.</div>" +
+					'<div class="muted" style="font-size:13px;margin-top:6px">The handover itself is saved — ' +
+					"do not record it again. Open the vehicle and add the missing photos there.</div>";
+			}
 			document.getElementById("ho-result-done").href =
 				"/a3-workshop/vehicle-history-detail?vehicle=" + encodeURIComponent(window.ho_vehicle);
 			document.getElementById("ho-result-print").href =
@@ -1942,7 +2063,17 @@
 		}).catch(function (err) {
 			confirmGo.disabled = false;
 			confirmGo.innerHTML = original;
-			alert("Could not save handover: " + (err.message || err));
+			// Only a failure before the handover was written leaves nothing behind.
+			// Anything later is reported on the result screen, so reaching here with
+			// another stage means the page itself broke after the record was filed --
+			// say that, rather than inviting a duplicate.
+			if (err && err.ho_stage === "save") {
+				alert("Could not save handover: " + (err.message || err));
+			} else {
+				alert("The handover was filed, but this page could not finish: " +
+					(err && err.message || err) +
+					"\n\nDo not record it again — open the vehicle to check it.");
+			}
 		});
 	}
 })();

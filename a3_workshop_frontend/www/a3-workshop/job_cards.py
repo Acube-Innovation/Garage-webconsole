@@ -69,6 +69,13 @@ def get_context(context):
 	# Card write permission server-side. Hide the control from users who do not
 	# hold that permission rather than render a button that cannot work.
 	context.can_update = frappe.has_permission("Workshop Job Card", "write")
+
+	# Topbar total. `context.total` is the matching count across every page, which
+	# is what the list is claiming to be a window onto.
+	context.page_count = context.total
+	context.page_count_label = (
+		"matching" if (context.status or context.search) else "job cards"
+	)
 	return context
 
 

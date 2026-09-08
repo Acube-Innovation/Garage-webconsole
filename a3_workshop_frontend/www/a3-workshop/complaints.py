@@ -17,4 +17,6 @@ def get_context(context):
 	from garagedesk.api.complaints import get_complaint_board
 
 	context.board = get_complaint_board()
+	context.page_count = (context.board.get("summary") or {}).get("total") or 0
+	context.page_count_label = "complaints"
 	return context
