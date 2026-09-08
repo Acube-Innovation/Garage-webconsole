@@ -24,25 +24,35 @@ def get_context(context):
 			["custom_vin", "like", like],
 		]
 
+	# custom_driver / custom_driver_name are GarageDesk fixtures, so they are only
+	# asked for on a site that actually carries them.
+	has_driver = frappe.db.has_column("Vehicle", "custom_driver")
+	fields = [
+		"name",
+		"model",
+		"custom_model",
+		"custom_plate",
+		"license_plate",
+		"chassis_no",
+		"custom_vin",
+		"last_odometer",
+		"custom_odometer",
+		"fuel_type",
+		"custom_customer",
+		"custom_customer_name",
+	]
+	if has_driver:
+		fields += ["custom_driver", "custom_driver_name"]
+
+	# limit_page_length=0 -> every matching Vehicle, not a page of them. The list is
+	# filtered client-side (WorkshopFilter), so a cap here would silently hide rows
+	# from the search box and from the toolbar counts alike.
 	rows = frappe.get_list(
 		"Vehicle",
-		fields=[
-			"name",
-			"model",
-			"custom_model",
-			"custom_plate",
-			"license_plate",
-			"chassis_no",
-			"custom_vin",
-			"last_odometer",
-			"custom_odometer",
-			"fuel_type",
-			"custom_customer",
-			"custom_customer_name",
-		],
+		fields=fields,
 		or_filters=or_filters,
 		order_by="modified desc",
-		limit_page_length=200,
+		limit_page_length=0,
 	)
 
 	# Batch-load the owning customers' phone + email for the Customer column, plus
@@ -65,6 +75,22 @@ def get_context(context):
 				"phone": c.mobile_no or "",
 				"email": c.email_id or "",
 				"is_own_fleet": bool(c.get("custom_is_own_fleet")) if has_fleet_flag else False,
+			}
+
+	# Driver name per vehicle. custom_driver_name is a fetch_from field, so it only
+	# fills on a document save -- anything that sets custom_driver through
+	# db.set_value (imports, patches, the handover write-back) leaves it blank.
+	# Resolve those stragglers in one batched query rather than showing a raw
+	# HR-DRI- id, the same way garagedesk.api.fleet does it.
+	driver_names = {}
+	if has_driver:
+		missing = {r.custom_driver for r in rows if r.custom_driver and not r.custom_driver_name}
+		if missing:
+			driver_names = {
+				d.name: d.full_name
+				for d in frappe.get_all(
+					"Driver", filters={"name": ["in", list(missing)]}, fields=["name", "full_name"]
+				)
 			}
 
 	# Which of these vehicles are on the floor right now — one grouped query, not
@@ -91,6 +117,11 @@ def get_context(context):
 		model = r.custom_model or r.model or r.name
 		odo = r.custom_odometer or r.last_odometer or 0
 		info = cust_info.get(r.custom_customer, {})
+		driver = (
+			(r.custom_driver_name or driver_names.get(r.custom_driver) or r.custom_driver)
+			if has_driver and r.custom_driver
+			else ""
+		)
 		# Column 2 shows the phone if we have one, otherwise fall back to the email.
 		phone = info.get("phone") or ""
 		email = info.get("email") or ""
@@ -106,6 +137,7 @@ def get_context(context):
 				"customer_contact_is_email": bool(not phone and email),
 				"odometer": f"{odo:,.0f} km" if odo else "—",
 				"fuel": r.fuel_type or "—",
+				"driver": driver or "—",
 				# --- toolbar filter facets
 				"is_own_fleet": bool(info.get("is_own_fleet")),
 				# Slugged so the chip's data-val is stable whatever the label reads
@@ -117,4 +149,12 @@ def get_context(context):
 
 	context.vehicles = vehicles
 	context.search = search
+	# Topbar total. With no search the list is every Vehicle, so len(vehicles) is
+	# the master total; under a search it is the size of the result set, and the
+	# label says so rather than implying the fleet just shrank.
+	context.page_count = len(vehicles)
+	context.page_count_label = "matching" if search else "vehicles"
+	# The real master total, always -- shown next to the filter count so a search
+	# never hides how big the fleet actually is.
+	context.total_vehicles = frappe.db.count("Vehicle")
 	return context

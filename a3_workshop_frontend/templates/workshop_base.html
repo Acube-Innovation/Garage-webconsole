@@ -6,80 +6,114 @@
 	<title>{{ title or "Workshop" }} | Service Center CRM</title>
 	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 	{{ include_style('workshop.bundle.css') }}
-</head>
-<body class="workshop">
-	{%- set nav_items = [
-		{"label": "Home", "route": "/a3-workshop", "icon": "fa-gauge-high"},
-		{"label": "Daily Planner", "route": "/a3-workshop/daily-planner", "icon": "fa-calendar-day"},
-		{"label": "Front Office", "route": "/a3-workshop/front-office", "icon": "fa-bell-concierge"},
-		{"label": "Job Cards", "route": "/a3-workshop/job-cards", "icon": "fa-clipboard-list"},
-		{"label": "Vehicles", "route": "/a3-workshop/vehicles", "icon": "fa-car"},
-		{"label": "Vehicle History", "route": "/a3-workshop/vehicle-history", "icon": "fa-clock-rotate-left"},
-		{"label": "Customers", "route": "/a3-workshop/customers", "icon": "fa-users"},
-		{"label": "Telecalling", "route": "/a3-workshop/telecalling", "icon": "fa-phone-volume"},
-		{"label": "Complaints", "route": "/a3-workshop/complaints", "icon": "fa-triangle-exclamation"},
-		{"label": "Technician Board", "route": "/a3-workshop/technician-board", "icon": "fa-screwdriver-wrench"},
-		{"label": "Manufacturing", "route": "/a3-workshop/manufacturing", "icon": "fa-industry"},
-		{"label": "Live Stock", "route": "/a3-workshop/live-stock", "icon": "fa-boxes-stacked"},
-	] -%}
-	{%- set current_path = (frappe.request.path if frappe.request else "/a3-workshop").rstrip("/") -%}
-	{%- set uname = (frappe.session.user or "User") -%}
-	{%- set uinitial = uname[0] if uname and uname != "Guest" else "U" -%}
-	{%- set user_row = (frappe.db.get_value("User", uname, ["first_name", "role_profile_name"], as_dict=True) if uname != "Guest" else None) or {} -%}
-	{#- The line under the name is the user's real job title: the designation on their
-	    Employee record, else the Role Profile assigned to their User. A user with
-	    neither gets no line at all — never an invented one. -#}
-	{%- set user_role = (frappe.db.get_value("Employee", {"user_id": uname}, "designation") if uname != "Guest" else None) or user_row.get("role_profile_name") -%}
-	{#- Company name comes from the database; the literal is only a last resort for a
-	    site with no Company at all. -#}
-	{%- set company_name = frappe.db.get_default("company") or (frappe.get_all("Company", pluck="name", order_by="creation", limit_page_length=1) or ["Redlines International"])[0] -%}
+	{#- Global client-error reporter. Every page below is server-rendered HTML driven
+	    by inline JavaScript; when one of those scripts throws, the page half-builds
+	    and the user is left with a control that silently does nothing. The stack
+	    goes to a console nobody has open, on a tablet in a workshop bay. This ships
+	    it to garagedesk.api.error_log.log_client_error instead, so the fault lands
+	    in Garage Error Log where it can be sorted and fixed.
 
-	<div class="workshop-shell">
-		<aside class="workshop-sidebar">
-			<a class="workshop-logo" href="/a3-workshop" title="{{ company_name }}">
-				<img src="/assets/a3_workshop_frontend/images/redline-logo.png" alt="{{ company_name }}">
-			</a>
-			<div class="workshop-avatar">{{ uinitial }}</div>
-			<div class="workshop-userblock">
-				<div class="name">{{ (user_row.get("first_name") if uname != "Guest" else "User") or uname }}</div>
-				{%- if user_role %}<div class="role">{{ user_role }}</div>{%- endif %}
-			</div>
+	    Loaded in <head>, before any page script, so it is already listening when
+	    that script runs. -#}
+	<script>window.csrf_token = "{{ csrf_token if csrf_token is defined and csrf_token else frappe.session.csrf_token }}";</script>
+	<script>
+	(function (w, d) {
+		"use strict";
 
-			<nav class="workshop-nav">
-				{%- for item in nav_items %}
-				{%- set is_active = (current_path == item.route) or (item.route != "/a3-workshop" and current_path.startswith(item.route)) %}
-				<a class="workshop-nav-item{% if is_active %} is-active{% endif %}" href="{{ item.route }}">
-					<i class="fa-solid {{ item.icon }}"></i><span>{{ item.label }}</span>
-				</a>
-				{%- endfor %}
-				<a class="workshop-nav-item workshop-nav-item--logout" href="/?cmd=web_logout">
-					<i class="fa-solid fa-right-from-bracket"></i><span>Logout</span>
-				</a>
-			</nav>
-		</aside>
+		var ENDPOINT = "/api/method/garagedesk.api.error_log.log_client_error";
+		// Per page load. The server collapses repeats and rate-limits as well, but
+		// stopping a render loop here saves the requests entirely.
+		var MAX_PER_PAGE = 10;
+		var sent = 0;
+		// Fingerprints already reported from THIS page load, so a handler firing on
+		// every mousemove reports once rather than ten times.
+		var seen = {};
+		// The token as rendered into <head>. Held privately because several pages
+		// re-assign window.csrf_token further down, and one of those assignments
+		// rendering empty must not disarm the reporter.
+		var TOKEN = (w.csrf_token && w.csrf_token !== "None") ? w.csrf_token : "";
+		function token() {
+			var t = w.csrf_token;
+			return (t && t !== "None") ? t : TOKEN;
+		}
 
-		<div class="workshop-main">
-			{% block topbar %}
-			<header class="workshop-topbar">
-				<div class="workshop-topbar__title">
-					<span class="icon"><i class="fa-solid {{ page_icon or 'fa-table-columns' }}"></i></span>
-					<div>
-						<h1>{{ title or "Workshop" }}</h1>
-						{% if subtitle %}<div class="sub">{{ subtitle }}</div>{% endif %}
-					</div>
-				</div>
-				<div class="workshop-breadcrumb">
-					<a href="/a3-workshop">Home</a>{% if breadcrumb %}<span class="sep">›</span><b>{{ breadcrumb }}</b>{% endif %}
-				</div>
-			</header>
-			{% endblock %}
+		function post(payload) {
+			var key = [payload.error_type, payload.error, payload.source_file, payload.line_no].join("|");
+			if (seen[key] || sent >= MAX_PER_PAGE) { return; }
+			seen[key] = 1;
+			sent += 1;
+			payload.page_url = w.location.href;
+			payload.page_route = w.location.pathname;
+			payload.viewport = w.innerWidth + "x" + w.innerHeight;
+			payload.user_agent = navigator.userAgent;
+			payload.os_platform = navigator.platform || "";
+			try {
+				fetch(ENDPOINT, {
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+						"X-Frappe-CSRF-Token": token(),
+						"Accept": "application/json"
+					},
+					body: JSON.stringify(payload),
+					// The page may be navigating away as this fires.
+					keepalive: true
+				}).catch(function () {});   // a lost report is not worth a second error
+			} catch (e) { /* never throw out of an error handler */ }
+		}
 
-			<main class="workshop-content">
-				{% block page_content %}{% endblock %}
-			</main>
-		</div>
-	</div>
+		// Uncaught exceptions. `error` carries the stack; the positional arguments
+		// are all some older browsers give.
+		w.addEventListener("error", function (e) {
+			// Fires for failed <img>/<script>/<link> loads too, which have no
+			// .error and are a different (and much noisier) class of problem.
+			if (!e || !e.message) { return; }
+			post({
+				error: e.message,
+				error_type: (e.error && e.error.name) || "Error",
+				stack_trace: (e.error && e.error.stack) || "",
+				source_file: e.filename || "",
+				line_no: e.lineno || 0,
+				column_no: e.colno || 0,
+				severity: "Error"
+			});
+		});
 
+		// A rejected promise nobody caught — how a failed fetch() surfaces, which
+		// is most of what these pages do.
+		w.addEventListener("unhandledrejection", function (e) {
+			var r = e && e.reason;
+			if (!r) { return; }
+			post({
+				error: (r.message || String(r)),
+				error_type: (r.name || "UnhandledRejection"),
+				stack_trace: r.stack || "",
+				severity: "Error"
+			});
+		});
+
+		// For a page that catches its own failure and wants it on file anyway:
+		//   logClientError("Could not load vehicle", { api_method: "…", http_status: 500 })
+		// NOT named reportError: that is a real browser global (self.reportError)
+		// which dispatches the very `error` event this file listens for.
+		w.logClientError = function (message, extra) {
+			if (!message) { return; }
+			var payload = { error: String(message), error_type: "Handled", severity: "Warning" };
+			for (var k in (extra || {})) {
+				if (Object.prototype.hasOwnProperty.call(extra, k)) { payload[k] = extra[k]; }
+			}
+			post(payload);
+		};
+	})(window, document);
+	</script>
+	{#- The shared list helper is loaded HERE, in <head>, and not at the end of
+	    <body>: every list page calls `new WorkshopFilter(...)` from an inline
+	    <script> inside the page_content block, which the browser runs in
+	    document order -- i.e. before anything further down the page. Defined at
+	    the bottom, that call threw "WorkshopFilter is not defined" and took the
+	    whole filter bar with it (the Customer / Fuel dropdowns stayed empty, the
+	    chips and the search box did nothing). The block only DEFINES things, so
+	    it is safe this early -- nothing in it touches the DOM until it is called. -#}
 	{#- Shared list-filter helper. Every list page in the portal drives its search
 	    box and filter chips through this, so the behaviour (debounced live search,
 	    AND across filter groups, chip state mirrored into the query string so a
@@ -278,7 +312,115 @@
 		};
 
 		w.WorkshopFilter = WorkshopFilter;
+
+		// Fill the topbar total for a list whose rows are fetched by JS (Front
+		// Office, Vehicle History, Manufacturing). `n` is the number of records
+		// that EXIST, which is not always the number rendered -- pass the server's
+		// total, not rows.length, whenever the two can differ.
+		w.setPageCount = function (n, label) {
+			var pill = d.querySelector("[data-page-count]");
+			if (!pill) { return; }
+			if (n === null || n === undefined || n === "") {
+				pill.classList.add("is-empty");
+				return;
+			}
+			var num = Number(n);
+			pill.querySelector("[data-page-count-value]").textContent =
+				isNaN(num) ? String(n) : num.toLocaleString();
+			if (label) { pill.querySelector("[data-page-count-label]").textContent = label; }
+			pill.classList.remove("is-empty");
+		};
 	})(window, document);
 	</script>
+</head>
+<body class="workshop">
+	{%- set nav_items = [
+		{"label": "Home", "route": "/a3-workshop", "icon": "fa-gauge-high"},
+		{"label": "Daily Planner", "route": "/a3-workshop/daily-planner", "icon": "fa-calendar-day"},
+		{"label": "Front Office", "route": "/a3-workshop/front-office", "icon": "fa-bell-concierge"},
+		{"label": "Job Cards", "route": "/a3-workshop/job-cards", "icon": "fa-clipboard-list"},
+		{"label": "Vehicles", "route": "/a3-workshop/vehicles", "icon": "fa-car"},
+		{"label": "Vehicle History", "route": "/a3-workshop/vehicle-history", "icon": "fa-clock-rotate-left"},
+		{"label": "Customers", "route": "/a3-workshop/customers", "icon": "fa-users"},
+		{"label": "Telecalling", "route": "/a3-workshop/telecalling", "icon": "fa-phone-volume"},
+		{"label": "Complaints", "route": "/a3-workshop/complaints", "icon": "fa-triangle-exclamation"},
+		{"label": "Technician Board", "route": "/a3-workshop/technician-board", "icon": "fa-screwdriver-wrench"},
+		{"label": "Manufacturing", "route": "/a3-workshop/manufacturing", "icon": "fa-industry"},
+		{"label": "Live Stock", "route": "/a3-workshop/live-stock", "icon": "fa-boxes-stacked"},
+	] -%}
+	{%- set current_path = (frappe.request.path if frappe.request else "/a3-workshop").rstrip("/") -%}
+	{%- set uname = (frappe.session.user or "User") -%}
+	{%- set uinitial = uname[0] if uname and uname != "Guest" else "U" -%}
+	{%- set user_row = (frappe.db.get_value("User", uname, ["first_name", "role_profile_name"], as_dict=True) if uname != "Guest" else None) or {} -%}
+	{#- The line under the name is the user's real job title: the designation on their
+	    Employee record, else the Role Profile assigned to their User. A user with
+	    neither gets no line at all — never an invented one. -#}
+	{%- set user_role = (frappe.db.get_value("Employee", {"user_id": uname}, "designation") if uname != "Guest" else None) or user_row.get("role_profile_name") -%}
+	{#- Company name comes from the database; the literal is only a last resort for a
+	    site with no Company at all. -#}
+	{%- set company_name = frappe.db.get_default("company") or (frappe.get_all("Company", pluck="name", order_by="creation", limit_page_length=1) or ["Redlines International"])[0] -%}
+
+	<div class="workshop-shell">
+		<aside class="workshop-sidebar">
+			<a class="workshop-logo" href="/a3-workshop" title="{{ company_name }}">
+				<img src="/assets/a3_workshop_frontend/images/redline-logo.png" alt="{{ company_name }}">
+			</a>
+			<div class="workshop-avatar">{{ uinitial }}</div>
+			<div class="workshop-userblock">
+				<div class="name">{{ (user_row.get("first_name") if uname != "Guest" else "User") or uname }}</div>
+				{%- if user_role %}<div class="role">{{ user_role }}</div>{%- endif %}
+			</div>
+
+			<nav class="workshop-nav">
+				{%- for item in nav_items %}
+				{%- set is_active = (current_path == item.route) or (item.route != "/a3-workshop" and current_path.startswith(item.route)) %}
+				<a class="workshop-nav-item{% if is_active %} is-active{% endif %}" href="{{ item.route }}">
+					<i class="fa-solid {{ item.icon }}"></i><span>{{ item.label }}</span>
+				</a>
+				{%- endfor %}
+				<a class="workshop-nav-item workshop-nav-item--logout" href="/?cmd=web_logout">
+					<i class="fa-solid fa-right-from-bracket"></i><span>Logout</span>
+				</a>
+			</nav>
+		</aside>
+
+		<div class="workshop-main">
+			{% block topbar %}
+			<header class="workshop-topbar">
+				<div class="workshop-topbar__title">
+					<span class="icon"><i class="fa-solid {{ page_icon or 'fa-table-columns' }}"></i></span>
+					<div>
+						<h1>{{ title or "Workshop" }}</h1>
+						{% if subtitle %}<div class="sub">{{ subtitle }}</div>{% endif %}
+					</div>
+				</div>
+				{#- Right-hand cluster: the record total for this page sits above the
+				    breadcrumb, so every list says how many rows exist -- not how many
+				    happen to be rendered. Server-rendered lists set `page_count` (and
+				    optionally `page_count_label`) in get_context; lists painted by JS
+				    leave both unset and call setPageCount(n, label) once their rows
+				    land. Guarded with `is defined` because the site's Jinja env uses
+				    DebugUndefined, which would print the tag source verbatim. -#}
+				{%- set has_count = (page_count is defined and page_count is not none) -%}
+				<div class="workshop-topbar__aside">
+					<span class="workshop-count{% if not has_count %} is-empty{% endif %}" data-page-count
+					      title="Total records available on this page">
+						<i class="fa-solid fa-layer-group"></i>
+						<b data-page-count-value>{{ "{:,}".format(page_count) if has_count else "" }}</b>
+						<span data-page-count-label>{{ page_count_label if page_count_label is defined and page_count_label else "total" }}</span>
+					</span>
+					<div class="workshop-breadcrumb">
+						<a href="/a3-workshop">Home</a>{% if breadcrumb %}<span class="sep">›</span><b>{{ breadcrumb }}</b>{% endif %}
+					</div>
+				</div>
+			</header>
+			{% endblock %}
+
+			<main class="workshop-content">
+				{% block page_content %}{% endblock %}
+			</main>
+		</div>
+	</div>
+
 </body>
 </html>

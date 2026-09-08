@@ -77,6 +77,9 @@ def get_context(context):
 
 	context.groups = _assigned_work(me.name if me else None)
 	context.totals = _totals(context.groups)
+	# Topbar total: the board is a list of tasks, so that is what it counts.
+	context.page_count = context.totals["tasks"]
+	context.page_count_label = "open tasks"
 	# Only the floor-wide view names who is free; a technician's own board has no
 	# use for it.
 	context.idle = [] if me else _idle_technicians(context.groups)

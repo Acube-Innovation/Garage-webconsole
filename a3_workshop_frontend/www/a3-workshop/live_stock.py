@@ -16,4 +16,7 @@ def get_context(context):
 	from garagedesk.api.live_stock import get_stock_board
 
 	context.board = get_stock_board()
+	# The board's headline list is the stock table, so that is what the topbar counts.
+	context.page_count = len(context.board.get("stock") or [])
+	context.page_count_label = "stock rows"
 	return context

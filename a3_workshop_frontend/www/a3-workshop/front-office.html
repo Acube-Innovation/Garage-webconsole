@@ -6,7 +6,7 @@
 
 	<!-- BOX 1 — customer selector + phone-book directory -->
 	<div class="card"><div class="card__head">
-			<h3>Customers</h3>
+			<h3>Customers <span class="count-badge" id="dir-count">0</span></h3>
 			<button type="button" class="btn btn--primary btn--sm" id="create-customer"><i class="fa-solid fa-plus"></i> Create Customer</button>
 		</div>
 		<div class="card__body">
@@ -134,7 +134,7 @@
 	<!-- BOX 3 — incoming enquiries list (real CRM Opportunities) -->
 	<div class="card fo-enquiries">
 		<div class="card__head">
-			<h3>Enquiries</h3>
+			<h3>Enquiries <span class="count-badge" id="opp-count">0</span></h3>
 			<button type="button" class="btn btn--primary btn--sm" id="create-opportunity"><i class="fa-solid fa-plus"></i> Create Opportunity</button>
 		</div>
 		<div class="card__body">
@@ -209,7 +209,7 @@
 		{ key: "order", label: "Orders", icon: "fa-cart-shopping", cols: ["Order No", "Date", "Items", "Total", "Status"] },
 		{ key: "invoice", label: "Invoices", icon: "fa-file-invoice-dollar", cols: ["Invoice", "Date", "Amount", "Paid", "Balance", "Status"] },
 		{ key: "payment", label: "Payments", icon: "fa-money-bill-wave", cols: ["Receipt", "Date", "Mode", "Amount", "Ref"] },
-		{ key: "vehicles", label: "Vehicles", icon: "fa-car", cols: ["Plate", "Make / Model", "Chassis", "Odometer", "Fuel", "Handover"] },
+		{ key: "vehicles", label: "Vehicles", icon: "fa-car", cols: ["Plate", "Make / Model", "Chassis", "Driver", "Odometer", "Fuel", "Handover"] },
 		{ key: "calls", label: "Calls", icon: "fa-phone", cols: ["Date", "Type", "Purpose", "Outcome", "By"] },
 		{ key: "complaints", label: "Complaints", icon: "fa-triangle-exclamation", cols: ["Date", "Complaint", "Severity", "Status"] }
 	];
@@ -222,6 +222,15 @@
 
 	function rowsFor(key) {
 		return (sections360[key] && sections360[key].rows) || [];
+	}
+
+	// How many records the customer actually has in this section. The server caps
+	// most sections at _360_LIMIT, so rows.length is the size of the page, not the
+	// history — the section buttons must count this instead.
+	function totalFor(key) {
+		var s = sections360[key];
+		if (s && typeof s.total === "number") { return s.total; }
+		return rowsFor(key).length;
 	}
 
 	function variant(v) {
@@ -310,6 +319,8 @@
 		var list = customers.filter(function (c) {
 			return !filter || c.name.toLowerCase().indexOf(filter) >= 0 || c.phone.indexOf(filter) >= 0 || c.id.toLowerCase().indexOf(filter) >= 0;
 		});
+		document.getElementById("dir-count").textContent =
+			filter ? list.length + " / " + customers.length : customers.length;
 		dirList.innerHTML = list.length ? list.map(function (c) {
 			return '<div class="dir-item" data-id="' + esc(c.id) + '">' +
 				'<div class="list-row__avatar">' + esc(c.name[0]) + '</div>' +
@@ -322,7 +333,7 @@
 		dirSections.innerHTML = SECTIONS.map(function (s) {
 			return '<button type="button" class="sec-btn" data-key="' + s.key + '">' +
 				'<i class="fa-solid ' + s.icon + '"></i> ' + s.label +
-				'<span class="count">' + (loading ? "…" : rowsFor(s.key).length) + '</span></button>';
+				'<span class="count">' + (loading ? "…" : totalFor(s.key)) + '</span></button>';
 		}).join("");
 	}
 
@@ -395,6 +406,13 @@
 			return r.filter(function (cell, i) { return s.cols[i] !== "Handover"; }).join(" ").toLowerCase();
 		}
 
+		// Every section states its size. `total` is what the customer has; `rows` is
+		// what this payload carried (the two differ only where the server still caps
+		// a section) — say so explicitly rather than letting the table imply the tail
+		// does not exist.
+		var total = totalFor(key);
+		var truncated = !!(sections360[key] && sections360[key].truncated);
+
 		viewer.innerHTML =
 			(searchable
 				? '<div class="field--inline" style="margin-bottom:12px">' +
@@ -403,13 +421,22 @@
 				  '<button type="button" class="btn btn--primary btn--icon" id="sec-search-go" title="Search">' +
 				  '<i class="fa-solid fa-magnifying-glass"></i></button></div>'
 				: "") +
+			'<div class="sec-count muted" id="sec-count"></div>' +
+			(truncated
+				? '<div class="muted" style="font-size:12px;margin-bottom:8px">Showing the ' +
+				  rows.length + ' most recent of ' + total + '.</div>'
+				: "") +
 			'<div style="overflow:auto"><table class="table">' + thead + '<tbody id="sec-rows"></tbody></table></div>';
 
 		var body = document.getElementById("sec-rows");
+		var countEl = document.getElementById("sec-count");
 		var span = s.cols.length + (pmode ? 1 : 0);
 		function paint(q) {
 			q = (q || "").trim().toLowerCase();
 			var list = q ? rows.filter(function (r) { return rowText(r).indexOf(q) >= 0; }) : rows;
+			// "12 of 64 vehicles" while searching, "64 vehicles" otherwise.
+			countEl.innerHTML = '<b>' + (q ? list.length + " of " + total : total) + "</b> " +
+				esc(s.label.toLowerCase());
 			body.innerHTML = list.length
 				? list.map(rowHtml).join("")
 				: '<tr><td colspan="' + span + '" class="muted" style="text-align:center;padding:18px">No ' +
@@ -464,6 +491,8 @@
 				'<div style="flex:1;min-width:0"><div class="nm">' + esc(o.customer_name) + '</div><div class="ph">' + esc(meta) + '</div></div>' +
 				'<span class="badge ' + variant(o.status) + '">' + esc(o.status) + '</span></div>';
 		}).join("") : '<div class="empty">No enquiries found.</div>';
+		document.getElementById("opp-count").textContent =
+			filter ? list.length + " / " + opportunities.length : opportunities.length;
 		if (oppFilter) { oppFilter.apply(); }
 	}
 
@@ -838,8 +867,12 @@
 
 	// ---- Initial load: pull real Customers for the LHS directory ----
 	function loadCustomers() {
-		return callMethod("garagedesk.api.front_office.list_customers", {}).then(function (rows) {
+		// limit:0 = every customer. The directory filters what it has loaded in the
+		// browser, so a server-side cap made customers past it unfindable rather
+		// than paging them.
+		return callMethod("garagedesk.api.front_office.list_customers", { limit: 0 }).then(function (rows) {
 			customers = (rows || []).map(toUiCustomer);
+			setPageCount(customers.length, customers.length === 1 ? "customer" : "customers");
 			renderDirectory(document.getElementById("dir-search").value);
 		}).catch(function () {
 			dirList.innerHTML = '<div class="empty">Could not load customers.</div>';

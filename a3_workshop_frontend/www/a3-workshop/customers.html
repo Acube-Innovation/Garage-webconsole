@@ -1,10 +1,9 @@
 {% extends "templates/workshop_base.html" %}
 
 {% block page_content %}
-{#- Typing narrows the loaded cards instantly, and the helper mirrors the term
-    into ?q= -- which customers.py reads server-side. So a reload of that same URL
-    re-runs the search across every Customer, not just the ones already on screen.
-    That is what the "search all" button in the empty state below does. -#}
+{#- customers.py renders EVERY Customer (no page-length cap), so typing narrows
+    the whole book client-side. The term is still mirrored into ?q= so a filtered
+    view survives a refresh and can be pasted to someone. -#}
 <div class="filter-bar" id="cu-bar">
 	<div class="filter-bar__search">
 		<i class="fa-solid fa-magnifying-glass"></i>
@@ -16,6 +15,7 @@
 		<button type="button" class="chip" data-val="outside"><i class="fa-solid fa-user"></i> Outside Customers</button>
 	</div>
 	<span class="filter-count" data-filter-count></span>
+	<span class="filter-count">· {{ "{:,}".format(total_customers) }} in total</span>
 	<div class="filter-bar__group">
 		{%- if search %}
 		<a class="btn btn--outline btn--sm" href="/a3-workshop/customers"><i class="fa-solid fa-xmark"></i> Clear</a>
@@ -49,9 +49,9 @@
 <div class="card" data-filter-empty style="display:none"><div class="card__body">
 	<div class="empty">
 		<div style="font-weight:700;color:var(--text)">No loaded customer matches these filters</div>
-		<div style="margin-top:6px">This page holds the 120 most recently updated customers.</div>
-		<button type="button" class="btn btn--outline btn--sm" style="margin-top:16px" onclick="location.reload()">
-			<i class="fa-solid fa-magnifying-glass"></i> Search every customer
+		<div style="margin-top:6px">All {{ "{:,}".format(total_customers) }} customers are loaded on this page — try widening the filters.</div>
+		<button type="button" class="btn btn--outline btn--sm" style="margin-top:16px" onclick="location.href='/a3-workshop/customers'">
+			<i class="fa-solid fa-rotate-left"></i> Clear all filters
 		</button>
 	</div>
 </div></div>

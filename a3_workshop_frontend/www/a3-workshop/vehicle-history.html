@@ -222,6 +222,7 @@
 		}
 
 		function renderCustomers(rows, q) {
+			setPageCount((rows || []).length, (rows || []).length === 1 ? "customer" : "customers");
 			if (!rows || !rows.length) {
 				var kind = TYPE_LABEL[typeFilter] || "";
 				picker.innerHTML = '<div class="empty" style="grid-column:1/-1">' +
@@ -313,6 +314,8 @@
 
 	function renderDashboard(d) {
 		var s = d.stats || {};
+		// This view is one customer's fleet, so the topbar counts their vehicles.
+		setPageCount((d.vehicles || []).length, (d.vehicles || []).length === 1 ? "vehicle" : "vehicles");
 		var tiles = "";
 		tiles += statcard("Vehicles", s.vehicles || 0, "");
 		tiles += statcard("Distance", (s.total_km_12m || 0).toLocaleString() + " km", "stat-card--navy", "Last 12 months");

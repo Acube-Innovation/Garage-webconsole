@@ -20,4 +20,11 @@ def get_context(context):
 		context.productivity = get_productivity()
 	except Exception:
 		context.productivity = zero_productivity()
+
+	# Topbar total — the page's list is the Call Log, so count that. Guarded: Call
+	# Log ships with the CRM app and may not exist on every site.
+	context.page_count = (
+		frappe.db.count("Call Log") if frappe.db.exists("DocType", "Call Log") else 0
+	)
+	context.page_count_label = "calls logged"
 	return context
