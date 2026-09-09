@@ -92,9 +92,17 @@
 	</ol>
 </div>
 
-<div class="sigs sigs--2 sigs--tight">
-	<div class="sig"><b>{{ emp.employee_name }}</b>Technician — signature &amp; date</div>
-	<div class="sig"><b>&nbsp;</b>Tool Crib / Workshop Manager — signature &amp; date</div>
+{#- The mark boxes are filled in by the chooser in the print base, from the
+    matching entry in `sig_slots`. Left empty they are the space to sign in. -#}
+<div class="sigs sigs--2 sigs--tight sigs--marked">
+	<div class="sig-slot">
+		<div class="sig-mark" data-sig-mark="technician"></div>
+		<div class="sig"><b>{{ emp.employee_name }}</b>Technician — signature &amp; date</div>
+	</div>
+	<div class="sig-slot">
+		<div class="sig-mark" data-sig-mark="manager"></div>
+		<div class="sig"><b>&nbsp;</b>Tool Crib / Workshop Manager — signature &amp; date</div>
+	</div>
 </div>
 {%- endif %}
 
@@ -209,19 +217,32 @@
 </div>
 
 {%- if doc.purpose == "Transfer" %}
-<div class="sigs sigs--tight">
-	<div class="sig"><b>{{ emp.employee_name }}</b>Releasing Technician — signature &amp; date</div>
-	<div class="sig"><b>{{ to_emp.employee_name if to_emp else "&nbsp;" }}</b>Receiving Technician — signature &amp; date</div>
-	{#- Only name the witness when it is genuinely a third party. Printing the
-	    receiving technician's own name over a "Witnessed By" line reads as though
-	    they witnessed their own handover. -#}
-	{%- set witness = doc.acknowledged_by if doc.acknowledged_by not in [emp.employee_name, (to_emp.employee_name if to_emp else None)] else "" %}
-	<div class="sig"><b>{{ witness or "&nbsp;" }}</b>Witnessed By — signature &amp; date</div>
+<div class="sigs sigs--tight sigs--marked">
+	<div class="sig-slot">
+		<div class="sig-mark" data-sig-mark="releasing"></div>
+		<div class="sig"><b>{{ emp.employee_name }}</b>Releasing Technician — signature &amp; date</div>
+	</div>
+	<div class="sig-slot">
+		<div class="sig-mark" data-sig-mark="receiving"></div>
+		<div class="sig"><b>{{ to_emp.employee_name if to_emp else "&nbsp;" }}</b>Receiving Technician — signature &amp; date</div>
+	</div>
+	{#- `witness` is resolved in the context builder: it names the acknowledger
+	    only when that is genuinely a third party. -#}
+	<div class="sig-slot">
+		<div class="sig-mark" data-sig-mark="witness"></div>
+		<div class="sig"><b>{{ witness or "&nbsp;" }}</b>Witnessed By — signature &amp; date</div>
+	</div>
 </div>
 {%- else %}
-<div class="sigs sigs--2 sigs--tight">
-	<div class="sig"><b>{{ emp.employee_name }}</b>Technician — signature &amp; date</div>
-	<div class="sig"><b>{{ doc.acknowledged_by or "&nbsp;" }}</b>Tool Crib — signature &amp; date</div>
+<div class="sigs sigs--2 sigs--tight sigs--marked">
+	<div class="sig-slot">
+		<div class="sig-mark" data-sig-mark="technician"></div>
+		<div class="sig"><b>{{ emp.employee_name }}</b>Technician — signature &amp; date</div>
+	</div>
+	<div class="sig-slot">
+		<div class="sig-mark" data-sig-mark="toolcrib"></div>
+		<div class="sig"><b>{{ doc.acknowledged_by or "&nbsp;" }}</b>Tool Crib — signature &amp; date</div>
+	</div>
 </div>
 {%- endif %}
 

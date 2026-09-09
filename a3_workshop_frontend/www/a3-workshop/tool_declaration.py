@@ -76,6 +76,18 @@ def _custody_statement(context, technician):
 	context.total_value = sum(r["replacement_rate"] for r in rows)
 	context.overdue_count = sum(1 for r in rows if r["overdue"])
 	context.as_of = formatdate(nowdate(), "dd MMM yyyy")
+	# One row in the signature chooser per rule at the foot of the declaration.
+	# Nobody here signs as a Driver, so there is no signature on file to offer —
+	# these rules take an upload for the printout, or are signed by hand.
+	#
+	# A technician holding no tools gets no declaration and no rules to sign, so
+	# there is nothing to choose: leaving the panel off also lets that page print
+	# straight away, the way it did before the chooser existed.
+	if rows:
+		context.sig_slots = [
+			{"id": "technician", "role": "Technician", "name": context.emp.employee_name, "saved": ""},
+			{"id": "manager", "role": "Tool Crib / Workshop Manager", "name": "", "saved": ""},
+		]
 
 
 def _custody_slip(context, custody):
@@ -113,6 +125,31 @@ def _custody_slip(context, custody):
 		formatdate(doc.expected_return_date, "dd MMM yyyy") if doc.expected_return_date else "Permanent"
 	)
 	context.is_draft = doc.docstatus == 0
+
+	# Only name the witness when it is genuinely a third party — printing the
+	# receiving technician's own name over a "Witnessed By" rule reads as though
+	# they witnessed their own handover. Resolved here rather than in the
+	# template so the chooser and the document agree on who signs what.
+	context.witness = (
+		doc.acknowledged_by
+		if doc.acknowledged_by
+		not in [context.emp.employee_name, (context.to_emp.employee_name if context.to_emp else None)]
+		else ""
+	)
+	if doc.purpose == "Transfer":
+		context.sig_slots = [
+			{"id": "releasing", "role": "Releasing Technician",
+			 "name": context.emp.employee_name, "saved": ""},
+			{"id": "receiving", "role": "Receiving Technician",
+			 "name": context.to_emp.employee_name if context.to_emp else "", "saved": ""},
+			{"id": "witness", "role": "Witnessed By", "name": context.witness, "saved": ""},
+		]
+	else:
+		context.sig_slots = [
+			{"id": "technician", "role": "Technician",
+			 "name": context.emp.employee_name, "saved": ""},
+			{"id": "toolcrib", "role": "Tool Crib", "name": doc.acknowledged_by or "", "saved": ""},
+		]
 
 
 def _replacement_rates(item_codes):

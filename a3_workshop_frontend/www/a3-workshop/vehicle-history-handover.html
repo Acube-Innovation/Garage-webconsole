@@ -10,6 +10,24 @@
 	<a class="btn btn--outline btn--sm" href="/a3-workshop/vehicle-history-detail?vehicle={{ vehicle | urlencode }}"><i class="fa-solid fa-arrow-left"></i> Back to Vehicle</a>
 </div>
 
+{%- if not can_save %}
+{#- Shown before the form, not after it: save_handover refuses this user, and
+    finding that out at Confirm means the whole walk-round is lost. -#}
+<div class="card" style="margin-bottom:18px;border-color:var(--red)">
+	<div class="card__body" style="display:flex;gap:12px;align-items:flex-start">
+		<i class="fa-solid fa-triangle-exclamation" style="color:var(--red);font-size:20px;margin-top:2px"></i>
+		<div>
+			<div style="font-weight:700;color:var(--red)">You cannot file a handover</div>
+			<div class="muted" style="font-size:13px;margin-top:4px">
+				Recording a handover needs one of these roles: <b>{{ fleet_write_roles }}</b>.
+				Ask a workshop manager to add one to your user, then reload this page.
+				You can still look through the checklist below, but Confirm will not save.
+			</div>
+		</div>
+	</div>
+</div>
+{%- endif %}
+
 <div class="card" style="margin-bottom:18px">
 	<div class="card__head"><h3><i class="fa-solid fa-right-left"></i> Handover</h3></div>
 	<div class="card__body">
@@ -96,7 +114,9 @@
 
 <div class="form-actions">
 	<span></span>
-	<button type="button" class="btn btn--primary" id="ho-save"><i class="fa-solid fa-clipboard-check"></i> Confirm Handover</button>
+	<button type="button" class="btn btn--primary" id="ho-save"
+	        {% if not can_save %}disabled title="Your user does not hold a fleet write role"{% endif %}>
+		<i class="fa-solid fa-clipboard-check"></i> Confirm Handover</button>
 </div>
 
 <!-- The webcam preview, used on a laptop/desktop only -- a phone or tablet is
@@ -490,10 +510,29 @@
 		try {
 			var arr = JSON.parse(msg);
 			if (Array.isArray(arr) && arr.length) {
-				return arr.map(function (m) { try { return JSON.parse(m).message; } catch (e) { return m; } }).join(" ");
+				// Server messages are HTML ("<b>Odometer</b> is required"); this goes
+				// into alert(), which renders none of it, so strip the tags here too.
+				return arr.map(function (m) {
+					try { return JSON.parse(m).message; } catch (e) { return m; }
+				}).join(" ").replace(/<[^>]+>/g, "").trim();
 			}
 		} catch (e) {}
-		return String(msg).replace(/<[^>]+>/g, "");
+		var text = String(msg).replace(/<[^>]+>/g, "").trim();
+		// A bare PermissionError carries no _server_messages, so what lands here is
+		// the whole Python traceback -- which is what this screen used to alert at
+		// whoever was standing at the vehicle. Keep the last line, which is the
+		// exception itself, and drop the frames.
+		if (/^Traceback \(most recent call last\)/.test(text)) {
+			var lines = text.split("\n").filter(function (l) { return l.trim(); });
+			var last = lines[lines.length - 1] || text;
+			// "frappe.exceptions.PermissionError: You do not have permission…"
+			var m = /^[\w.]+(?:Error|Exception):\s*(.*)$/.exec(last.trim());
+			// A bare exception class with nothing after the colon tells the person at
+			// the vehicle nothing at all; say something they can act on instead.
+			text = (m ? (m[1] || "").trim() : last.trim());
+			if (!text) { text = "The server rejected this request. Please report it to your workshop manager."; }
+		}
+		return text;
 	}
 	function esc(s) {
 		return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
