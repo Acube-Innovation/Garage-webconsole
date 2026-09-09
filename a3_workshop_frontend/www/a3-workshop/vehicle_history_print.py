@@ -1,29 +1,8 @@
 import frappe
 from frappe.utils import now_datetime
-from a3_workshop_frontend.website_utils import require_login
+from a3_workshop_frontend.website_utils import require_login, signature_of
 
 no_cache = 1
-
-
-def _signature_fields():
-	"""The Driver signature custom fields that this site actually has.
-
-	They arrive with the GarageDesk fixtures, so a site that has not migrated
-	since they shipped simply prints a blank rule instead of erroring.
-	"""
-	meta = frappe.get_meta("Driver")
-	return [f for f in ("custom_signature", "custom_signature_image") if meta.has_field(f)]
-
-
-def _signature_of(row):
-	"""The signature a Driver row offers to a print.
-
-	The drawn one wins: it is the signature the driver gave in person. The
-	uploaded image is the fallback for a driver who cannot sign on a screen.
-	"""
-	if not row:
-		return ""
-	return row.get("custom_signature") or row.get("custom_signature_image") or ""
 
 
 def _driver_contact(driver, fallback_name):
@@ -35,21 +14,20 @@ def _driver_contact(driver, fallback_name):
 	`*_driver_name` rides along as the fallback for a record whose Driver row was
 	renamed or removed.
 
-	`signature` is what the print offers as the signature on file: the drawn one
-	when there is one, otherwise the uploaded image, which is the fallback for a
-	driver who cannot sign on a screen.
+	`signature` is what the print offers as the signature on file.
 	"""
 	info = {"name": fallback_name or "—", "phone": "", "license": "", "signature": ""}
 	if not driver:
 		return info
-	fields = ["full_name", "cell_number", "license_number"] + _signature_fields()
-	row = frappe.db.get_value("Driver", driver, fields, as_dict=True)
+	row = frappe.db.get_value(
+		"Driver", driver, ["full_name", "cell_number", "license_number"], as_dict=True
+	)
 	if not row:
 		return info
 	info["name"] = row.full_name or fallback_name or driver
 	info["phone"] = row.cell_number or ""
 	info["license"] = row.license_number or ""
-	info["signature"] = _signature_of(row)
+	info["signature"] = signature_of("Driver", driver)
 	return info
 
 
@@ -140,14 +118,13 @@ def get_context(context):
 		context.s = fleet.get_driver_scorecard(driver)
 		context.driver_info = frappe.db.get_value(
 			"Driver", driver,
-			["full_name", "cell_number", "license_number", "expiry_date", "status"]
-			+ _signature_fields(),
+			["full_name", "cell_number", "license_number", "expiry_date", "status"],
 			as_dict=True,
 		)
 		context.title = f"Driver Performance — {context.driver_info.full_name or driver}"
 		context.sig_slots = [
 			{"id": "driver", "role": "Driver", "name": context.driver_info.full_name or driver,
-			 "saved": _signature_of(context.driver_info)},
+			 "saved": signature_of("Driver", driver)},
 			{"id": "fleet_manager", "role": "Fleet Manager", "name": "", "saved": ""},
 			{"id": "management", "role": "HR / Management", "name": "", "saved": ""},
 		]

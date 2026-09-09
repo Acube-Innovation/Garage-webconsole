@@ -1,7 +1,7 @@
 import frappe
 from frappe.utils import flt, formatdate, getdate, now_datetime, nowdate
 
-from a3_workshop_frontend.website_utils import require_login
+from a3_workshop_frontend.website_utils import require_login, signature_of
 
 no_cache = 1
 
@@ -77,15 +77,16 @@ def _custody_statement(context, technician):
 	context.overdue_count = sum(1 for r in rows if r["overdue"])
 	context.as_of = formatdate(nowdate(), "dd MMM yyyy")
 	# One row in the signature chooser per rule at the foot of the declaration.
-	# Nobody here signs as a Driver, so there is no signature on file to offer —
-	# these rules take an upload for the printout, or are signed by hand.
+	# The technician is an Employee, so their own signature is offered; the tool
+	# crib rule names nobody, so it takes an upload or is signed by hand.
 	#
 	# A technician holding no tools gets no declaration and no rules to sign, so
 	# there is nothing to choose: leaving the panel off also lets that page print
 	# straight away, the way it did before the chooser existed.
 	if rows:
 		context.sig_slots = [
-			{"id": "technician", "role": "Technician", "name": context.emp.employee_name, "saved": ""},
+			{"id": "technician", "role": "Technician", "name": context.emp.employee_name,
+			 "saved": signature_of("Employee", technician)},
 			{"id": "manager", "role": "Tool Crib / Workshop Manager", "name": "", "saved": ""},
 		]
 
@@ -136,18 +137,24 @@ def _custody_slip(context, custody):
 		not in [context.emp.employee_name, (context.to_emp.employee_name if context.to_emp else None)]
 		else ""
 	)
+	# Both technicians are Employee links, so each is offered their own signature.
+	# The witness and the tool crib are recorded as free text rather than a link,
+	# so there is no record to read one from: those rules take an upload.
 	if doc.purpose == "Transfer":
 		context.sig_slots = [
 			{"id": "releasing", "role": "Releasing Technician",
-			 "name": context.emp.employee_name, "saved": ""},
+			 "name": context.emp.employee_name,
+			 "saved": signature_of("Employee", doc.technician)},
 			{"id": "receiving", "role": "Receiving Technician",
-			 "name": context.to_emp.employee_name if context.to_emp else "", "saved": ""},
+			 "name": context.to_emp.employee_name if context.to_emp else "",
+			 "saved": signature_of("Employee", doc.to_technician)},
 			{"id": "witness", "role": "Witnessed By", "name": context.witness, "saved": ""},
 		]
 	else:
 		context.sig_slots = [
 			{"id": "technician", "role": "Technician",
-			 "name": context.emp.employee_name, "saved": ""},
+			 "name": context.emp.employee_name,
+			 "saved": signature_of("Employee", doc.technician)},
 			{"id": "toolcrib", "role": "Tool Crib", "name": doc.acknowledged_by or "", "saved": ""},
 		]
 

@@ -24,7 +24,7 @@ from frappe.utils import (
 	now_datetime,
 	nowdate,
 )
-from a3_workshop_frontend.website_utils import require_login
+from a3_workshop_frontend.website_utils import require_login, signature_of
 
 no_cache = 1
 
@@ -141,6 +141,17 @@ def _jobcard(context, name):
 		],
 		"billing_total": flt(doc.billing_total),
 	}
+
+	# One row in the signature chooser per rule at the foot of the job card. The
+	# service advisor is an Employee, so their own signature is offered. The
+	# customer signs at the counter and quality check names nobody, so those two
+	# rules take an upload for this printout or stay blank.
+	context.sig_slots = [
+		{"id": "advisor", "role": "Service Advisor", "name": context.jc["advisor"],
+		 "saved": signature_of("Employee", doc.service_advisor)},
+		{"id": "customer", "role": "Customer", "name": context.jc["customer"], "saved": ""},
+		{"id": "quality", "role": "Quality Check", "name": "", "saved": ""},
+	]
 
 
 # ---------------------------------------------------------- invoice / receipt
