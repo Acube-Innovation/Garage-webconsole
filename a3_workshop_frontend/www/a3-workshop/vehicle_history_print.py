@@ -5,26 +5,51 @@ from a3_workshop_frontend.website_utils import require_login
 no_cache = 1
 
 
+def _signature_fields():
+	"""The Driver signature custom fields that this site actually has.
+
+	They arrive with the GarageDesk fixtures, so a site that has not migrated
+	since they shipped simply prints a blank rule instead of erroring.
+	"""
+	meta = frappe.get_meta("Driver")
+	return [f for f in ("custom_signature", "custom_signature_image") if meta.has_field(f)]
+
+
+def _signature_of(row):
+	"""The signature a Driver row offers to a print.
+
+	The drawn one wins: it is the signature the driver gave in person. The
+	uploaded image is the fallback for a driver who cannot sign on a screen.
+	"""
+	if not row:
+		return ""
+	return row.get("custom_signature") or row.get("custom_signature_image") or ""
+
+
 def _driver_contact(driver, fallback_name):
-	"""Name, mobile and licence number for one side of a handover.
+	"""Name, mobile, licence number and signature for one side of a handover.
 
 	The declaration and the signature block are the part of this print that gets
 	signed and filed, so whoever took the vehicle has to be identifiable by more
 	than a first name. `driver` is the Driver link on the handover; the stored
 	`*_driver_name` rides along as the fallback for a record whose Driver row was
 	renamed or removed.
+
+	`signature` is what the print offers as the signature on file: the drawn one
+	when there is one, otherwise the uploaded image, which is the fallback for a
+	driver who cannot sign on a screen.
 	"""
-	info = {"name": fallback_name or "—", "phone": "", "license": ""}
+	info = {"name": fallback_name or "—", "phone": "", "license": "", "signature": ""}
 	if not driver:
 		return info
-	row = frappe.db.get_value(
-		"Driver", driver, ["full_name", "cell_number", "license_number"], as_dict=True
-	)
+	fields = ["full_name", "cell_number", "license_number"] + _signature_fields()
+	row = frappe.db.get_value("Driver", driver, fields, as_dict=True)
 	if not row:
 		return info
 	info["name"] = row.full_name or fallback_name or driver
 	info["phone"] = row.cell_number or ""
 	info["license"] = row.license_number or ""
+	info["signature"] = _signature_of(row)
 	return info
 
 
@@ -88,6 +113,24 @@ def get_context(context):
 			or "—",
 		}
 		context.title = f"Handover {handover}"
+		# One row in the signature chooser per rule at the foot of the document;
+		# `id` matches the .sig-mark box the chosen image is dropped into. The
+		# inspector signs as a user, not as a Driver, so that rule is upload-only.
+		context.sig_slots = [
+			{
+				"id": "from_driver",
+				"role": "From Driver",
+				"name": context.h["from_driver"] if context.h["from_driver"] != "—" else "Returning Driver",
+				"saved": context.from_driver_info["signature"],
+			},
+			{
+				"id": "to_driver",
+				"role": "To Driver",
+				"name": context.h["to_driver"] if context.h["to_driver"] != "—" else "Receiving Driver",
+				"saved": context.to_driver_info["signature"],
+			},
+			{"id": "inspector", "role": "Inspector", "name": context.h_meta["inspected_by"], "saved": ""},
+		]
 	elif vehicle and frappe.db.exists("Vehicle", vehicle):
 		context.mode = "vehicle"
 		context.d = fleet.get_vehicle_history(vehicle)
@@ -97,10 +140,17 @@ def get_context(context):
 		context.s = fleet.get_driver_scorecard(driver)
 		context.driver_info = frappe.db.get_value(
 			"Driver", driver,
-			["full_name", "cell_number", "license_number", "expiry_date", "status"],
+			["full_name", "cell_number", "license_number", "expiry_date", "status"]
+			+ _signature_fields(),
 			as_dict=True,
 		)
 		context.title = f"Driver Performance — {context.driver_info.full_name or driver}"
+		context.sig_slots = [
+			{"id": "driver", "role": "Driver", "name": context.driver_info.full_name or driver,
+			 "saved": _signature_of(context.driver_info)},
+			{"id": "fleet_manager", "role": "Fleet Manager", "name": "", "saved": ""},
+			{"id": "management", "role": "HR / Management", "name": "", "saved": ""},
+		]
 	elif customer and frappe.db.exists("Customer", customer):
 		context.mode = "customer"
 		context.d = fleet.get_customer_dashboard(customer)

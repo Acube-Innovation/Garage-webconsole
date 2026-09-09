@@ -15,4 +15,14 @@ def get_context(context):
 	if vehicle and not frappe.db.exists("Vehicle", vehicle):
 		vehicle = ""
 	context.vehicle = vehicle
+
+	# Whether this user can actually file the handover, checked BEFORE the form is
+	# offered. Without it an inspector walks the whole vehicle -- every panel, the
+	# tyres, the photographs -- and only learns at Confirm that save_handover would
+	# refuse them, with the work unrecoverable. Same roles the API enforces, read
+	# from the API so the two can never drift.
+	from garagedesk.api.fleet import _FLEET_WRITE_ROLES, can_write_fleet
+
+	context.can_save = can_write_fleet()
+	context.fleet_write_roles = ", ".join(_FLEET_WRITE_ROLES)
 	return context

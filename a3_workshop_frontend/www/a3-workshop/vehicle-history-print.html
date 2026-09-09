@@ -423,10 +423,21 @@
 	{%- endif %}
 </div>
 
-<div class="sigs sigs--tight">
-	<div class="sig"><b>{{ h.from_driver if h.from_driver != "—" else "Returning Driver" }}</b>{{ contact(from_driver_info) }}From Driver — signature &amp; date</div>
-	<div class="sig"><b>{{ h.to_driver if h.to_driver != "—" else "Receiving Driver" }}</b>{{ contact(to_driver_info) }}To Driver — signature &amp; date</div>
-	<div class="sig"><b>{{ h_meta.inspected_by }}</b>Inspector — signature &amp; date</div>
+{#- The mark boxes are filled in by the chooser in the print base, from the
+    matching entry in `sig_slots`. Left empty they are the space to sign in. -#}
+<div class="sigs sigs--tight sigs--marked">
+	<div class="sig-slot">
+		<div class="sig-mark" data-sig-mark="from_driver"></div>
+		<div class="sig"><b>{{ h.from_driver if h.from_driver != "—" else "Returning Driver" }}</b>{{ contact(from_driver_info) }}From Driver — signature &amp; date</div>
+	</div>
+	<div class="sig-slot">
+		<div class="sig-mark" data-sig-mark="to_driver"></div>
+		<div class="sig"><b>{{ h.to_driver if h.to_driver != "—" else "Receiving Driver" }}</b>{{ contact(to_driver_info) }}To Driver — signature &amp; date</div>
+	</div>
+	<div class="sig-slot">
+		<div class="sig-mark" data-sig-mark="inspector"></div>
+		<div class="sig"><b>{{ h_meta.inspected_by }}</b>Inspector — signature &amp; date</div>
+	</div>
 </div>
 
 {# ================================================================ DRIVER #}
@@ -474,10 +485,19 @@
 </tbody></table>
 {% else %}<p class="muted">No monthly snapshots yet — the trend fills in as the monthly job runs.</p>{% endif %}
 
-<div class="sigs">
-	<div class="sig"><b>{{ driver_info.full_name }}</b>Driver — signature &amp; date</div>
-	<div class="sig"><b>&nbsp;</b>Fleet Manager — signature &amp; date</div>
-	<div class="sig"><b>&nbsp;</b>HR / Management — signature &amp; date</div>
+<div class="sigs sigs--marked">
+	<div class="sig-slot">
+		<div class="sig-mark" data-sig-mark="driver"></div>
+		<div class="sig"><b>{{ driver_info.full_name }}</b>Driver — signature &amp; date</div>
+	</div>
+	<div class="sig-slot">
+		<div class="sig-mark" data-sig-mark="fleet_manager"></div>
+		<div class="sig"><b>&nbsp;</b>Fleet Manager — signature &amp; date</div>
+	</div>
+	<div class="sig-slot">
+		<div class="sig-mark" data-sig-mark="management"></div>
+		<div class="sig"><b>&nbsp;</b>HR / Management — signature &amp; date</div>
+	</div>
 </div>
 {% endif %}
 

@@ -63,6 +63,14 @@
 		   the person by more than the name they sign with. */
 		.kv .v .sub, .sig .sub { display: block; font-weight: 500; font-size: 10px; color: #5a6478; margin-top: 1px; }
 		.sig .sub { margin-bottom: 3px; }
+		/* A signature chosen before printing sits on the rule the name is written
+		   under, so the filed copy carries the signature the declaration claims.
+		   The box keeps its height when nothing is chosen, which is the space
+		   somebody signs in by hand. */
+		.sig-slot { break-inside: avoid; }
+		.sig-mark { height: 46px; display: flex; align-items: flex-end; overflow: hidden; }
+		.sig-mark img { max-height: 46px; max-width: 100%; }
+		.sigs--marked { margin-top: 24px; }
 		.stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
 		.stat { border: 1px solid #e2e5ea; border-radius: 8px; padding: 10px 12px; break-inside: avoid; }
 		.stat .l { font-size: 9.5px; text-transform: uppercase; color: #8a94a6; font-weight: 700; letter-spacing: .04em; }
@@ -75,9 +83,28 @@
 		.pagegrid > thead > tr > td,
 		.pagegrid > tfoot > tr > td { height: 0; padding: 0; border: 0; }
 		.pagegrid > tbody > tr > td { padding: 0; border: 0; vertical-align: top; }
+		/* The chooser itself — screen only, and never part of the document. */
+		.sigpanel { max-width: 820px; margin: 18px auto -6px; background: #fff; border: 1px solid #d7dbe2;
+			border-left: 4px solid #ec2e5d; padding: 14px 18px 16px; box-shadow: 0 2px 14px rgba(0,0,0,.10); }
+		.sigpanel h4 { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: #003277; }
+		.sigpanel .hint { color: #5a6478; font-size: 11.5px; line-height: 1.5; margin-top: 3px; }
+		.sigpanel .row { display: grid; grid-template-columns: 190px 1fr 120px; gap: 14px;
+			align-items: center; padding: 9px 0; border-top: 1px solid #eceef2; margin-top: 10px; }
+		.sigpanel .row:first-of-type { margin-top: 12px; }
+		.sigpanel .who b { display: block; font-size: 12px; color: #1f2a44; }
+		.sigpanel .who span { color: #8a94a6; font-size: 11px; }
+		.sigpanel label { margin-right: 15px; font-size: 11.5px; cursor: pointer; white-space: nowrap; }
+		.sigpanel input[type=file] { display: none; }
+		.sigpanel .prev { height: 36px; display: flex; align-items: center; justify-content: flex-end; }
+		.sigpanel .prev img { max-height: 36px; max-width: 118px; }
+		.sigpanel .acts { display: flex; align-items: center; gap: 12px; margin-top: 14px;
+			padding-top: 12px; border-top: 1px solid #eceef2; }
+		.sigpanel .acts button { background: #ec2e5d; color: #fff; border: none; border-radius: 999px;
+			padding: 8px 18px; font-weight: 600; cursor: pointer; font-size: 13px; font-family: inherit; }
+		.sigpanel .acts button.alt { background: transparent; color: #1f2a44; border: 1px solid #c9ced8; }
 		@media print {
 			body.printdoc { background: #fff; }
-			.print-toolbar { display: none; }
+			.print-toolbar, .sigpanel { display: none; }
 			/* @page carries no margin, so the browser has nowhere to print its own
 			   header and footer (the document title and the URL). Left and right
 			   come from the sheet's padding; top and bottom come from the repeating
@@ -93,6 +120,7 @@
 		}
 		@page { size: A4; margin: 0; }
 	</style>
+	{% include "templates/includes/client_error_reporter.html" %}
 </head>
 <body class="printdoc">
 	{#- Company name comes from the database; the literal is only a last resort for a
@@ -102,6 +130,38 @@
 		<button type="button" onclick="window.print()">Print / Save as PDF</button>
 		<button type="button" class="alt" onclick="window.close()">Close</button>
 	</div>
+	{#- Signature chooser. A page that declares responsibility is worth nothing
+	    unless the signature on it belongs to the person named, so every page that
+	    ends in a signature block hands `sig_slots` to this panel and the operator
+	    decides, per name, whether to drop in the signature held on the record,
+	    upload one for this printout, or leave the rule blank to be signed by hand.
+	    An upload never touches the database — it is applied to this page only. -#}
+	{%- if sig_slots %}
+	<div class="sigpanel" id="sigpanel">
+		<h4>Signatures</h4>
+		<p class="hint">Pick a signature for each name, then print. <b>On file</b> is the signature stored
+			on the record; an uploaded image is applied to this printout only and is not saved.</p>
+		{%- for slot in sig_slots %}
+		<div class="row" data-slot="{{ slot.id }}">
+			<div class="who"><b>{{ slot.name or "—" }}</b><span>{{ slot.role }}</span></div>
+			<div class="opts">
+				{%- if slot.saved %}
+				<label><input type="radio" name="sig-{{ slot.id }}" value="saved" checked> Signature on file</label>
+				{%- endif %}
+				<label><input type="radio" name="sig-{{ slot.id }}" value="upload"> Upload signature…</label>
+				<label><input type="radio" name="sig-{{ slot.id }}" value="none"{{ "" if slot.saved else " checked" }}> Leave blank</label>
+				<input type="file" accept="image/*">
+			</div>
+			<div class="prev">{% if slot.saved %}<img src="{{ slot.saved }}" alt="" data-saved="1">{% endif %}</div>
+		</div>
+		{%- endfor %}
+		<div class="acts">
+			<button type="button" id="sigprint">Apply &amp; Print</button>
+			<button type="button" class="alt" id="sigclear">Reset</button>
+			<span class="hint" id="sigmsg"></span>
+		</div>
+	</div>
+	{%- endif %}
 	{#- Same Letter Head record the Desk print formats use, so a printed page from
 	    this app and one printed from /app carry an identical header. Falls back to
 	    the bare logo on a site that has no default Letter Head. -#}
@@ -142,8 +202,109 @@
 	</td></tr></tbody><tfoot><tr><td></td></tr></tfoot></table>
 	</div>
 	<script>
-		// open the browser print dialog once images have loaded
-		window.addEventListener("load", function () { setTimeout(function () { window.print(); }, 350); });
+		// open the browser print dialog once images have loaded — unless the page
+		// is still waiting on a signature choice, in which case the panel's own
+		// button opens it, after the marks are in place.
+		window.addEventListener("load", function () {
+			if (document.getElementById("sigpanel")) { return; }
+			setTimeout(function () { window.print(); }, 350);
+		});
+
+		// Signature chooser. Each panel row drives the .sig-mark box that carries
+		// the same slot id in the document below.
+		(function () {
+			var panel = document.getElementById("sigpanel");
+			if (!panel) { return; }
+			var msg = document.getElementById("sigmsg");
+			var MAX_BYTES = 4 * 1024 * 1024;
+
+			Array.prototype.forEach.call(panel.querySelectorAll(".row"), function (row) {
+				var slot = row.getAttribute("data-slot");
+				var mark = document.querySelector('[data-sig-mark="' + slot + '"]');
+				var prev = row.querySelector(".prev");
+				var file = row.querySelector('input[type=file]');
+				var radios = row.querySelectorAll('input[type=radio]');
+				var onFile = prev.querySelector("img[data-saved]");
+				var onFileSrc = onFile ? onFile.getAttribute("src") : "";
+				var uploaded = "";
+				var chosen = onFileSrc ? "saved" : "none";
+
+				// Built as a node rather than assembled into innerHTML: the source is
+				// a file URL off a record, and quoting it into markup is how that
+				// kind of value turns into an injection.
+				function fill(host, src) {
+					while (host.firstChild) { host.removeChild(host.firstChild); }
+					if (!src) { return; }
+					var img = document.createElement("img");
+					img.setAttribute("src", src);
+					img.setAttribute("alt", "");
+					host.appendChild(img);
+				}
+				function paint(src) {
+					if (mark) { fill(mark, src); }
+					fill(prev, src);
+				}
+				function apply(value) {
+					chosen = value;
+					if (value === "saved") { paint(onFileSrc); }
+					else if (value === "upload") { paint(uploaded); }
+					else { paint(""); }
+				}
+
+				Array.prototype.forEach.call(radios, function (r) {
+					r.addEventListener("change", function () {
+						if (r.value !== "upload") { apply(r.value); return; }
+						if (uploaded) { apply("upload"); return; }
+						file.click();
+						// A cancelled file dialog fires no event, so nothing is
+						// applied until a file actually arrives; the radio is put
+						// back on the previous choice when the window regains focus
+						// with still nothing uploaded.
+						window.addEventListener("focus", function back() {
+							window.removeEventListener("focus", back);
+							setTimeout(function () {
+								if (!uploaded) { row.querySelector('input[value="' + chosen + '"]').checked = true; }
+							}, 250);
+						});
+					});
+				});
+
+				file.addEventListener("change", function () {
+					var f = file.files && file.files[0];
+					if (!f) { return; }
+					if (f.size > MAX_BYTES) {
+						msg.textContent = "That image is too large — use one under 4 MB.";
+						row.querySelector('input[value="' + chosen + '"]').checked = true;
+						file.value = "";
+						return;
+					}
+					var reader = new FileReader();
+					reader.onload = function () {
+						uploaded = String(reader.result || "");
+						msg.textContent = "";
+						row.querySelector('input[value="upload"]').checked = true;
+						apply("upload");
+					};
+					reader.onerror = function () { msg.textContent = "That image could not be read."; };
+					reader.readAsDataURL(f);
+				});
+
+				row.resetSignature = function () {
+					uploaded = "";
+					file.value = "";
+					var back = onFileSrc ? "saved" : "none";
+					row.querySelector('input[value="' + back + '"]').checked = true;
+					apply(back);
+				};
+				apply(chosen);
+			});
+
+			document.getElementById("sigclear").addEventListener("click", function () {
+				msg.textContent = "";
+				Array.prototype.forEach.call(panel.querySelectorAll(".row"), function (row) { row.resetSignature(); });
+			});
+			document.getElementById("sigprint").addEventListener("click", function () { window.print(); });
+		})();
 	</script>
 </body>
 </html>
