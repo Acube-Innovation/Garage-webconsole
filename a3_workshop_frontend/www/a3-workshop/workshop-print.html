@@ -98,10 +98,21 @@
 </div>
 {% endif %}
 
-<div class="sigs">
-	<div class="sig"><b>{{ jc.advisor }}</b>Service Advisor — signature &amp; date</div>
-	<div class="sig"><b>{{ jc.customer }}</b>Customer — signature &amp; date</div>
-	<div class="sig"><b>&nbsp;</b>Quality Check — signature &amp; date</div>
+{#- The mark boxes are filled in by the chooser in the print base, from the
+    matching entry in `sig_slots`. Left empty they are the space to sign in. -#}
+<div class="sigs sigs--marked">
+	<div class="sig-slot">
+		<div class="sig-mark" data-sig-mark="advisor"></div>
+		<div class="sig"><b>{{ jc.advisor }}</b>Service Advisor — signature &amp; date</div>
+	</div>
+	<div class="sig-slot">
+		<div class="sig-mark" data-sig-mark="customer"></div>
+		<div class="sig"><b>{{ jc.customer }}</b>Customer — signature &amp; date</div>
+	</div>
+	<div class="sig-slot">
+		<div class="sig-mark" data-sig-mark="quality"></div>
+		<div class="sig"><b>&nbsp;</b>Quality Check — signature &amp; date</div>
+	</div>
 </div>
 
 {# ================================================================ INVOICE #}

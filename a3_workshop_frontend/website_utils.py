@@ -39,3 +39,33 @@ def _csrf_token():
 	except Exception:
 		session = getattr(frappe.local, "session", None)
 		return (getattr(session, "data", None) or {}).get("csrf_token") or ""
+
+
+# --------------------------------------------------------------- signatures
+
+# A person who signs a printed declaration can keep a signature on their own
+# record instead of signing every copy by hand. Driver and Employee carry the
+# same pair of GarageDesk custom fields for it, so one resolver serves both.
+SIGNATURE_FIELDS = ("custom_signature", "custom_signature_image")
+
+
+def signature_of(doctype, name):
+	"""The signature held on one Driver or Employee record, or "".
+
+	The drawn one wins: it is the signature the person gave in person. The
+	uploaded image is the fallback for someone who cannot sign on a screen.
+
+	The fields arrive with the GarageDesk fixtures, so a site that has not
+	migrated since they shipped gets "" and prints a blank rule rather than
+	erroring.
+	"""
+	if not name:
+		return ""
+	meta = frappe.get_meta(doctype)
+	fields = [f for f in SIGNATURE_FIELDS if meta.has_field(f)]
+	if not fields:
+		return ""
+	row = frappe.db.get_value(doctype, name, fields, as_dict=True)
+	if not row:
+		return ""
+	return row.get("custom_signature") or row.get("custom_signature_image") or ""
