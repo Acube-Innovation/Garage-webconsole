@@ -102,9 +102,32 @@
 		.sigpanel .acts button { background: #ec2e5d; color: #fff; border: none; border-radius: 999px;
 			padding: 8px 18px; font-weight: 600; cursor: pointer; font-size: 13px; font-family: inherit; }
 		.sigpanel .acts button.alt { background: transparent; color: #1f2a44; border: 1px solid #c9ced8; }
+		.sigpanel .saved-tag { color: #15803d; font-size: 11px; font-weight: 600; }
+		/* The pad — draw the signature on the spot. Screen only, like the panel. */
+		.sigpad-back { position: fixed; inset: 0; background: rgba(16,24,40,.55); z-index: 200;
+			display: none; align-items: center; justify-content: center; padding: 16px; }
+		.sigpad-back.is-open { display: flex; }
+		.sigpad { background: #fff; border-radius: 10px; width: 100%; max-width: 560px;
+			box-shadow: 0 18px 48px rgba(16,24,40,.30); overflow: hidden; }
+		.sigpad h4 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: #003277;
+			padding: 14px 18px 0; }
+		.sigpad .who { padding: 2px 18px 0; font-size: 12px; color: #5a6478; }
+		.sigpad .stage { margin: 12px 18px 0; border: 1px dashed #c9ced8; border-radius: 8px;
+			background: #fcfcfd; position: relative; }
+		/* The rule is where a signature sits on paper, so the pad shows one too. */
+		.sigpad .stage::after { content: ""; position: absolute; left: 14px; right: 14px; bottom: 26px;
+			border-bottom: 1px solid #d7dbe2; pointer-events: none; }
+		.sigpad canvas { display: block; width: 100%; height: 190px; touch-action: none; cursor: crosshair; }
+		.sigpad .note { padding: 8px 18px 0; font-size: 11.5px; color: #5a6478; line-height: 1.5; }
+		.sigpad .acts { display: flex; align-items: center; gap: 10px; padding: 14px 18px 16px; }
+		.sigpad .acts .spacer { flex: 1; }
+		.sigpad .acts button { background: #ec2e5d; color: #fff; border: none; border-radius: 999px;
+			padding: 8px 18px; font-weight: 600; cursor: pointer; font-size: 13px; font-family: inherit; }
+		.sigpad .acts button.alt { background: transparent; color: #1f2a44; border: 1px solid #c9ced8; }
+		.sigpad .acts button[disabled] { opacity: .5; cursor: default; }
 		@media print {
 			body.printdoc { background: #fff; }
-			.print-toolbar, .sigpanel { display: none; }
+			.print-toolbar, .sigpanel, .sigpad-back { display: none !important; }
 			/* @page carries no margin, so the browser has nowhere to print its own
 			   header and footer (the document title and the URL). Left and right
 			   come from the sheet's padding; top and bottom come from the repeating
@@ -133,23 +156,34 @@
 	{#- Signature chooser. A page that declares responsibility is worth nothing
 	    unless the signature on it belongs to the person named, so every page that
 	    ends in a signature block hands `sig_slots` to this panel and the operator
-	    decides, per name, whether to drop in the signature held on the record,
-	    upload one for this printout, or leave the rule blank to be signed by hand.
-	    An upload never touches the database — it is applied to this page only. -#}
+	    decides, per name, where the signature comes from:
+
+	      * on file  — the digital signature held on that person's own record
+	      * upload   — an image applied to THIS printout only, never saved
+	      * sign now — drawn on the screen by the person standing there, which is
+	                   filed on their record as well, so the next print offers it
+	                   as the signature on file
+
+	    A slot the operator leaves alone prints a blank rule, to be signed by hand.
+	    `slot.save` names the record a drawn signature is filed on; a slot without
+	    one (a rule for somebody who holds no Driver or Employee record) can still
+	    be signed, but only for the page in front of you. -#}
 	{%- if sig_slots %}
 	<div class="sigpanel" id="sigpanel">
 		<h4>Signatures</h4>
 		<p class="hint">Pick a signature for each name, then print. <b>On file</b> is the signature stored
-			on the record; an uploaded image is applied to this printout only and is not saved.</p>
+			on the record and <b>Sign now</b> draws a new one, which is saved to that record for next time;
+			an uploaded image is applied to this printout only and is not saved.</p>
 		{%- for slot in sig_slots %}
-		<div class="row" data-slot="{{ slot.id }}">
+		<div class="row" data-slot="{{ slot.id }}"
+		     {%- if slot.save %} data-save-doctype="{{ slot.save.doctype }}" data-save-name="{{ slot.save.name }}"{% endif %}
+		     data-who="{{ slot.name or slot.role }}">
 			<div class="who"><b>{{ slot.name or "—" }}</b><span>{{ slot.role }}</span></div>
 			<div class="opts">
-				{%- if slot.saved %}
-				<label><input type="radio" name="sig-{{ slot.id }}" value="saved" checked> Signature on file</label>
-				{%- endif %}
+				<label{{ "" if slot.saved else ' style="display:none"' }} data-saved-opt>
+					<input type="radio" name="sig-{{ slot.id }}" value="saved"{{ " checked" if slot.saved }}> Signature on file</label>
 				<label><input type="radio" name="sig-{{ slot.id }}" value="upload"> Upload signature…</label>
-				<label><input type="radio" name="sig-{{ slot.id }}" value="none"{{ "" if slot.saved else " checked" }}> Leave blank</label>
+				<label><input type="radio" name="sig-{{ slot.id }}" value="sign"> Sign now</label>
 				<input type="file" accept="image/*">
 			</div>
 			<div class="prev">{% if slot.saved %}<img src="{{ slot.saved }}" alt="" data-saved="1">{% endif %}</div>
@@ -159,6 +193,22 @@
 			<button type="button" id="sigprint">Apply &amp; Print</button>
 			<button type="button" class="alt" id="sigclear">Reset</button>
 			<span class="hint" id="sigmsg"></span>
+		</div>
+	</div>
+
+	{#- One pad, retargeted at whichever rule is being signed. -#}
+	<div class="sigpad-back" id="sigpad" role="dialog" aria-modal="true" aria-label="Sign">
+		<div class="sigpad">
+			<h4>Sign here</h4>
+			<div class="who" id="sigpad-who">—</div>
+			<div class="stage"><canvas id="sigpad-canvas"></canvas></div>
+			<div class="note" id="sigpad-note">Sign with a finger, a stylus or the mouse.</div>
+			<div class="acts">
+				<button type="button" class="alt" id="sigpad-clear">Clear</button>
+				<span class="spacer"></span>
+				<button type="button" class="alt" id="sigpad-cancel">Cancel</button>
+				<button type="button" id="sigpad-use" disabled>Use signature</button>
+			</div>
 		</div>
 	</div>
 	{%- endif %}
@@ -201,6 +251,13 @@
 		<footer class="doc-foot">{{ company_name }} — Service Center CRM · Vehicle History &amp; Driver Performance</footer>
 	</td></tr></tbody><tfoot><tr><td></td></tr></tfoot></table>
 	</div>
+	{#- Every print controller here gates on require_login, which puts a token that
+	    is valid for this session on the context; the guard is for a page that ever
+	    renders without one, so a missing token reads as empty rather than printing
+	    the tag source (this site's Jinja uses DebugUndefined). -#}
+	<script>
+		window.csrf_token = "{{ csrf_token if csrf_token is defined else '' }}";
+	</script>
 	<script>
 		// open the browser print dialog once images have loaded — unless the page
 		// is still waiting on a signature choice, in which case the panel's own
@@ -209,6 +266,137 @@
 			if (document.getElementById("sigpanel")) { return; }
 			setTimeout(function () { window.print(); }, 350);
 		});
+
+		// The pad. One canvas, retargeted at whichever rule is being signed: it is
+		// opened with the row that asked for it and hands back a PNG data URL, or
+		// nothing at all if the signing is cancelled.
+		var sigpad = (function () {
+			var back = document.getElementById("sigpad");
+			if (!back) { return null; }
+			var canvas = document.getElementById("sigpad-canvas");
+			var who = document.getElementById("sigpad-who");
+			var note = document.getElementById("sigpad-note");
+			var useBtn = document.getElementById("sigpad-use");
+			var ctx = canvas.getContext("2d");
+			var drawing = false, drawn = false, onDone = null, lastX = 0, lastY = 0;
+
+			// The canvas is sized in CSS pixels but backed at device resolution, or
+			// a signature drawn on a phone comes out of toDataURL as a blur.
+			function size() {
+				var ratio = window.devicePixelRatio || 1;
+				var box = canvas.getBoundingClientRect();
+				canvas.width = Math.round(box.width * ratio);
+				canvas.height = Math.round(box.height * ratio);
+				ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+				ctx.lineWidth = 2.2;
+				ctx.lineCap = "round";
+				ctx.lineJoin = "round";
+				ctx.strokeStyle = "#1f2a44";
+			}
+			function clear() {
+				ctx.clearRect(0, 0, canvas.width, canvas.height);
+				drawn = false;
+				useBtn.disabled = true;
+			}
+			function at(e) {
+				var box = canvas.getBoundingClientRect();
+				var p = e.touches ? e.touches[0] : e;
+				return { x: p.clientX - box.left, y: p.clientY - box.top };
+			}
+			function start(e) {
+				e.preventDefault();
+				drawing = true;
+				var p = at(e);
+				lastX = p.x; lastY = p.y;
+				// A dot is a signature too — a tap has to leave a mark.
+				ctx.beginPath();
+				ctx.arc(p.x, p.y, ctx.lineWidth / 2, 0, Math.PI * 2);
+				ctx.fillStyle = ctx.strokeStyle;
+				ctx.fill();
+				drawn = true;
+				useBtn.disabled = false;
+			}
+			function move(e) {
+				if (!drawing) { return; }
+				e.preventDefault();
+				var p = at(e);
+				ctx.beginPath();
+				ctx.moveTo(lastX, lastY);
+				ctx.lineTo(p.x, p.y);
+				ctx.stroke();
+				lastX = p.x; lastY = p.y;
+			}
+			function stop() { drawing = false; }
+
+			canvas.addEventListener("mousedown", start);
+			canvas.addEventListener("mousemove", move);
+			window.addEventListener("mouseup", stop);
+			canvas.addEventListener("touchstart", start, { passive: false });
+			canvas.addEventListener("touchmove", move, { passive: false });
+			canvas.addEventListener("touchend", stop);
+
+			function close(result) {
+				back.classList.remove("is-open");
+				var cb = onDone;
+				onDone = null;
+				if (cb) { cb(result); }
+			}
+
+			document.getElementById("sigpad-clear").addEventListener("click", clear);
+			document.getElementById("sigpad-cancel").addEventListener("click", function () { close(null); });
+			useBtn.addEventListener("click", function () {
+				if (!drawn) { return; }
+				// PNG: the transparent background is what lets a signature sit on
+				// the printed rule instead of covering it with a white box.
+				close(canvas.toDataURL("image/png"));
+			});
+			back.addEventListener("click", function (e) { if (e.target === back) { close(null); } });
+			document.addEventListener("keydown", function (e) {
+				if (e.key === "Escape" && back.classList.contains("is-open")) { close(null); }
+			});
+
+			return {
+				open: function (label, canSave, done) {
+					onDone = done;
+					who.textContent = label || "";
+					note.textContent = canSave
+						? "Sign with a finger, a stylus or the mouse. This is saved to the record, " +
+						  "so the next print offers it as the signature on file."
+						: "Sign with a finger, a stylus or the mouse. There is no record to save it " +
+						  "to, so it is applied to this printout only.";
+					back.classList.add("is-open");
+					size();
+					clear();
+				},
+			};
+		})();
+
+		// File a drawn signature on the person's own record. A failure here is
+		// reported and nothing else: the signature is already on the page in front
+		// of the person who drew it, and refusing to print because the save did not
+		// land would be the wrong way round.
+		function fileSignature(doctype, name, image) {
+			return fetch("/api/method/garagedesk.api.signature.save_signature", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					"Accept": "application/json",
+					"X-Frappe-CSRF-Token": window.csrf_token || "",
+				},
+				credentials: "same-origin",
+				body: JSON.stringify({ doctype: doctype, name: name, image: image }),
+			}).then(function (r) {
+				return r.json().then(function (data) {
+					if (!r.ok) {
+						var msgs = [];
+						try { msgs = JSON.parse(data._server_messages || "[]"); } catch (e) { msgs = []; }
+						var first = msgs.length ? (JSON.parse(msgs[0]).message || msgs[0]) : "";
+						throw new Error(first || data.exception || "Could not save the signature.");
+					}
+					return data.message || {};
+				});
+			});
+		}
 
 		// Signature chooser. Each panel row drives the .sig-mark box that carries
 		// the same slot id in the document below.
@@ -226,8 +414,14 @@
 				var radios = row.querySelectorAll('input[type=radio]');
 				var onFile = prev.querySelector("img[data-saved]");
 				var onFileSrc = onFile ? onFile.getAttribute("src") : "";
+				var savedOpt = row.querySelector("[data-saved-opt]");
+				var saveDoctype = row.getAttribute("data-save-doctype") || "";
+				var saveName = row.getAttribute("data-save-name") || "";
 				var uploaded = "";
-				var chosen = onFileSrc ? "saved" : "none";
+				var drawn = "";
+				// "" is the blank rule: no radio stands for it, because a rule left
+				// alone is already blank and Reset puts a row back to it.
+				var chosen = onFileSrc ? "saved" : "";
 
 				// Built as a node rather than assembled into innerHTML: the source is
 				// a file URL off a record, and quoting it into markup is how that
@@ -248,11 +442,60 @@
 					chosen = value;
 					if (value === "saved") { paint(onFileSrc); }
 					else if (value === "upload") { paint(uploaded); }
+					else if (value === "sign") { paint(drawn); }
 					else { paint(""); }
+				}
+
+				// Re-check whichever option the row was on before the one just
+				// clicked, for a chooser the operator backed out of.
+				function revert() {
+					var back = row.querySelector('input[value="' + (chosen || "sign") + '"]');
+					if (chosen) { back.checked = true; } else {
+						Array.prototype.forEach.call(radios, function (r) { r.checked = false; });
+					}
+				}
+
+				// A drawn signature belongs to the person, not to this printout, so
+				// it is filed on their record — and the row then offers it as the
+				// signature on file, the same as one that was already there.
+				function remember(src) {
+					onFileSrc = src;
+					if (savedOpt) { savedOpt.style.display = ""; }
+					if (!onFile) {
+						onFile = document.createElement("img");
+						onFile.setAttribute("data-saved", "1");
+						onFile.setAttribute("alt", "");
+					}
+					onFile.setAttribute("src", src);
+				}
+
+				function signNow() {
+					if (!sigpad) { revert(); return; }
+					sigpad.open(row.getAttribute("data-who") || "", !!(saveDoctype && saveName),
+						function (image) {
+							if (!image) { revert(); return; }
+							drawn = image;
+							row.querySelector('input[value="sign"]').checked = true;
+							apply("sign");
+							if (!saveDoctype || !saveName) {
+								msg.textContent = "Signed for this printout — there is no record to save it to.";
+								return;
+							}
+							msg.textContent = "Saving signature…";
+							fileSignature(saveDoctype, saveName, image).then(function (res) {
+								remember(res.signature || image);
+								msg.textContent = "Signature saved to the record.";
+							}).catch(function (err) {
+								// The mark stays on the page: the person has signed,
+								// and the print must not wait on the database.
+								msg.textContent = "Signed, but not saved: " + (err.message || err);
+							});
+						});
 				}
 
 				Array.prototype.forEach.call(radios, function (r) {
 					r.addEventListener("change", function () {
+						if (r.value === "sign") { signNow(); return; }
 						if (r.value !== "upload") { apply(r.value); return; }
 						if (uploaded) { apply("upload"); return; }
 						file.click();
@@ -262,9 +505,7 @@
 						// with still nothing uploaded.
 						window.addEventListener("focus", function back() {
 							window.removeEventListener("focus", back);
-							setTimeout(function () {
-								if (!uploaded) { row.querySelector('input[value="' + chosen + '"]').checked = true; }
-							}, 250);
+							setTimeout(function () { if (!uploaded) { revert(); } }, 250);
 						});
 					});
 				});
@@ -274,7 +515,7 @@
 					if (!f) { return; }
 					if (f.size > MAX_BYTES) {
 						msg.textContent = "That image is too large — use one under 4 MB.";
-						row.querySelector('input[value="' + chosen + '"]').checked = true;
+						revert();
 						file.value = "";
 						return;
 					}
@@ -289,12 +530,16 @@
 					reader.readAsDataURL(f);
 				});
 
+				// Reset drops what was chosen for this printout. A signature that was
+				// filed on the record stays filed — that is the person's signature
+				// now, not a choice made on this page.
 				row.resetSignature = function () {
 					uploaded = "";
+					drawn = "";
 					file.value = "";
-					var back = onFileSrc ? "saved" : "none";
-					row.querySelector('input[value="' + back + '"]').checked = true;
-					apply(back);
+					chosen = onFileSrc ? "saved" : "";
+					revert();
+					apply(chosen);
 				};
 				apply(chosen);
 			});

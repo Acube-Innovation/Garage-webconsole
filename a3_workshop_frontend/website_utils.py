@@ -69,3 +69,35 @@ def signature_of(doctype, name):
 	if not row:
 		return ""
 	return row.get("custom_signature") or row.get("custom_signature_image") or ""
+
+
+def signable(doctype, name):
+	"""Where a signature drawn on a print page is filed, or None.
+
+	A rule whose name belongs to a real Driver or Employee can be signed on the
+	screen and the signature kept on that person's own record, so the next print
+	offers it as the signature on file. A rule for somebody the system holds no
+	record of — a customer at the counter, the tool crib, a witness — can still be
+	signed, but only for the page being printed.
+
+	Paired with :func:`signature_of`: that reads the signature back, this says
+	where a new one goes. Both are handed to the chooser in templates/print_base.html.
+	"""
+	if not name or doctype not in ("Driver", "Employee"):
+		return None
+	if not frappe.db.exists(doctype, name):
+		return None
+	return {"doctype": doctype, "name": name}
+
+
+def employee_of(user):
+	"""The Employee record behind a user, or "".
+
+	The inspector on a handover and the advisor on a job card are recorded as
+	users; their signature lives on the Employee row that names them.
+	"""
+	if not user or user == "Guest":
+		return ""
+	return frappe.db.get_value("Employee", {"user_id": user, "status": "Active"}, "name") or (
+		frappe.db.get_value("Employee", {"user_id": user}, "name") or ""
+	)

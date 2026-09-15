@@ -39,15 +39,6 @@
 			<div class="field"><label>To Driver (receiving)</label><input name="to_driver_label" placeholder="Search driver..." autocomplete="off"><input type="hidden" name="to_driver"></div>
 			{{ field("Fuel Level","fuel_level",type="select",options=["Empty","Quarter","Half","Three-Quarter","Full"]) }}
 			{{ field("Overall Condition","overall_condition",type="select",options=["Excellent","Good","Fair","Poor"]) }}
-			<div class="field">
-				<label>Tyre Condition</label>
-				<div class="ho-ctl-row">
-					<button type="button" class="ho-tyre-open" id="ho-tyre-open" aria-haspopup="dialog">
-						<span id="ho-tyre-summary">Not recorded</span>
-						<i class="fa-solid fa-chevron-right"></i>
-					</button>
-				</div>
-			</div>
 			{{ field("Other Observations","observations",type="textarea") }}
 		</form>
 	</div>
@@ -56,9 +47,17 @@
 <div class="card" style="margin-bottom:18px">
 	<div class="card__head"><h3><i class="fa-solid fa-camera"></i> Vehicle Unit Condition &amp; Photo Record</h3></div>
 	<div class="card__body">
-		<!-- The structured walk-round: one condition + photo per area, with extra
-		     rows for damage the standard five do not cover. Every photo on this
-		     handover is captured against a row — there is no loose pile. -->
+		<!-- The structured walk-round: one condition, remark and photo per row —
+		     body panels first, then the tyres — with extra rows for anything the
+		     standard set does not cover. Every photo on this handover is captured
+		     against a row; there is no loose pile.
+
+		     The remark is the only place damage is described. The form used to
+		     carry a separate "Vehicle Condition — Damages" table underneath, which
+		     asked a second time for what the inspector had already assessed here;
+		     a row marked Damaged or Requires Attention now becomes the damage line
+		     itself (garagedesk.api.fleet._derived_damages). -->
+		<div id="ho-prev-note" class="muted" style="font-size:13px;margin-bottom:12px;display:none"></div>
 		<!-- Every camera button on this page opens THIS, not an in-page preview:
 		     `capture` hands straight over to the device's own camera app, which is
 		     the only way the photographer gets tap-to-focus, zoom, torch and HDR. -->
@@ -70,7 +69,7 @@
 		<div class="ho-area-wrap">
 			<table class="ho-area-tbl">
 				<thead>
-					<tr><th>Inspection Area</th><th>Condition</th><th class="ph">Photo</th><th></th></tr>
+					<tr><th>Inspection Area</th><th>Condition</th><th class="rem">Remark</th><th class="td">Tread</th><th class="ph">Photo</th><th></th></tr>
 				</thead>
 				<tbody id="ho-area-rows"></tbody>
 			</table>
@@ -79,20 +78,9 @@
 			<button type="button" class="btn btn--outline btn--sm" id="ho-add-area">
 				<i class="fa-solid fa-plus"></i> Add Inspection Area
 			</button>
-		</div>
-	</div>
-</div>
-
-<div class="card" style="margin-bottom:18px">
-	<div class="card__head"><h3><i class="fa-solid fa-car-burst"></i> Vehicle Condition — Damages</h3></div>
-	<div class="card__body">
-		<div id="ho-prev-note" class="muted" style="font-size:13px;margin-bottom:12px;display:none"></div>
-		<div style="overflow-x:auto"><table class="table editable" id="ho-dmg-table">
-			<thead><tr><th style="min-width:150px">Area</th><th style="min-width:130px">Damage Type</th><th>Severity</th><th style="min-width:180px">Description</th><th></th></tr></thead>
-			<tbody></tbody>
-		</table></div>
-		<div class="table-actions">
-			<button type="button" class="btn btn--outline btn--sm" id="ho-add-dmg"><i class="fa-solid fa-plus"></i> Add Damage</button>
+			<button type="button" class="btn btn--outline btn--sm" id="ho-add-tyre">
+				<i class="fa-solid fa-plus"></i> Add Tyre Position
+			</button>
 		</div>
 	</div>
 </div>
@@ -107,8 +95,8 @@
 <div class="card" style="margin-bottom:18px">
 	<div class="card__head"><h3><i class="fa-solid fa-trailer"></i> Attachments</h3></div>
 	<div class="card__body">
-		<div class="muted" style="font-size:13px;margin-bottom:12px">Equipment coupled to the vehicle — tick what is attached and handed over with it.</div>
-		<div id="ho-attachments" class="ho-checklist"><div class="muted">Loading attachments…</div></div>
+		<div class="muted" style="font-size:13px;margin-bottom:12px">Equipment coupled to the vehicle — tick what is attached and handed over with it. A ticked attachment opens a remark and the same condition-by-view table the walk-round above uses.</div>
+		<div id="ho-attachments" class="ho-checklist ho-checklist--wide"><div class="muted">Loading attachments…</div></div>
 	</div>
 </div>
 
@@ -164,50 +152,6 @@
 	</div>
 </div>
 
-<!-- Tyres: one row per position, opened from the Tyre Condition field. Kept in a
-     modal because five positions x condition + tread + photo would otherwise
-     swamp the handover form for the many inspections that never touch it. -->
-<div class="modal-overlay" id="ho-tyre-modal" role="dialog" aria-modal="true" aria-labelledby="ho-tyre-title">
-	<div class="modal" style="max-width:760px">
-		<div class="modal__head">
-			<div><h3 id="ho-tyre-title">Tyre Condition</h3><div class="sub">Condition, tread depth and a photo per position</div></div>
-			<button type="button" class="modal__close" data-tyre-close aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
-		</div>
-		<div class="modal__body">
-			<div class="ho-tyre-wrap">
-				<table class="ho-tyre-tbl">
-					<thead>
-						<tr><th>Tyre Position</th><th>Condition</th><th>Tread Depth</th><th>Photo</th><th></th></tr>
-					</thead>
-					<tbody id="ho-tyre-rows"></tbody>
-				</table>
-			</div>
-		</div>
-		<div class="modal__foot">
-			<button type="button" class="btn btn--outline btn--sm" id="ho-tyre-add"><i class="fa-solid fa-plus"></i> Add Position</button>
-			<button type="button" class="btn btn--outline btn--sm" id="ho-tyre-clear">Reset</button>
-			<button type="button" class="btn btn--primary btn--sm" data-tyre-close>Done</button>
-		</div>
-	</div>
-</div>
-
-<!-- Attachment views: front / back / sides for one attachment, or for one unit
-     of it. A single modal retargeted per row — each row's panel is built once
-     and kept, because its photos live as blobs bound to those DOM nodes. -->
-<div class="modal-overlay" id="ho-view-modal" role="dialog" aria-modal="true" aria-labelledby="ho-view-title">
-	<div class="modal" style="max-width:720px">
-		<div class="modal__head">
-			<div><h3 id="ho-view-title">Attachment Views</h3><div class="sub" id="ho-view-sub">Condition and a photo per view</div></div>
-			<button type="button" class="modal__close" data-view-close aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
-		</div>
-		<div class="modal__body"><div id="ho-view-panels"></div></div>
-		<div class="modal__foot">
-			<button type="button" class="btn btn--outline btn--sm" id="ho-view-add"><i class="fa-solid fa-plus"></i> Add View</button>
-			<button type="button" class="btn btn--primary btn--sm" data-view-close>Done</button>
-		</div>
-	</div>
-</div>
-
 <!-- Confirm: every photograph captured, grouped by what it was shot against, so
      the inspector sees the evidence before the handover is committed. -->
 <div class="modal-overlay" id="ho-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="ho-confirm-title">
@@ -250,6 +194,10 @@
 	.ho-prev-row td { background:var(--bg); }
 	.ho-checklist { display:grid; grid-template-columns:repeat(2,1fr); gap:10px 18px; }
 	@media (max-width:900px){ .ho-checklist { grid-template-columns:1fr; } }
+	/* Attachments: one column, because each row carries a views table under it. */
+	.ho-checklist--wide { grid-template-columns:1fr; gap:16px; }
+	.ho-serial-wrap { margin-bottom:10px; }
+	.ho-serial-wrap:last-child { margin-bottom:0; }
 	.ho-chk-row { display:flex; align-items:center; gap:10px; padding:9px 14px;
 		border:1px solid var(--border); border-radius:var(--radius-sm,9px); background:var(--surface); }
 	.ho-chk-row label.check { flex:1; margin:0; font-weight:600; font-size:13px; }
@@ -307,45 +255,10 @@
 	.ho-ctl-row { display:flex; align-items:center; gap:8px; }
 	.ho-ctl-row > input, .ho-ctl-row > select { flex:0 1 220px; width:220px; max-width:100%; }
 
-	/* ---- tyre condition: trigger + per-position table ---- */
-	/* The trigger has to read as the field's control, so it borrows the same
-	   metrics the bundle gives input/select rather than looking like a button. */
-	.ho-tyre-open { flex:0 1 220px; width:220px; max-width:100%; display:flex; align-items:center;
-		justify-content:space-between; gap:8px; padding:10px 12px; font:inherit; text-align:left;
-		color:var(--text); background:var(--surface); border:1px solid var(--border);
-		border-radius:var(--radius-sm,9px); cursor:pointer; }
-	.ho-tyre-open:hover { border-color:var(--red); }
-	.ho-tyre-open i { color:var(--muted); font-size:11px; flex:none; }
-	.ho-tyre-open.is-set { border-color:var(--green); }
-	.ho-tyre-open span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-	.ho-tyre-wrap { overflow-x:auto; }
-	.ho-tyre-tbl { width:100%; border-collapse:collapse; min-width:560px; }
-	.ho-tyre-tbl th { text-align:left; font-size:11px; letter-spacing:.04em; text-transform:uppercase;
-		color:var(--muted); font-weight:700; padding:0 10px 9px; border-bottom:1px solid var(--border); }
-	.ho-tyre-tbl td { padding:11px 10px; border-bottom:1px solid var(--border); vertical-align:middle; }
-	.ho-tyre-tbl tr:last-child td { border-bottom:0; }
-	.ho-tyre-tbl .pos { font-weight:700; font-size:13px; white-space:nowrap; }
-	/* Segmented Good / Worn / Damaged — one tap, no dropdown to open on a phone. */
-	.ho-tyre-seg { display:inline-flex; border:1px solid var(--border); border-radius:8px; overflow:hidden; }
-	.ho-tyre-seg button { border:none; background:var(--surface); color:var(--muted); font:inherit;
-		font-size:12px; font-weight:600; padding:7px 12px; cursor:pointer; white-space:nowrap;
-		border-right:1px solid var(--border); }
-	.ho-tyre-seg button:last-child { border-right:0; }
-	.ho-tyre-seg button:hover { background:var(--bg); }
-	.ho-tyre-seg button.is-on { color:#fff; }
-	.ho-tyre-seg button.is-on[data-c="Good"] { background:var(--green); }
-	.ho-tyre-seg button.is-on[data-c="Worn"] { background:var(--amber,#d98324); }
-	.ho-tyre-seg button.is-on[data-c="Damaged"] { background:var(--red); }
-	.ho-tyre-depth { display:inline-flex; align-items:center; gap:6px; }
-	.ho-tyre-depth input { width:74px; padding:7px 9px; font:inherit; font-size:13px; text-align:right;
-		color:var(--text); background:var(--surface); border:1px solid var(--border);
-		border-radius:8px; }
-	.ho-tyre-depth input:focus { outline:none; border-color:var(--red); box-shadow:0 0 0 3px var(--red-soft); }
-	.ho-tyre-depth .u { font-size:12px; color:var(--muted); }
-	/* The webcam preview and the photo viewer are both launched from inside the
-	   tyre modal, so they have to outrank it. Every .modal-overlay shares one
-	   z-index, which leaves DOM order deciding — and the tyre modal is written
-	   after both, so without this it covers the very camera it opened. */
+	/* The webcam preview and the photo viewer are opened from inside the walk-round
+	   table, and the confirm dialog opens over the whole page. Every .modal-overlay
+	   shares one z-index, which leaves DOM order deciding, so the camera says
+	   outright that it outranks what launched it. */
 	#ho-cam-modal { z-index:1100; }
 
 	/* ---- fullscreen photo viewer ---- */
@@ -386,8 +299,14 @@
 	}
 
 	/* ---- attachment views ---- */
-	.ho-view-panel { display:none; }
-	.ho-view-panel.is-active { display:block; }
+	/* Inline under the attachment, not in a dialog: the views are the same kind of
+	   assessment as the walk-round above (condition, remark, photo per row), and
+	   two different-looking ways to record the same thing is what confused people. */
+	.ho-view-panel { display:none; margin:10px 0 2px 14px; padding:10px 0 2px 12px;
+		border-left:2px solid var(--border); }
+	.ho-view-panel.is-open { display:block; }
+	.ho-view-panel .ho-view-head { font-size:11px; font-weight:700; letter-spacing:.06em;
+		text-transform:uppercase; color:var(--muted); margin-bottom:8px; }
 	.ho-view-tbl { width:100%; border-collapse:collapse; }
 	.ho-view-tbl th { text-align:left; font-size:11px; letter-spacing:.04em; text-transform:uppercase;
 		color:var(--muted); font-weight:700; padding:0 10px 9px; border-bottom:1px solid var(--border); }
@@ -399,15 +318,12 @@
 	   inherit font, so the weight has to be restated — otherwise the added row
 	   reads lighter than the fixed rows and the column looks like two columns. */
 	.ho-area-tbl .area input,
-	.ho-tyre-tbl .pos input,
 	.ho-view-tbl .vw input { width:100%; min-width:130px; padding:7px 9px; font:inherit;
 		font-size:13px; font-weight:700; color:var(--text); background:var(--surface);
 		border:1px solid var(--border); border-radius:8px; }
 	.ho-area-tbl .area input::placeholder,
-	.ho-tyre-tbl .pos input::placeholder,
 	.ho-view-tbl .vw input::placeholder { font-weight:600; color:var(--muted); }
 	.ho-area-tbl .area input:focus,
-	.ho-tyre-tbl .pos input:focus,
 	.ho-view-tbl .vw input:focus { outline:none; border-color:var(--red); box-shadow:0 0 0 3px var(--red-soft); }
 	/* ---- confirm: the captured-evidence review ---- */
 	/* A grid, not a list: sixteen single-thumbnail rows was sixteen screens of
@@ -452,13 +368,29 @@
 		cursor:pointer; white-space:nowrap; display:inline-flex; align-items:center; gap:6px; }
 	.ho-views-btn:hover { border-color:var(--red); color:var(--red); }
 	.ho-views-btn.is-set { border-color:var(--green); color:var(--green); }
+	.ho-views-btn i.fa-chevron-down { transition:transform .15s; font-size:10px; }
+	.ho-views-btn.is-open i.fa-chevron-down { transform:rotate(180deg); }
 
 	/* ---- vehicle unit condition walk-round ---- */
 	.ho-area-wrap { overflow-x:auto; }
-	.ho-area-tbl { width:100%; border-collapse:collapse; min-width:560px; }
+	.ho-area-tbl { width:100%; border-collapse:collapse; min-width:820px; }
 	.ho-area-tbl th { text-align:left; font-size:11px; letter-spacing:.04em; text-transform:uppercase;
 		color:var(--muted); font-weight:700; padding:0 10px 9px; border-bottom:1px solid var(--border); }
 	.ho-area-tbl th.ph { width:80px; }
+	.ho-area-tbl th.td { width:122px; }
+	/* Tread depth is a tyre reading, so the column is empty on a body row. */
+	.ho-depth { display:inline-flex; align-items:center; gap:6px; white-space:nowrap; }
+	.ho-depth input { width:70px; padding:7px 9px; font:inherit; font-size:13px; text-align:right;
+		color:var(--text); background:var(--surface); border:1px solid var(--border);
+		border-radius:8px; }
+	.ho-depth input:focus { outline:none; border-color:var(--red); box-shadow:0 0 0 3px var(--red-soft); }
+	.ho-depth .u { font-size:12px; color:var(--muted); }
+	/* Body panels, then tyres, in one table — the heading row says which block a
+	   row belongs to without splitting the walk-round into two lists. */
+	.ho-area-grp td { padding:16px 10px 7px; font-size:11px; font-weight:700;
+		letter-spacing:.07em; text-transform:uppercase; color:var(--muted);
+		border-bottom:1px solid var(--border); }
+	.ho-area-tbl tbody .ho-area-grp:first-child td { padding-top:2px; }
 	.ho-area-tbl td { padding:11px 10px; border-bottom:1px solid var(--border); vertical-align:middle; }
 	.ho-area-tbl tr:last-child td { border-bottom:0; }
 	.ho-area-tbl .area { font-weight:700; font-size:13px; }
@@ -474,6 +406,37 @@
 	.ho-area-seg button.is-on[data-c="Good"] { background:var(--green); }
 	.ho-area-seg button.is-on[data-c="Damaged"] { background:var(--red); }
 	.ho-area-seg button.is-on[data-c="Requires Attention"] { background:var(--amber,#d98324); }
+	.ho-area-seg button.is-on[data-c="Worn"] { background:var(--amber,#d98324); }
+
+	/* ---- the remark column ---- */
+	/* Beside the verdict it explains, in both tables: this is where damage is
+	   described now, so it has to be readable straight down the table. It is the
+	   column that gives when the table is narrow, and the widest one otherwise. */
+	.ho-area-tbl .rem, .ho-view-tbl .rem { min-width:200px; }
+	.ho-area-tbl td.rem input, .ho-view-tbl td.rem input {
+		width:100%; min-width:0; padding:7px 10px; font:inherit; font-size:13px;
+		color:var(--text); background:var(--surface); border:1px solid var(--border);
+		border-radius:8px; }
+	.ho-area-tbl td.rem input:focus, .ho-view-tbl td.rem input:focus {
+		outline:none; border-color:var(--red); box-shadow:0 0 0 3px var(--red-soft); }
+	/* A row reporting a fault with nothing written against it says something is
+	   wrong without saying what, so the box asks. It stays a hint -- the handover
+	   still saves without one. */
+	.ho-area-tbl td.rem input.is-wanted, .ho-view-tbl td.rem input.is-wanted {
+		border-color:var(--amber,#d98324); background:#fffaf2; }
+	.ho-area-tbl td.rem input.is-wanted::placeholder,
+	.ho-view-tbl td.rem input.is-wanted::placeholder { color:var(--amber,#d98324); }
+
+	/* The attachment's own remark sits in the tick row's wrapper rather than in a
+	   table, so it carries its own label. */
+	.ho-chk-rem { margin:8px 0 0 14px; padding-left:12px; border-left:2px solid var(--border); }
+	.ho-rem { display:flex; align-items:center; gap:8px; }
+	.ho-rem > span { font-size:11px; font-weight:700; letter-spacing:.04em;
+		text-transform:uppercase; color:var(--muted); flex:none; }
+	.ho-rem input { flex:1; min-width:0; padding:7px 10px; font:inherit; font-size:13px;
+		color:var(--text); background:var(--surface); border:1px solid var(--border);
+		border-radius:8px; }
+	.ho-rem input:focus { outline:none; border-color:var(--red); box-shadow:0 0 0 3px var(--red-soft); }
 </style>
 
 <script>
@@ -483,9 +446,6 @@
 {% raw %}
 <script>
 (function () {
-	var AREAS = ["Front Bumper","Rear Bumper","Bonnet","Roof","Boot","Windscreen","Rear Glass","LH Front Door","LH Rear Door","RH Front Door","RH Rear Door","LH Fender","RH Fender","LH Quarter Panel","RH Quarter Panel","Wheels & Tyres","Interior","Undercarriage","Other"];
-	var TYPES = ["Scratch","Dent","Bend","Crack","Chip","Rust","Missing Part","Other"];
-	var SEVERITIES = ["Minor","Moderate","Severe"];
 
 	function callMethod(method, args) {
 		return fetch("/api/method/" + method, {
@@ -581,45 +541,14 @@
 	attachAutocomplete(document.querySelector('#ho-form [name="from_driver_label"]'), "from_driver", driverSource);
 	attachAutocomplete(document.querySelector('#ho-form [name="to_driver_label"]'), "to_driver", driverSource);
 
-	// ---------------------------------------------------- damage line editor
-	var tbody = document.querySelector("#ho-dmg-table tbody");
-	function selectHtml(name, options, value) {
-		return '<select data-f="' + name + '"><option value=""></option>' + options.map(function (o) {
-			return '<option' + (o === value ? " selected" : "") + ">" + esc(o) + "</option>";
-		}).join("") + "</select>";
-	}
-	function addRow(d, fromPrevious) {
-		d = d || {};
-		var tr = document.createElement("tr");
-		if (fromPrevious) tr.className = "ho-prev-row";
-		tr.innerHTML =
-			"<td>" + selectHtml("area", AREAS, d.area) + "</td>" +
-			"<td>" + selectHtml("damage_type", TYPES, d.damage_type) + "</td>" +
-			"<td>" + selectHtml("severity", SEVERITIES, d.severity || "Minor") + "</td>" +
-			'<td><input data-f="description" value="' + esc(d.description || "") + '" placeholder="Notes"></td>' +
-			'<td style="text-align:right">' +
-			(fromPrevious ? '<span class="badge badge--soft" title="Carried from the previous handover">prev</span> ' : "") +
-			'<button type="button" class="icon-del" title="Remove (repaired / not present)"><i class="fa-solid fa-trash"></i></button></td>';
-		tbody.appendChild(tr);
-	}
-	tbody.addEventListener("click", function (e) {
-		var b = e.target.closest(".icon-del");
-		if (b) b.closest("tr").remove();
-	});
-	document.getElementById("ho-add-dmg").addEventListener("click", function () { addRow(); });
-	function collectDamages() {
-		return Array.prototype.map.call(tbody.querySelectorAll("tr"), function (tr) {
-			function f(n) { var el = tr.querySelector('[data-f="' + n + '"]'); return el ? el.value.trim() : ""; }
-			return { area: f("area"), damage_type: f("damage_type"), severity: f("severity"), description: f("description") };
-		}).filter(function (d) { return d.area && d.damage_type; });
-	}
-
 	// ------------------------------------- dynamic tick lists (checklist + attachments)
 	// Both sections are master-driven and behave identically: a tick, plus a value
 	// input that only appears (and is only required) for "Check + Value" items.
 	var chkBox = document.getElementById("ho-checklist");
 	var attBox = document.getElementById("ho-attachments");
-	function renderTicks(box, items, emptyMsg) {
+	// `withRemark` is the attachments section: its rows carry a free remark
+	// alongside the tick, written the same way as the walk-round's.
+	function renderTicks(box, items, emptyMsg, withRemark) {
 		if (!items || !items.length) {
 			box.innerHTML = '<div class="muted">' + emptyMsg + "</div>";
 			return;
@@ -637,9 +566,16 @@
 				body += '<span data-qtywrap class="ho-qty"><span class="ho-qty-lbl">Qty</span>' +
 					'<input data-qty type="number" min="1" step="1" value="1"></span>';
 			}
+			var name = esc(it.item_name || it.name);
 			return '<div class="ho-chk-row-wrap">' +
 				'<div class="ho-chk-row" data-item="' + esc(it.name) + '" data-type="' + esc(type) + '"' +
 				' data-label="' + label + '">' + body + "</div>" +
+				(withRemark
+					? '<div class="ho-chk-rem" data-remwrap style="display:none">' +
+					  '<div class="ho-rem"><span>Remark</span>' +
+					  '<input data-remark placeholder="Optional note" aria-label="' +
+					  name + ' remark"></div></div>'
+					: "") +
 				'<div class="ho-serials" data-serials></div>' +
 				"</div>";
 		}).join("");
@@ -664,22 +600,27 @@
 		// innerHTML would preserve the typed serials (they used to be copied out
 		// first) but would silently throw away each row's captured photos, which
 		// only exist as blobs in the widget bound to that DOM node.
-		var existing = box.querySelectorAll(".ho-serial");
+		var existing = box.querySelectorAll(".ho-serial-wrap");
 		for (var i = existing.length; i < qty; i++) {
+			// The line and the unit's own views table share a wrapper, so winding
+			// the qty down takes both away together.
+			var unitWrap = document.createElement("div");
+			unitWrap.className = "ho-serial-wrap";
 			var line = document.createElement("div");
 			line.className = "ho-serial";
 			line.innerHTML = '<span class="n">' + (i + 1) + "</span>" +
 				'<input data-serial placeholder="' + esc(label) + " #" + (i + 1) + '">';
-			var host = document.createElement("span");
-			host.className = "ho-ph";
-			line.appendChild(host);
-			box.appendChild(line);
-			attachViewsButton(host, item, i + 1, label + " #" + (i + 1));
+			unitWrap.appendChild(line);
+			box.appendChild(unitWrap);
+			buildViewPanel(item, i + 1, label + " #" + (i + 1), unitWrap);
+			// A unit only exists because the attachment is ticked, so its views are
+			// open from the start -- there is nothing to reveal.
+			openViewPanel(item, i + 1, true);
 		}
 		for (var j = existing.length - 1; j >= qty; j--) {
-			// The unit's views live in the modal, not in the row, so they have to
-			// be dropped explicitly or they would queue photos for a unit that is
-			// no longer on the handover.
+			// The unit's views hold photos of their own, so they have to be dropped
+			// explicitly or they would queue uploads for a unit that is no longer
+			// on the handover.
 			dropViewPanel(item, j + 1);
 			dropWidgetsIn(existing[j]);
 			existing[j].remove();
@@ -704,6 +645,17 @@
 			}
 			var qtyWrap = row.querySelector("[data-qtywrap]");
 			if (qtyWrap) qtyWrap.style.display = e.target.checked ? "inline-flex" : "none";
+			var remWrap = row.parentNode.querySelector("[data-remwrap]");
+			if (remWrap) {
+				remWrap.style.display = e.target.checked ? "block" : "none";
+				if (!e.target.checked) remWrap.querySelector("[data-remark]").value = "";
+			}
+			// A whole-attachment views table only applies to an attachment that is
+			// actually on the vehicle; a Check + Quantity item has none of its own
+			// (its units carry them), so this is a no-op there.
+			if (row.getAttribute("data-type") !== "Check + Quantity") {
+				openViewPanel(row.getAttribute("data-item"), 0, e.target.checked);
+			}
 			syncSerials(row);
 			if (e.target.checked && qtyWrap) row.querySelector("[data-qty]").focus();
 		});
@@ -724,7 +676,9 @@
 			var item = row.getAttribute("data-item");
 			var valEl = row.querySelector("[data-val]");
 			var value = valEl ? valEl.value.trim() : "";
+			var remEl = row.parentNode.querySelector("[data-remark]");
 			var entry = { item: item, checked: chk.checked ? 1 : 0, value: value };
+			if (remEl) entry.remark = remEl.value.trim();
 
 			if (chk.checked && type === "Check + Value" && !value && !missing) missing = item;
 
@@ -769,28 +723,28 @@
 			renderTicks(chkBox, p.checklist,
 				"No checklist items configured yet. Add them in Desk &rarr; Handover Checklist Item.");
 			renderTicks(attBox, p.attachments,
-				"No attachments configured yet. Add them in Desk &rarr; Handover Attachment Item.");
-			// A Views button per attachment row — front, back and sides, each with
-			// its own condition and photo.
+				"No attachments configured yet. Add them in Desk &rarr; Handover Attachment Item.", true);
+			// The walk-round first: the attachment views borrow its condition
+			// wording, so the table has to be built before any panel is.
+			buildWalkTable(p.inspection_areas, p.area_conditions,
+				p.tyre_positions, p.tyre_conditions);
+			// A views table per attachment — front, back and sides, each with its
+			// own condition, remark and photo. It sits under its row, revealed when
+			// the attachment is ticked.
 			//
 			// A "Check + Quantity" item is skipped: its views belong to the unit
 			// rows the qty spinner creates (Trailer #1, Trailer #2), each of which
-			// gets its own button in syncSerials. A set on the heading as well
-			// would be a second, ambiguous place to put the same picture.
+			// gets its own table in syncSerials. A set on the heading as well would
+			// be a second, ambiguous place to put the same picture.
 			attBox.querySelectorAll(".ho-chk-row").forEach(function (row) {
 				if (row.getAttribute("data-type") === "Check + Quantity") return;
-				var host = document.createElement("span");
-				host.className = "ho-ph";
-				row.appendChild(host);
-				attachViewsButton(host, row.getAttribute("data-item"), 0,
-					(row.textContent || "Attachment").trim());
+				buildViewPanel(row.getAttribute("data-item"), 0,
+					(row.textContent || "Attachment").trim(), row.parentNode);
 			});
 			// Odometer and fuel take one shot each, inline at the end of the field.
-			// Tyres are per position, so their cameras live in the tyre modal.
+			// Every other camera on this handover hangs off a row in a table.
 			attachFieldPhoto("odometer", { target: "odometer" }, { title: "Odometer photo" });
 			attachFieldPhoto("fuel_level", { target: "fuel" }, { title: "Fuel gauge photo" });
-			buildTyreTable(p.tyre_positions, p.tyre_conditions);
-			buildAreaTable(p.inspection_areas, p.area_conditions);
 			ctx.innerHTML = "<b>" + esc(p.model) + "</b> · Plate " + esc(p.plate) +
 				(p.current_driver && p.current_driver.driver_name ? " · Current driver: <b>" + esc(p.current_driver.driver_name) + "</b>" : "") +
 				(p.odometer ? " · Last odometer " + p.odometer.toLocaleString() + " km" : "");
@@ -799,13 +753,20 @@
 				document.querySelector('#ho-form [name="from_driver_label"]').value = p.current_driver.driver_name || p.current_driver.driver;
 			}
 			if (p.previous_handover) {
+				// Rows the previous inspection left carrying damage come back
+				// pre-set, shaded, for this one to confirm or clear.
+				var seeded = seedWalkRows("area", p.previous_areas) +
+					seedWalkRows("tyre", p.previous_tyres);
 				var note = document.getElementById("ho-prev-note");
 				note.style.display = "";
-				note.innerHTML = '<i class="fa-solid fa-circle-info"></i> Pre-filled from the previous handover <b>' +
+				note.innerHTML = '<i class="fa-solid fa-circle-info"></i> Previous handover <b>' +
 					esc(p.previous_handover.name) + "</b> (" + esc(p.previous_handover.date) +
-					", held by " + esc(p.previous_handover.holder || "—") +
-					"). Confirm each damage, adjust severity if worse, remove lines that were repaired, and add anything new.";
-				(p.previous_damages || []).forEach(function (d) { addRow(d, true); });
+					", held by " + esc(p.previous_handover.holder || "—") + "). " +
+					(seeded
+						? "The " + seeded + " shaded row" + (seeded === 1 ? "" : "s") +
+						  " below still carried damage at that inspection — confirm each one, " +
+						  "update the remark if it is worse, or clear the condition if it has been repaired."
+						: "Nothing was left outstanding on it.");
 			}
 		})
 		.catch(function (err) {
@@ -1161,214 +1122,95 @@
 
 	// Put a widget on the label line of a plain form field, so it lines up with
 	// the label rather than fighting the input (or a select's own chevron).
-	// --------------------------------------------------------- tyre condition
-	// One row per position: condition, tread depth and a photo. The handover form
-	// shows only a summary; the rows themselves live in a modal so five tyres do
-	// not dominate a form most inspections fill in without touching them.
-	var tyreRows = [];
-	// Held so "Clear all" rebuilds with whatever the server sent, not the fallback.
-	var lastTyrePositions = null, lastTyreConditions = null;
-
-	var TYRE_FALLBACK_POSITIONS = [
-		"Front Left (FL)", "Front Right (FR)", "Rear Left (RL)", "Rear Right (RR)", "Spare Tyre"
-	];
-	var TYRE_FALLBACK_CONDITIONS = ["Good", "Worn", "Damaged"];
-
-	function addTyreRow(pos, conditions, custom) {
-		var body = document.getElementById("ho-tyre-rows");
-		if (!body) return null;
-		var tr = document.createElement("tr");
-
-		var tdPos = document.createElement("td");
-		tdPos.className = "pos";
-		var nameInput = null;
-		if (custom) {
-			// Added positions name themselves — a second drive axle, a trailer
-			// wheel. The photo route reads the name live, so renaming a row after
-			// shooting it still lands the picture correctly.
-			nameInput = document.createElement("input");
-			nameInput.type = "text";
-			nameInput.placeholder = "Name this position…";
-			nameInput.value = pos || "";
-			nameInput.setAttribute("aria-label", "Tyre position name");
-			tdPos.appendChild(nameInput);
-		} else {
-			tdPos.textContent = pos;
-		}
-
-		var tdCond = document.createElement("td");
-		var seg = document.createElement("div");
-		seg.className = "ho-tyre-seg";
-		seg.innerHTML = conditions.map(function (c) {
-			return '<button type="button" data-c="' + esc(c) + '">' + esc(c) + "</button>";
-		}).join("");
-		tdCond.appendChild(seg);
-
-		var tdDepth = document.createElement("td");
-		var depthWrap = document.createElement("span");
-		depthWrap.className = "ho-tyre-depth";
-		var depth = document.createElement("input");
-		depth.type = "number"; depth.min = "0"; depth.step = "0.1"; depth.placeholder = "—";
-		depth.setAttribute("aria-label", (pos || "Tyre") + " tread depth in mm");
-		depthWrap.appendChild(depth);
-		var unit = document.createElement("span");
-		unit.className = "u"; unit.textContent = "mm";
-		depthWrap.appendChild(unit);
-		tdDepth.appendChild(depthWrap);
-
-		var tdPhoto = document.createElement("td");
-		var host = document.createElement("span");
-		host.className = "ho-ph";
-		tdPhoto.appendChild(host);
-
-		var tdRm = document.createElement("td");
-		tdRm.style.width = "34px";
-
-		tr.appendChild(tdPos); tr.appendChild(tdCond);
-		tr.appendChild(tdDepth); tr.appendChild(tdPhoto); tr.appendChild(tdRm);
-		body.appendChild(tr);
-
-		var row = { name: nameInput, label: pos || "", condition: "", depth: depth, seg: seg, tr: tr };
-		row.position = function () {
-			return row.name ? row.name.value.trim() : row.label;
-		};
-		// Routed per position so attach_handover_photos can drop the file onto
-		// the reading it belongs to; a function keeps it in step with a rename.
-		row.widget = photoWidget(host, { target: "tyre_row", position: row.position },
-			{ title: (pos || "Tyre") + " photo" });
-
-		seg.addEventListener("click", function (e) {
-			var btn = e.target.closest("button[data-c]");
-			if (!btn) return;
-			// Tapping the chosen one again clears it — there is no "unset"
-			// button, and a mis-tap should not be permanent.
-			row.condition = (row.condition === btn.dataset.c) ? "" : btn.dataset.c;
-			seg.querySelectorAll("button").forEach(function (b) {
-				b.classList.toggle("is-on", b.dataset.c === row.condition);
-			});
-			updateTyreSummary();
-		});
-		depth.addEventListener("input", updateTyreSummary);
-		if (nameInput) nameInput.addEventListener("input", updateTyreSummary);
-
-		var rm = document.createElement("button");
-		rm.type = "button"; rm.className = "ho-area-rm";
-		rm.title = "Remove this position";
-		rm.innerHTML = '<i class="fa-solid fa-xmark"></i>';
-		rm.addEventListener("click", function () {
-			dropWidgetsIn(tr);
-			tr.remove();
-			tyreRows = tyreRows.filter(function (r) { return r !== row; });
-			updateTyreSummary();
-		});
-		tdRm.appendChild(rm);
-
-		tyreRows.push(row);
-		return row;
-	}
-
-	function buildTyreTable(positions, conditions) {
-		positions = (positions && positions.length) ? positions : TYRE_FALLBACK_POSITIONS;
-		conditions = (conditions && conditions.length) ? conditions : TYRE_FALLBACK_CONDITIONS;
-		lastTyrePositions = positions;
-		lastTyreConditions = conditions;
-		var body = document.getElementById("ho-tyre-rows");
-		if (!body) return;
-		body.innerHTML = "";
-		tyreRows = [];
-		positions.forEach(function (pos) { addTyreRow(pos, conditions, false); });
-		updateTyreSummary();
-	}
-
-	// Rows the inspector actually touched. A photo on its own counts, so the
-	// server keeps the row for the upload to land on.
-	function collectTyres() {
-		return tyreRows.filter(function (r) {
-			return r.position() &&
-				(r.condition || r.depth.value !== "" || r.widget.shots().length);
-		}).map(function (r) {
-			return {
-				position: r.position(),
-				condition: r.condition,
-				tread_depth_mm: r.depth.value === "" ? null : Number(r.depth.value),
-				has_photo: r.widget.shots().length ? 1 : 0,
-			};
-		});
-	}
-
-	function updateTyreSummary() {
-		var label = document.getElementById("ho-tyre-summary");
-		var trigger = document.getElementById("ho-tyre-open");
-		if (!label || !trigger) return;
-		var done = collectTyres();
-		if (!done.length) {
-			label.textContent = "Not recorded";
-			trigger.classList.remove("is-set");
-			return;
-		}
-		// Lead with the worst reading — that is what anyone glancing at the form
-		// needs to know, and the count says how much of the walk-round is done.
-		var worst = "";
-		["Damaged", "Worn", "Good"].some(function (c) {
-			return done.some(function (r) { return r.condition === c; }) ? (worst = c) : false;
-		});
-		label.textContent = (worst ? worst + " — " : "") + done.length + " of " + tyreRows.length + " recorded";
-		trigger.title = done.map(function (r) {
-			return r.position + ": " + (r.condition || "—");
-		}).join("\n");
-		trigger.classList.add("is-set");
-	}
-
-	var tyreModal = document.getElementById("ho-tyre-modal");
-	document.getElementById("ho-tyre-open").addEventListener("click", function () {
-		tyreModal.classList.add("is-open");
-	});
-	tyreModal.addEventListener("click", function (e) {
-		if (e.target.closest("[data-tyre-close]") || e.target === tyreModal) {
-			tyreModal.classList.remove("is-open");
-		}
-	});
-	document.getElementById("ho-tyre-clear").addEventListener("click", function () {
-		if (!confirm("Reset the tyre list — discarding every reading, photo and change to the rows?")) return;
-		buildTyreTable(lastTyrePositions, lastTyreConditions);
-	});
-	document.getElementById("ho-tyre-add").addEventListener("click", function () {
-		var row = addTyreRow("", lastTyreConditions || TYRE_FALLBACK_CONDITIONS, true);
-		if (row && row.name) row.name.focus();
-		updateTyreSummary();
-	});
-
 	// ------------------------------------------- vehicle unit condition record
-	// The walk-round in the Vehicle Unit Condition card: condition + photo per
-	// area. Unlike the
-	// tyres this stays on the page rather than in a modal — it IS the section's
-	// content, and an inspector can append areas for damage the standard five
-	// do not cover.
-	var areaRows = [];
+	// One table for the whole walk-round: the body panels first, then the tyres,
+	// every row carrying a condition, a remark and its photos. The tyres used to
+	// sit behind a "Tyre Condition" field that opened a modal -- a second place to
+	// record the same kind of thing, and one that hid whether they had been looked
+	// at at all. Rows can be appended to either block for anything the standard
+	// set does not cover.
+	//
+	// The remark is load-bearing: a row marked Damaged or Requires Attention
+	// becomes a damage line on the saved handover, described by what is written
+	// here (garagedesk.api.fleet._derived_damages). The form no longer carries a
+	// damage table of its own, which asked a second time for what the inspector
+	// had already assessed on this table.
+	var walkRows = [];
+	var tyreGroupTr = null;                 // where added areas are spliced in above
 	var AREA_FALLBACK = ["Front View", "Rear / Back View", "Left Side View",
 		"Right Side View", "Interior / Cabin"];
 	var AREA_FALLBACK_CONDITIONS = ["Good", "Damaged", "Requires Attention"];
-	var lastAreaConditions = null;
+	var TYRE_FALLBACK_POSITIONS = ["Front Left (FL)", "Front Right (FR)",
+		"Rear Left (RL)", "Rear Right (RR)", "Spare Tyre"];
+	var TYRE_FALLBACK_CONDITIONS = ["Good", "Worn", "Damaged"];
+	// Held so a rebuild uses whatever the server sent rather than the fallback.
+	// The attachment views borrow the area wording for their own segments.
+	var lastAreaConditions = null, lastTyreConditions = null;
 
-	function addAreaRow(area, conditions, custom) {
+	// Verdicts that mean something is wrong, so the remark is the description of
+	// it. Mirrors _CONDITION_SEVERITY in garagedesk.api.fleet.
+	var WANTS_REMARK = { "Damaged": 1, "Requires Attention": 1 };
+
+	function rowsOfKind(kind) {
+		return walkRows.filter(function (r) { return r.kind === kind; });
+	}
+	function areaRows() { return rowsOfKind("area"); }
+	function tyreRows() { return rowsOfKind("tyre"); }
+
+	function addGroupRow(title) {
 		var body = document.getElementById("ho-area-rows");
 		if (!body) return null;
 		var tr = document.createElement("tr");
+		tr.className = "ho-area-grp";
+		var td = document.createElement("td");
+		td.colSpan = 6;
+		td.textContent = title;
+		tr.appendChild(td);
+		body.appendChild(tr);
+		return tr;
+	}
 
-		var tdArea = document.createElement("td");
-		tdArea.className = "area";
+	function paintCondition(row) {
+		row.seg.querySelectorAll("button").forEach(function (b) {
+			b.classList.toggle("is-on", b.dataset.c === row.condition);
+		});
+		syncRemarkHint(row);
+	}
+
+	// A row that reports a fault with no remark is a handover that says something
+	// is wrong without saying what, so the box asks for it rather than waiting to
+	// be noticed. It stays a hint -- an inspector can still save without one.
+	function syncRemarkHint(row) {
+		var wanted = !!WANTS_REMARK[row.condition];
+		row.remark.classList.toggle("is-wanted", wanted && !row.remark.value.trim());
+		row.remark.placeholder = wanted
+			? "What is wrong? This is the damage description"
+			: "Optional note";
+	}
+
+	// kind: "area" -- a body panel or the interior; "tyre" -- one position, which
+	// also carries a tread depth.
+	function addWalkRow(kind, label, conditions, custom, before) {
+		var body = document.getElementById("ho-area-rows");
+		if (!body) return null;
+		var isTyre = kind === "tyre";
+		var tr = document.createElement("tr");
+
+		var tdName = document.createElement("td");
+		tdName.className = "area";
 		var nameInput = null;
 		if (custom) {
 			// Added rows name themselves; the photo route reads the name live, so
 			// renaming one before saving still lands its picture correctly.
 			nameInput = document.createElement("input");
 			nameInput.type = "text";
-			nameInput.placeholder = "Name this area…";
-			nameInput.value = area || "";
-			nameInput.setAttribute("aria-label", "Inspection area name");
-			tdArea.appendChild(nameInput);
+			nameInput.placeholder = isTyre ? "Name this position…" : "Name this area…";
+			nameInput.value = label || "";
+			nameInput.setAttribute("aria-label",
+				isTyre ? "Tyre position name" : "Inspection area name");
+			tdName.appendChild(nameInput);
 		} else {
-			tdArea.textContent = area;
+			tdName.textContent = label;
 		}
 
 		var tdCond = document.createElement("td");
@@ -1379,6 +1221,34 @@
 		}).join("");
 		tdCond.appendChild(seg);
 
+		// The remark sits beside the verdict it explains, in its own column: this is
+		// where damage is described, so it has to be visible at a glance down the
+		// table rather than tucked on a line of its own.
+		var tdRem = document.createElement("td");
+		tdRem.className = "rem";
+		var remark = document.createElement("input");
+		remark.type = "text";
+		remark.placeholder = "Optional note";
+		remark.setAttribute("aria-label", (label || "Row") + " remark");
+		tdRem.appendChild(remark);
+
+		// Tread depth is a tyre reading; the column stays empty on a body row
+		// rather than the two kinds of row being laid out differently.
+		var tdDepth = document.createElement("td");
+		var depth = null;
+		if (isTyre) {
+			var depthWrap = document.createElement("span");
+			depthWrap.className = "ho-depth";
+			depth = document.createElement("input");
+			depth.type = "number"; depth.min = "0"; depth.step = "0.1"; depth.placeholder = "—";
+			depth.setAttribute("aria-label", (label || "Tyre") + " tread depth in mm");
+			depthWrap.appendChild(depth);
+			var unit = document.createElement("span");
+			unit.className = "u"; unit.textContent = "mm";
+			depthWrap.appendChild(unit);
+			tdDepth.appendChild(depthWrap);
+		}
+
 		var tdPhoto = document.createElement("td");
 		var host = document.createElement("span");
 		host.className = "ho-ph";
@@ -1387,111 +1257,208 @@
 		var tdRm = document.createElement("td");
 		tdRm.style.width = "34px";
 
-		tr.appendChild(tdArea); tr.appendChild(tdCond);
-		tr.appendChild(tdPhoto); tr.appendChild(tdRm);
-		body.appendChild(tr);
+		tr.appendChild(tdName); tr.appendChild(tdCond); tr.appendChild(tdRem);
+		tr.appendChild(tdDepth); tr.appendChild(tdPhoto); tr.appendChild(tdRm);
+
+		if (before) {
+			body.insertBefore(tr, before);
+		} else {
+			body.appendChild(tr);
+		}
 
 		var row = {
+			kind: kind,
 			fixed: !custom,
 			name: nameInput,
-			label: area || "",
+			label: label || "",
 			condition: "",
 			seg: seg,
+			depth: depth,
+			remark: remark,
 			tr: tr,
 		};
-		row.area = function () {
+		row.value = function () {
 			return row.name ? row.name.value.trim() : row.label;
 		};
 		// The route is read at upload time, so a function keeps it in step with a
 		// row the inspector renames after taking the photo.
-		row.widget = photoWidget(host, { target: "area_row", area: row.area },
-			{ title: (area || "Inspection area") + " photo" });
+		row.widget = photoWidget(host,
+			isTyre ? { target: "tyre_row", position: row.value }
+			       : { target: "area_row", area: row.value },
+			{ title: (label || (isTyre ? "Tyre" : "Inspection area")) + " photo" });
 
 		seg.addEventListener("click", function (e) {
 			var btn = e.target.closest("button[data-c]");
 			if (!btn) return;
+			// Tapping the chosen one again clears it — there is no "unset" button,
+			// and a mis-tap should not be permanent.
 			row.condition = (row.condition === btn.dataset.c) ? "" : btn.dataset.c;
-			seg.querySelectorAll("button").forEach(function (b) {
-				b.classList.toggle("is-on", b.dataset.c === row.condition);
-			});
+			paintCondition(row);
 		});
+		remark.addEventListener("input", function () { syncRemarkHint(row); });
 
 		// Every row is removable — a van has no cabin worth a separate shot, a
 		// trailer has no interior at all. Standard rows come back on reload.
 		var rm = document.createElement("button");
 		rm.type = "button"; rm.className = "ho-area-rm";
-		rm.title = "Remove this row";
+		rm.title = isTyre ? "Remove this position" : "Remove this row";
 		rm.innerHTML = '<i class="fa-solid fa-xmark"></i>';
 		rm.addEventListener("click", function () {
 			dropWidgetsIn(tr);
 			tr.remove();
-			areaRows = areaRows.filter(function (r) { return r !== row; });
+			walkRows = walkRows.filter(function (r) { return r !== row; });
 		});
 		tdRm.appendChild(rm);
 
-		areaRows.push(row);
+		walkRows.push(row);
 		return row;
 	}
 
-	function buildAreaTable(areas, conditions) {
+	function buildWalkTable(areas, areaConditions, positions, tyreConditions) {
 		areas = (areas && areas.length) ? areas : AREA_FALLBACK;
-		lastAreaConditions = (conditions && conditions.length) ? conditions : AREA_FALLBACK_CONDITIONS;
+		positions = (positions && positions.length) ? positions : TYRE_FALLBACK_POSITIONS;
+		lastAreaConditions = (areaConditions && areaConditions.length)
+			? areaConditions : AREA_FALLBACK_CONDITIONS;
+		lastTyreConditions = (tyreConditions && tyreConditions.length)
+			? tyreConditions : TYRE_FALLBACK_CONDITIONS;
 		var body = document.getElementById("ho-area-rows");
 		if (!body) return;
 		body.innerHTML = "";
-		areaRows = [];
-		areas.forEach(function (a) { addAreaRow(a, lastAreaConditions, false); });
+		walkRows = [];
+		addGroupRow("Body & interior");
+		areas.forEach(function (a) { addWalkRow("area", a, lastAreaConditions, false); });
+		tyreGroupTr = addGroupRow("Tyres");
+		positions.forEach(function (p) { addWalkRow("tyre", p, lastTyreConditions, false); });
 	}
 
-	// Areas the inspector actually assessed. A photo alone counts, so the server
-	// keeps the row for the upload to land on.
+	// Rows the previous handover left carrying damage, put back so a fault nobody
+	// has fixed stays on the record. This is what the damage table's "prev" rows
+	// used to do; an inspector who leaves the row alone re-reports it, and the
+	// controller then diffs it as known rather than new.
+	function seedWalkRows(kind, seeds) {
+		var conditions = kind === "tyre"
+			? (lastTyreConditions || TYRE_FALLBACK_CONDITIONS)
+			: (lastAreaConditions || AREA_FALLBACK_CONDITIONS);
+		var seeded = 0;
+		(seeds || []).forEach(function (seed) {
+			var wanted = String(seed.position || seed.area || "").trim();
+			if (!wanted) return;
+			var row = rowsOfKind(kind).filter(function (r) {
+				return r.value().toLowerCase() === wanted.toLowerCase();
+			})[0];
+			// An area the standard set no longer lays out (it was added by hand
+			// last time) comes back as an added row rather than being dropped.
+			if (!row) {
+				row = addWalkRow(kind, wanted, conditions, true,
+					kind === "area" ? tyreGroupTr : null);
+			}
+			if (!row) return;
+			if (conditions.indexOf(seed.condition) !== -1) row.condition = seed.condition;
+			if (seed.remark) row.remark.value = seed.remark;
+			paintCondition(row);
+			row.tr.classList.add("ho-prev-row");
+			seeded += 1;
+		});
+		return seeded;
+	}
+
+	// Rows the inspector actually assessed. A photo or a remark on its own counts,
+	// so the server keeps the row for the upload to land on.
 	function collectAreas() {
-		return areaRows.filter(function (r) {
-			return r.area() && (r.condition || r.widget.shots().length);
+		return areaRows().filter(function (r) {
+			return r.value() &&
+				(r.condition || r.remark.value.trim() || r.widget.shots().length);
 		}).map(function (r) {
 			return {
-				area: r.area(),
+				area: r.value(),
 				condition: r.condition,
+				remark: r.remark.value.trim(),
+				has_photo: r.widget.shots().length ? 1 : 0,
+			};
+		});
+	}
+
+	function collectTyres() {
+		return tyreRows().filter(function (r) {
+			return r.value() && (r.condition || r.depth.value !== "" ||
+				r.remark.value.trim() || r.widget.shots().length);
+		}).map(function (r) {
+			return {
+				position: r.value(),
+				condition: r.condition,
+				tread_depth_mm: r.depth.value === "" ? null : Number(r.depth.value),
+				remark: r.remark.value.trim(),
 				has_photo: r.widget.shots().length ? 1 : 0,
 			};
 		});
 	}
 
 	document.getElementById("ho-add-area").addEventListener("click", function () {
-		var row = addAreaRow("", lastAreaConditions || AREA_FALLBACK_CONDITIONS, true);
+		// Above the Tyres heading, so an added panel joins the block it belongs to.
+		var row = addWalkRow("area", "", lastAreaConditions || AREA_FALLBACK_CONDITIONS,
+			true, tyreGroupTr);
+		if (row && row.name) row.name.focus();
+	});
+	document.getElementById("ho-add-tyre").addEventListener("click", function () {
+		var row = addWalkRow("tyre", "", lastTyreConditions || TYRE_FALLBACK_CONDITIONS, true);
 		if (row && row.name) row.name.focus();
 	});
 
 	// ------------------------------------------------- attachment views
 	// Front / back / sides per attachment, and per unit where an attachment has
-	// several. One modal, retargeted: each row's panel is built on first open and
-	// then kept, because its captures live as blobs bound to those DOM nodes —
-	// rebuilding the panel would silently throw the photos away.
-	var viewPanels = {};                 // key -> {el, body, rows[], btn}
-	var activeViewKey = null;            // which panel the modal is showing
+	// several. The panel is built once per row and kept -- its captures live as
+	// blobs bound to those DOM nodes, so rebuilding it would silently throw the
+	// photos away.
+	//
+	// It sits inline under its attachment rather than in a dialog: a view is the
+	// same assessment as a walk-round row above (condition, remark, photo), and
+	// two different-looking ways to record the same thing is exactly what made
+	// this form confusing. Same table, same segments, same remark control.
+	var viewPanels = {};                 // key -> {el, body, rows[], item, unit_no, label}
 	var ATTACHMENT_VIEWS = ["Front", "Back", "Left Side", "Right Side"];
 
 	function viewKey(item, unitNo) { return item + "::" + (unitNo || 0); }
 
-	function buildViewPanel(item, unitNo, label) {
+	function buildViewPanel(item, unitNo, label, mount) {
 		var key = viewKey(item, unitNo);
 		if (viewPanels[key]) return viewPanels[key];
 
 		var panel = document.createElement("div");
 		panel.className = "ho-view-panel";
 		panel.setAttribute("data-vk", key);
+		var head = document.createElement("div");
+		head.className = "ho-view-head";
+		head.textContent = label + " — condition by view";
+		panel.appendChild(head);
 		var table = document.createElement("table");
 		table.className = "ho-view-tbl";
-		table.innerHTML = "<thead><tr><th>View</th><th>Condition</th><th>Photo</th><th></th></tr></thead>";
+		table.innerHTML = "<thead><tr><th>View</th><th>Condition</th><th class=\"rem\">Remark</th>" +
+			"<th>Photo</th><th></th></tr></thead>";
 		var tbody = document.createElement("tbody");
 		table.appendChild(tbody);
 		panel.appendChild(table);
-		document.getElementById("ho-view-panels").appendChild(panel);
+
+		var add = document.createElement("button");
+		add.type = "button";
+		add.className = "btn btn--outline btn--sm";
+		add.style.marginTop = "10px";
+		add.innerHTML = '<i class="fa-solid fa-plus"></i> Add View';
+		add.addEventListener("click", function () {
+			var row = addViewRow(key, "", true);
+			if (row && row.name) row.name.focus();
+		});
+		panel.appendChild(add);
+		mount.appendChild(panel);
 
 		viewPanels[key] = { el: panel, body: tbody, rows: [], item: item,
-			unit_no: unitNo || 0, label: label, btn: null };
+			unit_no: unitNo || 0, label: label };
 		ATTACHMENT_VIEWS.forEach(function (vw) { addViewRow(key, vw, false); });
 		return viewPanels[key];
+	}
+
+	function openViewPanel(item, unitNo, open) {
+		var p = viewPanels[viewKey(item, unitNo)];
+		if (p) p.el.classList.toggle("is-open", !!open);
 	}
 
 	function addViewRow(key, vw, custom) {
@@ -1522,6 +1489,16 @@
 		}).join("");
 		tdC.appendChild(seg);
 
+		// Same remark column as the walk-round rows, in the same place relative to
+		// the condition, so the two tables read identically.
+		var tdRem = document.createElement("td");
+		tdRem.className = "rem";
+		var remark = document.createElement("input");
+		remark.type = "text";
+		remark.placeholder = "Optional note";
+		remark.setAttribute("aria-label", p.label + " " + (vw || "view") + " remark");
+		tdRem.appendChild(remark);
+
 		var tdP = document.createElement("td");
 		var host = document.createElement("span");
 		host.className = "ho-ph";
@@ -1530,10 +1507,12 @@
 		var tdRm = document.createElement("td");
 		tdRm.style.width = "34px";
 
-		tr.appendChild(tdV); tr.appendChild(tdC); tr.appendChild(tdP); tr.appendChild(tdRm);
+		tr.appendChild(tdV); tr.appendChild(tdC); tr.appendChild(tdRem);
+		tr.appendChild(tdP); tr.appendChild(tdRm);
+
 		p.body.appendChild(tr);
 
-		var row = { name: nameInput, label: vw || "", condition: "" };
+		var row = { name: nameInput, label: vw || "", condition: "", remark: remark, seg: seg };
 		row.view = function () {
 			return row.name ? row.name.value.trim() : row.label;
 		};
@@ -1545,12 +1524,9 @@
 			var btn = e.target.closest("button[data-c]");
 			if (!btn) return;
 			row.condition = (row.condition === btn.dataset.c) ? "" : btn.dataset.c;
-			seg.querySelectorAll("button").forEach(function (b) {
-				b.classList.toggle("is-on", b.dataset.c === row.condition);
-			});
-			refreshViewBtn(key);
+			paintCondition(row);
 		});
-		if (nameInput) nameInput.addEventListener("input", function () { refreshViewBtn(key); });
+		remark.addEventListener("input", function () { syncRemarkHint(row); });
 
 		var rm = document.createElement("button");
 		rm.type = "button"; rm.className = "ho-area-rm";
@@ -1560,7 +1536,6 @@
 			dropWidgetsIn(tr);
 			tr.remove();
 			p.rows = p.rows.filter(function (r) { return r !== row; });
-			refreshViewBtn(key);
 		});
 		tdRm.appendChild(rm);
 
@@ -1568,62 +1543,49 @@
 		return row;
 	}
 
-	function viewsDone(key) {
-		var p = viewPanels[key];
-		if (!p) return 0;
-		return p.rows.filter(function (r) {
-			return r.view() && (r.condition || r.widget.shots().length);
-		}).length;
-	}
-
-	function refreshViewBtn(key) {
-		var p = viewPanels[key];
-		if (!p || !p.btn) return;
-		var n = viewsDone(key);
-		p.btn.querySelector("[data-n]").textContent = n ? n + "/" + p.rows.length : "Views";
-		p.btn.classList.toggle("is-set", !!n);
-	}
-
-	// A "Views" button for one attachment row or one unit row.
-	function attachViewsButton(host, item, unitNo, label) {
-		var btn = document.createElement("button");
-		btn.type = "button";
-		btn.className = "ho-views-btn";
-		btn.innerHTML = '<i class="fa-solid fa-images"></i> <span data-n>Views</span>';
-		btn.addEventListener("click", function () {
-			var p = buildViewPanel(item, unitNo, label);
-			p.btn = btn;
-			Object.keys(viewPanels).forEach(function (k) {
-				viewPanels[k].el.classList.toggle("is-active", k === viewKey(item, unitNo));
-			});
-			activeViewKey = viewKey(item, unitNo);
-			document.getElementById("ho-view-title").textContent = label;
-			document.getElementById("ho-view-sub").textContent =
-				"Condition and a photo per view";
-			viewModal.classList.add("is-open");
-		});
-		host.appendChild(btn);
-		return btn;
-	}
-
 	// Rows for save: every view the inspector actually assessed.
 	function collectAttachmentViews() {
 		var out = [];
 		Object.keys(viewPanels).forEach(function (k) {
 			var p = viewPanels[k];
+			if (!panelIsOnHandover(p)) return;
 			p.rows.forEach(function (r) {
 				if (!r.view()) return;
-				if (!r.condition && !r.widget.shots().length) return;
+				var remark = r.remark.value.trim();
+				if (!r.condition && !remark && !r.widget.shots().length) return;
 				out.push({
 					attachment_item: p.item,
 					unit_no: p.unit_no,
 					view: r.view(),
 					condition: r.condition,
+					remark: remark,
 					has_photo: r.widget.shots().length ? 1 : 0,
 				});
 			});
 		});
 		return out;
+	}
+
+	// A views panel is built for every attachment as soon as the list renders, so
+	// anything reading the panels has to ask whether that attachment is actually
+	// on the vehicle. An attachment nobody ticked is not an unphotographed one --
+	// it is not part of this handover at all.
+	//
+	// Unit panels (unit_no > 0) need no check: a unit only exists because the
+	// attachment is ticked with a quantity, and winding the quantity down drops
+	// its panel outright.
+	function attachmentIsTicked(item) {
+		var ticked = false;
+		attBox.querySelectorAll(".ho-chk-row").forEach(function (row) {
+			if (row.getAttribute("data-item") !== item) return;
+			var chk = row.querySelector("[data-chk]");
+			ticked = !!(chk && chk.checked);
+		});
+		return ticked;
+	}
+
+	function panelIsOnHandover(p) {
+		return p.unit_no ? true : attachmentIsTicked(p.item);
 	}
 
 	// Units can be removed by winding the qty down; their panel would otherwise
@@ -1636,18 +1598,6 @@
 		p.el.remove();
 		delete viewPanels[key];
 	}
-
-	var viewModal = document.getElementById("ho-view-modal");
-	viewModal.addEventListener("click", function (e) {
-		if (e.target.closest("[data-view-close]") || e.target === viewModal) {
-			viewModal.classList.remove("is-open");
-		}
-	});
-	document.getElementById("ho-view-add").addEventListener("click", function () {
-		if (!activeViewKey) return;
-		var row = addViewRow(activeViewKey, "", true);
-		if (row && row.name) row.name.focus();
-	});
 
 	function attachFieldPhoto(fieldName, route, opts) {
 		var input = document.querySelector('#ho-form [name="' + fieldName + '"]');
@@ -1881,19 +1831,28 @@
 		});
 		sections.push(["Readings", readings]);
 
-		sections.push(["Tyres", tyreRows.filter(function (r) { return r.position(); })
+		// Body panels and tyres share one table on the form; the review keeps them
+		// apart, because "is every tyre photographed" is its own question.
+		sections.push(["Vehicle unit", areaRows().filter(function (r) { return r.value(); })
 			.map(function (r) {
-				return confirmCard(r.widget, r.position(),
-					r.depth.value !== "" ? r.depth.value + " mm" : "", r.condition);
+				return confirmCard(r.widget, r.value(), r.remark.value.trim(), r.condition);
 			})]);
 
-		sections.push(["Vehicle unit", areaRows.filter(function (r) { return r.area(); })
-			.map(function (r) { return confirmCard(r.widget, r.area(), "", r.condition); })]);
+		sections.push(["Tyres", tyreRows().filter(function (r) { return r.value(); })
+			.map(function (r) {
+				var note = r.depth.value !== "" ? r.depth.value + " mm" : "";
+				var remark = r.remark.value.trim();
+				return confirmCard(r.widget, r.value(),
+					[note, remark].filter(Boolean).join(" · "), r.condition);
+			})]);
 
 		Object.keys(viewPanels).forEach(function (k) {
 			var p = viewPanels[k];
+			if (!panelIsOnHandover(p)) return;
 			sections.push([p.label, p.rows.filter(function (r) { return r.view(); })
-				.map(function (r) { return confirmCard(r.widget, r.view(), "", r.condition); })]);
+				.map(function (r) {
+					return confirmCard(r.widget, r.view(), r.remark.value.trim(), r.condition);
+				})]);
 		});
 
 		var shot = 0, missing = 0, total = 0;
@@ -1999,8 +1958,7 @@
 			attachment_views: JSON.stringify(collectAttachmentViews()),
 			observations: val("observations"),
 			checklist: chk.rows,
-			attachments: att.rows,
-			damages: collectDamages()
+			attachments: att.rows
 		}).catch(function (err) {
 			// The handover itself did not get written. Nothing exists yet, so the
 			// inspector can correct whatever is wrong and press Confirm again.
@@ -2012,6 +1970,13 @@
 			// routing for attach_handover_photos to drop it into the right slot.
 			var jobs = [];
 			photoWidgets.forEach(function (w) {
+				// A photo shot against an attachment that was then unticked has no
+				// row on the saved handover to land on, so uploading it would only
+				// leave an orphan File behind.
+				if (w.route && w.route.target === "attachment_view" &&
+				    !w.route.unit_no && !attachmentIsTicked(w.route.item)) {
+					return;
+				}
 				w.shots().forEach(function (sh) { jobs.push({ file: sh.file, route: w.route }); });
 			});
 			if (!jobs.length) return res;
@@ -2071,10 +2036,15 @@
 					'<div style="font-weight:700;color:var(--red);margin-bottom:12px"><i class="fa-solid fa-triangle-exclamation"></i> ' +
 					res.new_damages.length + " new damage" + (res.new_damages.length > 1 ? "s" : "") + " found since the previous handover</div>" +
 					res.new_damages.map(function (x) {
+						// The description is where a derived line says what and where —
+						// the tyre position, or the attachment, unit and view. Without
+						// it a row off an attachment reads only "Other — Other".
 						return '<div class="vh-dmg is-new"><div class="t">' + esc(x.area) + " — " + esc(x.damage_type) +
 							(x.severity ? ' <span class="badge badge--soft">' + esc(x.severity) + "</span>" : "") +
 							(x.previous_severity ? ' <span class="badge badge--pending">was ' + esc(x.previous_severity) + "</span>" : "") +
-							"</div></div>";
+							"</div>" +
+							(x.description ? '<div class="muted" style="margin-top:3px">' + esc(x.description) + "</div>" : "") +
+							"</div>";
 					}).join("") +
 					(res.responsible_driver_name || res.responsible_driver
 						? '<div class="row-between" style="margin-top:14px"><span class="muted">Responsible driver</span><b style="color:var(--red)">' +
@@ -2083,7 +2053,23 @@
 					'<div class="muted" style="font-size:13px;margin-top:10px">Rectification is now marked <b>Pending</b> — resolve or document it before the next handover.</div>';
 			} else {
 				body.innerHTML = '<div style="font-weight:700;color:var(--green)"><i class="fa-solid fa-circle-check"></i> ' +
-					"No new damage — vehicle condition matches the previous handover.</div>";
+					"No new damage since the previous handover.</div>";
+			}
+
+			// Then everything this handover put on the record, new or not. Without
+			// it a panel marked Damaged that was already damaged last time reads as
+			// "nothing noted" — it is known damage, and it is still recorded here.
+			var noted = res.damages || [];
+			if (noted.length) {
+				body.innerHTML += '<div class="ho-cf-sec" style="margin-top:20px">' +
+					"<h4>Damage recorded on this handover · " + noted.length + "</h4>" +
+					noted.map(function (d) {
+						return '<div class="vh-dmg"><div class="t">' + esc(d.area) + " — " + esc(d.damage_type) +
+							(d.severity ? ' <span class="badge badge--soft">' + esc(d.severity) + "</span>" : "") +
+							"</div>" +
+							(d.description ? '<div class="muted" style="margin-top:3px">' + esc(d.description) + "</div>" : "") +
+							"</div>";
+					}).join("") + "</div>";
 			}
 			if (res.photos_failed) {
 				body.innerHTML +=

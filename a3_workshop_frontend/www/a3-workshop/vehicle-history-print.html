@@ -272,19 +272,21 @@
 	{% for a in attached %}
 	<div><div class="k">{{ a.item }}{% if a.qty %} &times;{{ a.qty }}{% endif %}</div>
 		<div class="v">✔ Attached{% if a.value %} — {{ a.value }}{% endif %}
-		{%- if a.serials %}<br><span style="font-size:10px;color:#4a5468">{{ a.serials | join(" · ") }}</span>{% endif %}</div></div>
+		{%- if a.serials %}<br><span style="font-size:10px;color:#4a5468">{{ a.serials | join(" · ") }}</span>{% endif %}
+		{%- if a.remark %}<br><span style="font-size:10px;color:#4a5468">{{ a.remark }}</span>{% endif %}</div></div>
 	{% endfor %}
 </div>
 {% endif %}
 
 {% if h.tyre_readings %}
 <h2 class="sec">Tyre Condition &amp; Tread ({{ h.tyre_readings | length }})</h2>
-<table class="t"><thead><tr><th style="width:24%">Tyre Position</th><th style="width:20%">Condition</th><th style="width:18%">Tread Depth</th><th>Photo</th></tr></thead><tbody>
+<table class="t"><thead><tr><th style="width:20%">Tyre Position</th><th style="width:16%">Condition</th><th style="width:14%">Tread Depth</th><th style="width:28%">Remark</th><th>Photo</th></tr></thead><tbody>
 	{% for t in h.tyre_readings %}
 	<tr>
 		<td><b>{{ t.position }}</b></td>
 		<td>{{ condpill(t.condition) }}</td>
 		<td>{% if t.tread_depth_mm %}{{ t.tread_depth_mm }} mm{% else %}<span class="muted">Not measured</span>{% endif %}</td>
+		<td>{% if t.remark %}{{ t.remark }}{% else %}<span class="muted">—</span>{% endif %}</td>
 		<td>{{ shot(t.photo, t.position) }}</td>
 	</tr>
 	{% endfor %}
@@ -293,11 +295,12 @@
 
 {% if h.area_inspections %}
 <h2 class="sec">Vehicle Unit Condition &amp; Photo Record ({{ h.area_inspections | length }})</h2>
-<table class="t"><thead><tr><th style="width:32%">Inspection Area</th><th style="width:24%">Condition</th><th>Photo</th></tr></thead><tbody>
+<table class="t"><thead><tr><th style="width:24%">Inspection Area</th><th style="width:18%">Condition</th><th style="width:34%">Remark</th><th>Photo</th></tr></thead><tbody>
 	{% for a in h.area_inspections %}
 	<tr>
 		<td><b>{{ a.area }}</b></td>
 		<td>{{ condpill(a.condition) }}</td>
+		<td>{% if a.remark %}{{ a.remark }}{% else %}<span class="muted">—</span>{% endif %}</td>
 		<td>{{ shot(a.photo, a.area) }}</td>
 	</tr>
 	{% endfor %}
@@ -306,12 +309,13 @@
 
 {% if h.attachment_views %}
 <h2 class="sec">Attachment Condition By View ({{ h.attachment_views | length }})</h2>
-<table class="t"><thead><tr><th style="width:26%">Attachment</th><th style="width:18%">View</th><th style="width:22%">Condition</th><th>Photo</th></tr></thead><tbody>
+<table class="t"><thead><tr><th style="width:20%">Attachment</th><th style="width:14%">View</th><th style="width:16%">Condition</th><th style="width:28%">Remark</th><th>Photo</th></tr></thead><tbody>
 	{% for v in h.attachment_views %}
 	<tr>
 		<td><b>{{ v.attachment_item }}</b>{% if v.unit_no %} <span class="muted">#{{ v.unit_no }}</span>{% endif %}</td>
 		<td>{{ v.view }}</td>
 		<td>{{ condpill(v.condition) }}</td>
+		<td>{% if v.remark %}{{ v.remark }}{% else %}<span class="muted">—</span>{% endif %}</td>
 		<td>{{ shot(v.photo, v.attachment_item ~ " " ~ v.view) }}</td>
 	</tr>
 	{% endfor %}

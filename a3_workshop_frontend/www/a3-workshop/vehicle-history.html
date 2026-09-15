@@ -31,7 +31,35 @@
 
 <div class="card" style="margin-bottom:18px">
 	<div class="card__head"><h3><i class="fa-solid fa-car"></i> Vehicles — {{ customer_label }}</h3></div>
-	<div class="card__body"><div id="vh-vehicles" class="list-rows"><div class="empty">Loading…</div></div></div>
+	<div class="card__body">
+		{#- The fleets here run to dozens of vehicles, so the list carries the same
+		    filter bar every other list in the portal does: free text over plate,
+		    model, chassis and driver, then model / driver dropdowns filled from the
+		    fleet itself and a chip for the vehicles nobody is holding. Every choice
+		    is mirrored into the query string, so a filtered fleet survives a refresh
+		    and can be pasted to someone. The driver controls are hidden for an
+		    outside customer — those vehicles have an owner, not a driver. -#}
+		<div class="filter-bar" id="vh-veh-bar">
+			<div class="filter-bar__search">
+				<i class="fa-solid fa-magnifying-glass"></i>
+				<input id="vh-veh-q" type="search" placeholder="Search plate, model, chassis or driver…"
+				       autocomplete="off" aria-label="Search this fleet">
+			</div>
+			<div class="filter-bar__group" data-filter-key="held" role="group"
+			     aria-label="Filter by driver assignment" data-fleet-only>
+				<button type="button" class="chip" data-val="all">All</button>
+				<button type="button" class="chip" data-val="assigned"><i class="fa-solid fa-user-check"></i> Assigned</button>
+				<button type="button" class="chip" data-val="unassigned"><i class="fa-solid fa-user-slash"></i> Unassigned</button>
+			</div>
+			<div class="filter-bar__group">
+				<select class="chip-select" data-filter-key="model" aria-label="Filter by model"></select>
+				<select class="chip-select" data-filter-key="driver" aria-label="Filter by driver" data-fleet-only></select>
+			</div>
+			<span class="filter-count" data-filter-count></span>
+		</div>
+		<div id="vh-vehicles" class="list-rows"><div class="empty">Loading…</div></div>
+		<div class="empty" data-filter-empty style="display:none">No vehicle matches these filters.</div>
+	</div>
 </div>
 
 <div class="card" id="vh-kpi-card" style="display:none;margin-bottom:18px">
@@ -130,6 +158,9 @@
 {% endif %}
 
 <style>
+	/* The fleet's filter bar sits inside the card, above the rows it filters —
+	   the same control every other list page in the portal uses. */
+	#vh-veh-bar { margin-bottom: 16px; }
 	.vh-chip { border:1px solid var(--border); background:var(--surface); border-radius:999px;
 		padding:8px 16px; font-size:13px; font-weight:600; color:var(--muted); cursor:pointer;
 		font-family:var(--font); display:inline-flex; align-items:center; gap:7px; }
@@ -304,6 +335,7 @@
 	// ------------------------------------------------------- customer dashboard
 	var statsEl = document.getElementById("vh-stats");
 	var vehiclesEl = document.getElementById("vh-vehicles");
+	var vehicleFilter = null;
 	var kpiCard = document.getElementById("vh-kpi-card");
 
 	function statcard(label, value, variant, sub) {
@@ -332,7 +364,19 @@
 			vehiclesEl.innerHTML = '<div class="empty">No vehicles yet for this customer. Use Register Vehicle to add one.</div>';
 		} else {
 			vehiclesEl.innerHTML = d.vehicles.map(function (v) {
-				return '<div class="list-row" style="grid-template-columns:2fr 1.4fr 1.4fr auto">' +
+				var held = d.is_own_fleet && v.current_driver;
+				var driver = d.is_own_fleet ? (v.current_driver || "Unassigned") : d.customer_name;
+				// Everything the row shows, lowercased once, so the filter never has
+				// to walk the DOM to work out what a row is about.
+				var hay = [v.model, v.plate, v.chassis, driver, v.name].join(" ").toLowerCase();
+				// One data-f-<key> per dimension the bar above filters on. The driver
+				// is left blank when nobody holds the vehicle, so picking a name
+				// drops it — which is what the Unassigned chip is for instead.
+				return '<div class="list-row" data-row data-search="' + esc(hay) + '"' +
+					' data-f-model="' + esc(v.model || "") + '"' +
+					' data-f-driver="' + esc(held ? v.current_driver : "") + '"' +
+					' data-f-held="' + (held ? "assigned" : "unassigned") + '"' +
+					' style="grid-template-columns:2fr 1.4fr 1.4fr auto">' +
 					'<div class="list-row__party">' +
 					'<div class="list-row__avatar" style="background:var(--navy)"><i class="fa-solid fa-car"></i></div>' +
 					'<div><div class="list-row__title">' + esc(v.model) + "</div>" +
@@ -340,10 +384,37 @@
 					'<div class="list-row__col"><div class="k">Odometer</div><div style="font-weight:600">' + esc(v.odometer) +
 					'</div><div class="muted">' + esc(v.fuel) + "</div></div>" +
 					'<div class="list-row__col"><div class="k">' + (d.is_own_fleet ? "Current Driver" : "Owner") + "</div>" +
-					'<div style="font-weight:600">' + esc(d.is_own_fleet ? (v.current_driver || "Unassigned") : d.customer_name) + "</div></div>" +
+					'<div style="font-weight:600">' + esc(driver) + "</div></div>" +
 					'<a class="btn btn--primary btn--sm" href="/a3-workshop/vehicle-history-detail?vehicle=' + encodeURIComponent(v.name) + '">View History</a>' +
 					"</div>";
 			}).join("");
+		}
+
+		// An outside customer's vehicles have an owner rather than a driver, so the
+		// two driver controls are not offered at all there.
+		if (!d.is_own_fleet) {
+			document.querySelectorAll("#vh-veh-bar [data-fleet-only]").forEach(function (el) {
+				el.style.display = "none";
+			});
+		}
+
+		// Built after the rows exist, and kept, so whatever is in the query string
+		// is applied to the fleet that has just landed.
+		if (!vehicleFilter) {
+			vehicleFilter = new WorkshopFilter({
+				root: "#vh-vehicles",
+				bar: "#vh-veh-bar",
+				search: "#vh-veh-q",
+				searchParam: "v",
+				empty: "[data-filter-empty]",
+			});
+			// The dropdowns are filled from the rows themselves, so their options
+			// can never drift from the fleet on screen.
+			vehicleFilter.populate("model", "All models");
+			vehicleFilter.populate("driver", "All drivers");
+			vehicleFilter.apply();  // re-run: populate() restores the saved values
+		} else {
+			vehicleFilter.apply();
 		}
 
 		if (d.is_own_fleet && d.kpi) renderKpi(d.kpi);

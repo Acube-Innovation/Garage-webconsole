@@ -1,7 +1,7 @@
 import frappe
 from frappe.utils import flt, formatdate, getdate, now_datetime, nowdate
 
-from a3_workshop_frontend.website_utils import require_login, signature_of
+from a3_workshop_frontend.website_utils import require_login, signable, signature_of
 
 no_cache = 1
 
@@ -86,7 +86,8 @@ def _custody_statement(context, technician):
 	if rows:
 		context.sig_slots = [
 			{"id": "technician", "role": "Technician", "name": context.emp.employee_name,
-			 "saved": signature_of("Employee", technician)},
+			 "saved": signature_of("Employee", technician),
+			 "save": signable("Employee", technician)},
 			{"id": "manager", "role": "Tool Crib / Workshop Manager", "name": "", "saved": ""},
 		]
 
@@ -144,17 +145,20 @@ def _custody_slip(context, custody):
 		context.sig_slots = [
 			{"id": "releasing", "role": "Releasing Technician",
 			 "name": context.emp.employee_name,
-			 "saved": signature_of("Employee", doc.technician)},
+			 "saved": signature_of("Employee", doc.technician),
+			 "save": signable("Employee", doc.technician)},
 			{"id": "receiving", "role": "Receiving Technician",
 			 "name": context.to_emp.employee_name if context.to_emp else "",
-			 "saved": signature_of("Employee", doc.to_technician)},
+			 "saved": signature_of("Employee", doc.to_technician),
+			 "save": signable("Employee", doc.to_technician)},
 			{"id": "witness", "role": "Witnessed By", "name": context.witness, "saved": ""},
 		]
 	else:
 		context.sig_slots = [
 			{"id": "technician", "role": "Technician",
 			 "name": context.emp.employee_name,
-			 "saved": signature_of("Employee", doc.technician)},
+			 "saved": signature_of("Employee", doc.technician),
+			 "save": signable("Employee", doc.technician)},
 			{"id": "toolcrib", "role": "Tool Crib", "name": doc.acknowledged_by or "", "saved": ""},
 		]
 
