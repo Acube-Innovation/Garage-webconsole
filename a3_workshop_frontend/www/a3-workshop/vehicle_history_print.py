@@ -1,6 +1,11 @@
 import frappe
 from frappe.utils import now_datetime
-from a3_workshop_frontend.website_utils import require_login, signature_of
+from a3_workshop_frontend.website_utils import (
+	employee_of,
+	require_login,
+	signable,
+	signature_of,
+)
 
 no_cache = 1
 
@@ -92,22 +97,34 @@ def get_context(context):
 		}
 		context.title = f"Handover {handover}"
 		# One row in the signature chooser per rule at the foot of the document;
-		# `id` matches the .sig-mark box the chosen image is dropped into. The
-		# inspector signs as a user, not as a Driver, so that rule is upload-only.
+		# `id` matches the .sig-mark box the chosen image is dropped into, and
+		# `save` is the record a signature drawn on the screen is filed on. The
+		# inspector signs as a user, so theirs is filed on the Employee row that
+		# names them -- and a user with no Employee record can still sign, for this
+		# printout only.
+		inspector = employee_of(meta.inspected_by)
 		context.sig_slots = [
 			{
 				"id": "from_driver",
 				"role": "From Driver",
 				"name": context.h["from_driver"] if context.h["from_driver"] != "—" else "Returning Driver",
 				"saved": context.from_driver_info["signature"],
+				"save": signable("Driver", meta.from_driver),
 			},
 			{
 				"id": "to_driver",
 				"role": "To Driver",
 				"name": context.h["to_driver"] if context.h["to_driver"] != "—" else "Receiving Driver",
 				"saved": context.to_driver_info["signature"],
+				"save": signable("Driver", meta.to_driver),
 			},
-			{"id": "inspector", "role": "Inspector", "name": context.h_meta["inspected_by"], "saved": ""},
+			{
+				"id": "inspector",
+				"role": "Inspector",
+				"name": context.h_meta["inspected_by"],
+				"saved": signature_of("Employee", inspector),
+				"save": signable("Employee", inspector),
+			},
 		]
 	elif vehicle and frappe.db.exists("Vehicle", vehicle):
 		context.mode = "vehicle"
@@ -124,7 +141,7 @@ def get_context(context):
 		context.title = f"Driver Performance — {context.driver_info.full_name or driver}"
 		context.sig_slots = [
 			{"id": "driver", "role": "Driver", "name": context.driver_info.full_name or driver,
-			 "saved": signature_of("Driver", driver)},
+			 "saved": signature_of("Driver", driver), "save": signable("Driver", driver)},
 			{"id": "fleet_manager", "role": "Fleet Manager", "name": "", "saved": ""},
 			{"id": "management", "role": "HR / Management", "name": "", "saved": ""},
 		]

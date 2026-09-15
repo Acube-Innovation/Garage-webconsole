@@ -340,6 +340,27 @@
 </section>
 
 <style>
+	/* The item catalogue scrolls inside its own card rather than lengthening the
+	   page: the cart, the totals and Create Quotation sit opposite it, and every
+	   one of them went off-screen once a workshop had a few hundred items. Capped
+	   against the viewport, not a fixed height, so a short list still takes only
+	   the room it needs. The search box stays put — it lives in the card head,
+	   outside this box.
+
+	   The 360px is what everything else on the tab occupies — topbar, stepper,
+	   card head and the Previous/Next row — measured, then rounded up so the page
+	   itself does not scroll at all at a normal window height. */
+	#catalog { max-height: calc(100vh - 360px); min-height: 220px; overflow-y: auto;
+		overscroll-behavior: contain; }
+	/* The cart scrolls the same way, but only its LINES: the totals and Create /
+	   Update Quotation stay put underneath, which is the whole reason for capping
+	   the list — a cart long enough to push the total off the screen is a cart
+	   nobody can check before they send the quotation.
+
+	   215px more than the catalogue's allowance, which is what those two fixed
+	   blocks occupy, so the two columns end up the same height. */
+	#cart { max-height: calc(100vh - 575px); min-height: 120px; overflow-y: auto;
+		overscroll-behavior: contain; }
 	.bill-kit-title { display:flex; align-items:center; justify-content:space-between; gap:8px;
 		font-size:13px; font-weight:800; letter-spacing:.02em; margin:0 0 8px; }
 	#billing-body .table.editable td { padding:5px 6px; }
