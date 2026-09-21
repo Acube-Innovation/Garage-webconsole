@@ -45,6 +45,12 @@
 				<input id="vh-veh-q" type="search" placeholder="Search plate, model, chassis or driver…"
 				       autocomplete="off" aria-label="Search this fleet">
 			</div>
+			<div class="filter-bar__group" data-filter-key="kind" role="group"
+			     aria-label="Filter by what the record is">
+				<button type="button" class="chip" data-val="all">All</button>
+				<button type="button" class="chip" data-val="vehicle"><i class="fa-solid fa-truck"></i> Vehicles</button>
+				<button type="button" class="chip" data-val="attachment"><i class="fa-solid fa-trailer"></i> Attachments</button>
+			</div>
 			<div class="filter-bar__group" data-filter-key="held" role="group"
 			     aria-label="Filter by driver assignment" data-fleet-only>
 				<button type="button" class="chip" data-val="all">All</button>
@@ -85,18 +91,44 @@
 		</div>
 		<div class="modal__body">
 			<form class="form-grid" id="vh-reg-form" onsubmit="return false">
+				{#- What is being registered decides the rest of the form. A trailer,
+				    a bed or a box is handed over and inspected like a vehicle, so it
+				    belongs in the same list — it just has no engine, so the fields
+				    that describe one are replaced rather than left blank. -#}
+				<div class="field field--full">
+					<label class="check"><input type="checkbox" name="is_attachment" id="vh-reg-attach">
+						This is an attachment — trailer, bed or box, not a motor vehicle</label>
+				</div>
+				<div class="field" data-kind="attachment" style="display:none">
+					<label>Attachment Type <span class="req">*</span></label>
+					<select name="attachment_type"><option value="">Select</option>
+					{%- for a in attachment_types %}<option>{{ a }}</option>{% endfor %}
+					</select>
+				</div>
 				<div class="field"><label>Plate Number <span class="req">*</span></label><input name="plate"></div>
-				<div class="field"><label>Make / Model <span class="req">*</span></label><input name="model" placeholder="e.g. Toyota Fortuner"></div>
+				<div class="field" data-kind="vehicle"><label>Make / Model <span class="req">*</span></label><input name="model" placeholder="e.g. Toyota Fortuner"></div>
 				<div class="field"><label>Chassis Number</label><input name="chassis"></div>
-				<div class="field"><label>Engine Number</label><input name="engine"></div>
-				<div class="field"><label>Odometer Reading</label><input name="odo" type="number" placeholder="0"></div>
-				<div class="field"><label>Fuel Type</label><select name="fuel">
+				<div class="field" data-kind="vehicle"><label>Engine Number</label><input name="engine"></div>
+				<div class="field" data-kind="vehicle"><label>Odometer Reading</label><input name="odo" type="number" placeholder="0"></div>
+				<div class="field" data-kind="vehicle"><label>Fuel Type</label><select name="fuel">
 					<option value="">Select</option><option>Petrol</option><option>Diesel</option>
 					<option>Electric</option><option>Hybrid</option>
 				</select></div>
-				<div class="field"><label>Transmission</label><select name="trans">
+				<div class="field" data-kind="vehicle"><label>Transmission</label><select name="trans">
 					<option value="">Select</option><option>Automatic</option><option>Manual</option>
 				</select></div>
+				<div class="field" data-kind="attachment" style="display:none">
+					<label>Make / Model</label><input name="attachment_model" placeholder="e.g. CIMC 3-axle"></div>
+				<div class="field" data-kind="attachment" style="display:none">
+					<label>Axles</label><input name="axles" type="number" min="0" placeholder="0"></div>
+				<div class="field" data-kind="attachment" style="display:none">
+					<label>Tyres</label><input name="tyres" type="number" min="0" placeholder="0"></div>
+				<div class="field" data-kind="attachment" style="display:none">
+					<label>Payload Capacity (kg)</label><input name="payload" type="number" min="0" placeholder="0"></div>
+				<div class="field" data-kind="attachment" style="display:none">
+					<label>Coupling</label><select name="coupling"><option value="">Select</option>
+					<option>Fifth Wheel</option><option>Pintle Hook</option><option>Ball</option>
+					<option>Gooseneck</option><option>Other</option></select></div>
 				{#- Driver picker. Typing filters the Driver list; the hidden input holds
 				    the chosen record's id, and is cleared on every keystroke so a
 				    half-typed name can never submit a stale driver. -#}
@@ -368,7 +400,9 @@
 				var driver = d.is_own_fleet ? (v.current_driver || "Unassigned") : d.customer_name;
 				// Everything the row shows, lowercased once, so the filter never has
 				// to walk the DOM to work out what a row is about.
-				var hay = [v.model, v.plate, v.chassis, driver, v.name].join(" ").toLowerCase();
+				var hay = [v.model, v.plate, v.chassis, driver, v.name,
+					v.attachment_type, v.is_attachment ? "attachment trailer" : "vehicle"]
+					.join(" ").toLowerCase();
 				// One data-f-<key> per dimension the bar above filters on. The driver
 				// is left blank when nobody holds the vehicle, so picking a name
 				// drops it — which is what the Unassigned chip is for instead.
@@ -376,13 +410,23 @@
 					' data-f-model="' + esc(v.model || "") + '"' +
 					' data-f-driver="' + esc(held ? v.current_driver : "") + '"' +
 					' data-f-held="' + (held ? "assigned" : "unassigned") + '"' +
-					' style="grid-template-columns:2fr 1.4fr 1.4fr auto">' +
+					' data-f-kind="' + (v.is_attachment ? "attachment" : "vehicle") + '"' +
+					// Vehicle · Odometer · Fuel-or-Type · Driver · action. Its own grid
+					// rather than .list-row--vehicle: the Vehicles page carries a
+					// customer column this one does not.
+					' style="grid-template-columns:2fr .9fr .9fr 1.4fr auto">' +
 					'<div class="list-row__party">' +
-					'<div class="list-row__avatar" style="background:var(--navy)"><i class="fa-solid fa-car"></i></div>' +
+					'<div class="list-row__avatar" style="background:var(--navy)"><i class="fa-solid fa-' +
+					(v.is_attachment ? "trailer" : "car") + '"></i></div>' +
 					'<div><div class="list-row__title">' + esc(v.model) + "</div>" +
 					'<div class="list-row__meta">Plate: ' + esc(v.plate) + "<br>Chassis: " + esc(v.chassis) + "</div></div></div>" +
-					'<div class="list-row__col"><div class="k">Odometer</div><div style="font-weight:600">' + esc(v.odometer) +
-					'</div><div class="muted">' + esc(v.fuel) + "</div></div>" +
+					'<div class="list-row__col"><div class="k">Odometer</div><div style="font-weight:600">' +
+					esc(v.odometer) + "</div></div>" +
+					// Labelled by what the row is: an attachment by its type, a motor
+					// vehicle by what it burns. Neither reads as part of the odometer.
+					'<div class="list-row__col"><div class="k">' + (v.is_attachment ? "Type" : "Fuel") +
+					'</div><div style="font-weight:600">' +
+					esc(v.is_attachment ? (v.attachment_type || "Attachment") : v.fuel) + "</div></div>" +
 					'<div class="list-row__col"><div class="k">' + (d.is_own_fleet ? "Current Driver" : "Owner") + "</div>" +
 					'<div style="font-weight:600">' + esc(driver) + "</div></div>" +
 					'<a class="btn btn--primary btn--sm" href="/a3-workshop/vehicle-history-detail?vehicle=' + encodeURIComponent(v.name) + '">View History</a>' +
@@ -621,15 +665,43 @@
 	});
 
 	var regSave = document.getElementById("vh-reg-save");
+
+	// Ticking "this is an attachment" swaps the halves of the form: the engine
+	// fields go, the towing ones arrive. Nothing is merely disabled — a field that
+	// does not apply should not be on screen to be wondered about.
+	var attachBox = document.getElementById("vh-reg-attach");
+	function paintRegKind() {
+		var attachment = attachBox.checked;
+		document.querySelectorAll("#vh-reg-form [data-kind]").forEach(function (f) {
+			f.style.display = (f.getAttribute("data-kind") === "attachment") === attachment ? "" : "none";
+		});
+		regSave.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Save ' +
+			(attachment ? "Attachment" : "Vehicle");
+	}
+	attachBox.addEventListener("change", paintRegKind);
+	paintRegKind();
 	regSave.addEventListener("click", function () {
-		var plate = val("plate"), model = val("model");
-		if (!plate || !model) { alert("Please fill the required fields: Plate Number and Make / Model."); return; }
+		var attachment = attachBox.checked;
+		var plate = val("plate");
+		var model = attachment ? val("attachment_model") : val("model");
+		if (!plate) { alert("Plate Number is required."); return; }
+		if (attachment && !val("attachment_type")) { alert("Please choose an Attachment Type."); return; }
+		if (!attachment && !model) { alert("Please fill the required fields: Plate Number and Make / Model."); return; }
 		var original = regSave.innerHTML;
 		regSave.disabled = true;
 		regSave.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving…';
 		callMethod("garagedesk.api.vehicle.create_vehicle", {
-			plate: plate, model: model, chassis: val("chassis"), engine: val("engine"),
-			odometer: val("odo"), fuel_type: val("fuel"), transmission: val("trans"),
+			plate: plate, model: model, chassis: val("chassis"),
+			engine: attachment ? "" : val("engine"),
+			odometer: attachment ? "" : val("odo"),
+			fuel_type: attachment ? "" : val("fuel"),
+			transmission: attachment ? "" : val("trans"),
+			is_attachment: attachment ? 1 : 0,
+			attachment_type: attachment ? val("attachment_type") : "",
+			axles: attachment ? val("axles") : "",
+			tyres: attachment ? val("tyres") : "",
+			payload_capacity: attachment ? val("payload") : "",
+			coupling_type: attachment ? val("coupling") : "",
 			driver: val("driver"), customer: window.vh_customer
 		}).then(function () {
 			window.location.reload();

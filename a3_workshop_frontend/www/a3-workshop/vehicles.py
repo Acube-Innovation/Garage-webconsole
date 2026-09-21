@@ -43,6 +43,13 @@ def get_context(context):
 	]
 	if has_driver:
 		fields += ["custom_driver", "custom_driver_name"]
+	# Trailers, beds and boxes are registered as Vehicles too; the list says which
+	# is which rather than showing a trailer as a car with no engine. Guarded on
+	# the column: the fields ship as a fixture, and a site that has not migrated
+	# since they landed still renders.
+	has_attachment = frappe.db.has_column("Vehicle", "custom_is_attachment")
+	if has_attachment:
+		fields += ["custom_is_attachment", "custom_attachment_type"]
 
 	# limit_page_length=0 -> every matching Vehicle, not a page of them. The list is
 	# filtered client-side (WorkshopFilter), so a cap here would silently hide rows
@@ -114,7 +121,9 @@ def get_context(context):
 
 	vehicles = []
 	for r in rows:
-		model = r.custom_model or r.model or r.name
+		attachment = bool(has_attachment and r.get("custom_is_attachment"))
+		attachment_type = (r.get("custom_attachment_type") or "") if has_attachment else ""
+		model = r.custom_model or r.model or (attachment_type if attachment else "") or r.name
 		odo = r.custom_odometer or r.last_odometer or 0
 		info = cust_info.get(r.custom_customer, {})
 		driver = (
@@ -135,10 +144,15 @@ def get_context(context):
 				"customer_id": r.custom_customer or "",
 				"customer_contact": phone or email or "—",
 				"customer_contact_is_email": bool(not phone and email),
-				"odometer": f"{odo:,.0f} km" if odo else "—",
-				"fuel": r.fuel_type or "—",
+				# A towed unit has neither, so the columns say what it is instead of
+				# showing a zero and a blank.
+				"odometer": "—" if attachment else (f"{odo:,.0f} km" if odo else "—"),
+				"fuel": (attachment_type or "Attachment") if attachment else (r.fuel_type or "—"),
 				"driver": driver or "—",
+				"is_attachment": attachment,
+				"attachment_type": attachment_type,
 				# --- toolbar filter facets
+				"kind": "attachment" if attachment else "vehicle",
 				"is_own_fleet": bool(info.get("is_own_fleet")),
 				# Slugged so the chip's data-val is stable whatever the label reads
 				# ("Natural Gas" -> "natural-gas").

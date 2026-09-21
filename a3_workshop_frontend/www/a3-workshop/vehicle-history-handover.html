@@ -8,9 +8,27 @@
 
 <div class="toolbar">
 	<a class="btn btn--outline btn--sm" href="/a3-workshop/vehicle-history-detail?vehicle={{ vehicle | urlencode }}"><i class="fa-solid fa-arrow-left"></i> Back to Vehicle</a>
+	{%- if readonly %}
+	<a class="btn btn--navy btn--sm" href="/a3-workshop/vehicle-history-print?handover={{ handover | urlencode }}" target="_blank" rel="noopener"><i class="fa-solid fa-print"></i> Print Handover</a>
+	{%- endif %}
 </div>
 
-{%- if not can_save %}
+{%- if readonly %}
+<div class="card ho-ro-banner" style="margin-bottom:18px">
+	<div class="card__body" style="display:flex;gap:12px;align-items:center">
+		<i class="fa-solid fa-lock" style="color:var(--muted);font-size:17px"></i>
+		<div>
+			<div style="font-weight:700">Handover {{ handover }}</div>
+			<div class="muted" style="font-size:13px;margin-top:2px">
+				This inspection has been filed. Everything below is exactly as it was
+				recorded and cannot be edited here.
+			</div>
+		</div>
+	</div>
+</div>
+{%- endif %}
+
+{%- if not can_save and not readonly %}
 {#- Shown before the form, not after it: save_handover refuses this user, and
     finding that out at Confirm means the whole walk-round is lost. -#}
 <div class="card" style="margin-bottom:18px;border-color:var(--red)">
@@ -34,10 +52,14 @@
 		<div id="ho-context" class="muted" style="margin-bottom:16px">Loading vehicle…</div>
 		<form class="form-grid" id="ho-form" onsubmit="return false">
 			{{ field("Handover Type","handover_type",type="select",options=["Issue","Return","Driver Change"]) }}
-			<div class="field"><label>Odometer (km) <span class="req">*</span></label><input name="odometer" type="number" placeholder="0"></div>
+			{#- A towed unit has no odometer and no fuel gauge; both fields are taken
+			    off the form when the record being handed over is an attachment. -#}
+			<div class="field" data-motor><label>Odometer (km) <span class="req">*</span></label><input name="odometer" type="number" placeholder="0"></div>
 			<div class="field"><label>From Driver (returning)</label><input name="from_driver_label" placeholder="Search driver..." autocomplete="off"><input type="hidden" name="from_driver"></div>
 			<div class="field"><label>To Driver (receiving)</label><input name="to_driver_label" placeholder="Search driver..." autocomplete="off"><input type="hidden" name="to_driver"></div>
-			{{ field("Fuel Level","fuel_level",type="select",options=["Empty","Quarter","Half","Three-Quarter","Full"]) }}
+			<div data-motor style="display:contents">
+				{{ field("Fuel Level","fuel_level",type="select",options=["Empty","Quarter","Half","Three-Quarter","Full"]) }}
+			</div>
 			{{ field("Overall Condition","overall_condition",type="select",options=["Excellent","Good","Fair","Poor"]) }}
 			{{ field("Other Observations","observations",type="textarea") }}
 		</form>
@@ -69,12 +91,12 @@
 		<div class="ho-area-wrap">
 			<table class="ho-area-tbl">
 				<thead>
-					<tr><th>Inspection Area</th><th>Condition</th><th class="rem">Remark</th><th class="td">Tread</th><th class="ph">Photo</th><th></th></tr>
+					<tr><th>Inspection Area</th><th>Condition</th><th class="rem">Remark</th><th class="resp">Responsible</th><th class="td">Tread</th><th class="ph">Photo</th><th></th></tr>
 				</thead>
 				<tbody id="ho-area-rows"></tbody>
 			</table>
 		</div>
-		<div class="table-actions">
+		<div class="table-actions"{% if readonly %} style="display:none"{% endif %}>
 			<button type="button" class="btn btn--outline btn--sm" id="ho-add-area">
 				<i class="fa-solid fa-plus"></i> Add Inspection Area
 			</button>
@@ -92,7 +114,9 @@
 	</div>
 </div>
 
-<div class="card" style="margin-bottom:18px">
+{#- Equipment coupled to the vehicle. A trailer handed over in its own right has
+    nothing coupled to it, so the whole card goes -- see the prefill handler. -#}
+<div class="card" style="margin-bottom:18px" id="ho-attachments-card">
 	<div class="card__head"><h3><i class="fa-solid fa-trailer"></i> Attachments</h3></div>
 	<div class="card__body">
 		<div class="muted" style="font-size:13px;margin-bottom:12px">Equipment coupled to the vehicle — tick what is attached and handed over with it. A ticked attachment opens a remark and the same condition-by-view table the walk-round above uses.</div>
@@ -100,7 +124,14 @@
 	</div>
 </div>
 
-<div class="form-actions">
+{%- if readonly %}
+<div class="card" style="margin-bottom:18px" id="ho-damage-card">
+	<div class="card__head"><h3><i class="fa-solid fa-triangle-exclamation"></i> Damage &amp; Rectification</h3></div>
+	<div class="card__body" id="ho-damage-body"><div class="muted">Loading…</div></div>
+</div>
+{%- endif %}
+
+<div class="form-actions"{% if readonly %} style="display:none"{% endif %}>
 	<span></span>
 	<button type="button" class="btn btn--primary" id="ho-save"
 	        {% if not can_save %}disabled title="Your user does not hold a fleet write role"{% endif %}>
@@ -373,7 +404,7 @@
 
 	/* ---- vehicle unit condition walk-round ---- */
 	.ho-area-wrap { overflow-x:auto; }
-	.ho-area-tbl { width:100%; border-collapse:collapse; min-width:820px; }
+	.ho-area-tbl { width:100%; border-collapse:collapse; min-width:1020px; }
 	.ho-area-tbl th { text-align:left; font-size:11px; letter-spacing:.04em; text-transform:uppercase;
 		color:var(--muted); font-weight:700; padding:0 10px 9px; border-bottom:1px solid var(--border); }
 	.ho-area-tbl th.ph { width:80px; }
@@ -408,11 +439,35 @@
 	.ho-area-seg button.is-on[data-c="Requires Attention"] { background:var(--amber,#d98324); }
 	.ho-area-seg button.is-on[data-c="Worn"] { background:var(--amber,#d98324); }
 
+	/* ---- the responsible column ---- */
+	/* Company or one driver, never both on screen at once: whichever answer has
+	   been given is the only control left, so a row cannot say two things. */
+	.ho-area-tbl .resp, .ho-view-tbl .resp { width:200px; }
+	td.resp { white-space:nowrap; }
+	td.resp .ho-resp-company { display:inline-flex; align-items:center; gap:7px; margin:0;
+		font-size:12.5px; font-weight:600; color:var(--text); cursor:pointer; }
+	td.resp .ho-resp-company input { width:15px; height:15px; margin:0; }
+	td.resp .ho-resp-driver { position:relative; display:inline-flex; align-items:center; gap:4px; }
+	td.resp .ho-resp-driver input { width:150px; padding:7px 9px; font:inherit; font-size:13px;
+		color:var(--text); background:var(--surface); border:1px solid var(--border);
+		border-radius:8px; }
+	td.resp .ho-resp-driver input:focus { outline:none; border-color:var(--red);
+		box-shadow:0 0 0 3px var(--red-soft); }
+	td.resp .ho-resp-driver input.is-set { border-color:var(--green); font-weight:600; }
+	/* Filled in from "From Driver" rather than chosen: shown so it can be read and
+	   kept, but not as an answer already given -- Company is still on offer. */
+	td.resp .ho-resp-driver input.is-default { border-style:dashed; color:var(--muted); }
+	td.resp .ho-resp-clear { background:none; border:none; color:var(--muted); cursor:pointer;
+		font-size:13px; padding:2px 4px; }
+	td.resp .ho-resp-clear:hover { color:var(--red); }
+	/* The dropdown is inside a table cell, so it has to outrank the rows below. */
+	td.resp .jc-ac { min-width:210px; }
+
 	/* ---- the remark column ---- */
 	/* Beside the verdict it explains, in both tables: this is where damage is
 	   described now, so it has to be readable straight down the table. It is the
 	   column that gives when the table is narrow, and the widest one otherwise. */
-	.ho-area-tbl .rem, .ho-view-tbl .rem { min-width:200px; }
+	.ho-area-tbl .rem, .ho-view-tbl .rem { min-width:180px; }
 	.ho-area-tbl td.rem input, .ho-view-tbl td.rem input {
 		width:100%; min-width:0; padding:7px 10px; font:inherit; font-size:13px;
 		color:var(--text); background:var(--surface); border:1px solid var(--border);
@@ -437,15 +492,81 @@
 		color:var(--text); background:var(--surface); border:1px solid var(--border);
 		border-radius:8px; }
 	.ho-rem input:focus { outline:none; border-color:var(--red); box-shadow:0 0 0 3px var(--red-soft); }
+
+	/* ---------------------------------------------- filed handover (read-only)
+	   A verdict that cannot be changed is a badge, not three buttons two of which
+	   do nothing; a responsible party is a name, not a picker. */
+	.ho-cond-ro { display:inline-block; padding:4px 10px; border-radius:999px;
+		font-size:12px; font-weight:700; letter-spacing:.01em; white-space:nowrap; }
+	.ho-cond-ro.is-ok { background:var(--green-soft,#e7f6ec); color:var(--green,#1a7f37); }
+	.ho-cond-ro.is-warn { background:#fff4e5; color:var(--amber,#b45309); }
+	.ho-cond-ro.is-bad { background:var(--red-soft); color:var(--red); }
+	.ho-resp-ro { font-size:13px; font-weight:600; }
+	.ho-resp-ro.is-driver { color:var(--red); }
+	.ho-ph-none { font-size:13px; }
+	/* Read-back inputs carry the recorded text; they must not look like empty
+	   boxes waiting to be filled in. */
+	body.ho-ro .ho-area-tbl td.rem input, body.ho-ro .ho-view-tbl td.rem input,
+	body.ho-ro .ho-rem input, body.ho-ro .ho-serial input,
+	body.ho-ro #ho-form input, body.ho-ro #ho-form select, body.ho-ro #ho-form textarea {
+		background:transparent; border-color:transparent; padding-left:0; cursor:default;
+		-webkit-appearance:none; appearance:none; }
+	body.ho-ro #ho-form input, body.ho-ro #ho-form select, body.ho-ro #ho-form textarea {
+		font-weight:600; color:var(--text); opacity:1; }
+	body.ho-ro .ho-chk-row input[type="checkbox"] { opacity:1; cursor:default; }
+	body.ho-ro .ho-chk-row.is-checked { font-weight:600; }
+	/* Every attachment's views table is open on a filed record: there is no tick
+	   to reveal it with. */
+	body.ho-ro .ho-view-panel { display:block; }
+
+	.ho-ro-banner { border-color:var(--border); background:var(--surface-2,#fafafa); }
+	.ho-dmg-tbl { width:100%; border-collapse:collapse; font-size:13px; }
+	.ho-dmg-tbl th { text-align:left; font-size:11px; font-weight:700; letter-spacing:.04em;
+		text-transform:uppercase; color:var(--muted); padding:0 10px 8px 0; }
+	.ho-dmg-tbl td { padding:9px 10px 9px 0; border-top:1px solid var(--border);
+		vertical-align:top; }
+	.ho-dmg-tbl tr.is-new td { background:var(--red-soft); }
+	.ho-dmg-sec + .ho-dmg-sec { margin-top:22px; }
+	.ho-dmg-tbl a { color:var(--red); font-weight:600; text-decoration:none; }
+	.ho-dmg-tbl a:hover { text-decoration:underline; }
+	/* The Add Damage form: one row under the New damage table, laid out like a
+	   walk-round row -- what it is, who answers for it, add. */
+	.ho-dmg-add { margin-top:10px; border-top:2px solid var(--border); }
+	.ho-dmg-add td { border-top:none; vertical-align:top; }
+	.ho-dmg-add-line { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px; }
+	.ho-dmg-add select, .ho-dmg-add input[type="text"] {
+		padding:7px 10px; font:inherit; font-size:13px; color:var(--text);
+		background:var(--surface); border:1px solid var(--border); border-radius:8px; }
+	.ho-dmg-add select { min-width:140px; }
+	.ho-dmg-add input[type="text"] { width:100%; }
+	.ho-dmg-add-act { white-space:nowrap; }
+	.ho-dmg-add-act .btn + .btn { margin-left:6px; }
+	.ho-dmg-add-msg { color:var(--red); font-size:13px; margin-top:6px; }
+	/* "open since HND-…" under a seeded row's name. */
+	.ho-since { font-size:11px; font-weight:400; color:var(--muted); margin-top:2px; }
+	.ho-since a { color:var(--red); font-weight:600; text-decoration:none; }
+	.ho-view-tbl tr.ho-prev-row td { background:var(--red-soft); }
+	.ho-dmg-sec h4 { margin:0 0 10px; font-size:12px; font-weight:800; letter-spacing:.05em;
+		text-transform:uppercase; color:var(--muted); }
 </style>
 
 <script>
 	window.csrf_token = "{{ frappe.session.csrf_token }}";
 	window.ho_vehicle = "{{ vehicle }}";
+	window.ho_handover = "{{ handover }}";
+	window.ho_readonly = {{ 1 if readonly else 0 }};
 </script>
 {% raw %}
 <script>
 (function () {
+
+	// A handover that has already been filed opens on this same page, read-only:
+	// ?handover= instead of ?vehicle=. Everything below is built by the same
+	// builders either way -- a second, view-only rendering of the walk-round, the
+	// attachment views and the tick lists would be a second place for them to
+	// disagree with the form. The builders branch on this flag instead, and the
+	// read-back path fills them from fleet.get_handover.
+	var RO = !!window.ho_readonly;
 
 	function callMethod(method, args) {
 		return fetch("/api/method/" + method, {
@@ -533,12 +654,162 @@
 			input.value = it.label; hide(); setHidden(it.value);
 		});
 	}
+	// The registered attachments of one type, offered against a unit's plate box.
+	// Typing something the fleet has never registered is left alone: the box holds
+	// whatever is in it, and the server links the unit to a Vehicle only when the
+	// plate actually names one.
+	function attachmentPicker(input, item) {
+		if (!input) return;
+		var wrap = input.parentNode;
+		wrap.style.position = "relative";
+		var list = document.createElement("div");
+		list.className = "jc-ac"; list.style.display = "none";
+		wrap.appendChild(list);
+		var items = [], timer = null;
+		function hide() { list.style.display = "none"; }
+		function render(rows) {
+			items = rows || [];
+			if (!items.length) {
+				// Not an error: it means this type has nothing registered yet, or
+				// nothing matching, and the plate is about to be typed by hand.
+				list.innerHTML = '<div class="jc-ac-empty">No registered ' +
+					esc(item || "attachment") + " matches — type the plate</div>";
+				list.style.display = "block";
+				return;
+			}
+			list.innerHTML = items.map(function (it, i) {
+				return '<div class="jc-ac-item" data-i="' + i + '"><div class="jc-ac-label">' +
+					esc(it.plate) + "</div>" +
+					(it.detail ? '<div class="jc-ac-sub">' + esc(it.detail) + "</div>" : "") + "</div>";
+			}).join("");
+			list.style.display = "block";
+		}
+		function run() {
+			callMethod("garagedesk.api.fleet.search_attachments", {
+				attachment_type: item, search: input.value.trim(), limit: 15,
+			}).then(render).catch(hide);
+		}
+		input.addEventListener("input", function () {
+			clearTimeout(timer);
+			timer = setTimeout(run, 180);
+		});
+		input.addEventListener("focus", run);
+		input.addEventListener("blur", function () { setTimeout(hide, 150); });
+		list.addEventListener("mousedown", function (e) {
+			var el = e.target.closest("[data-i]"); if (!el) return;
+			e.preventDefault();
+			input.value = items[+el.dataset.i].plate;
+			hide();
+		});
+	}
+
+	// The open driver list, and the one pair of listeners that keeps it pinned to
+	// its input while the page moves under it.
+	var openDriverList = null;
+	function repositionDriverList() { if (openDriverList) openDriverList(); }
+	window.addEventListener("scroll", repositionDriverList, true);
+	window.addEventListener("resize", repositionDriverList);
+
+	// Same dropdown as the From/To driver fields, but it reports the pick to a
+	// callback instead of a named hidden input — one row's cell has no form field.
+	//
+	// The list hangs off <body>, fixed, rather than off the cell. The walk-round
+	// table sits in `.ho-area-wrap`, which is `overflow-x:auto` — and a box that
+	// scrolls on one axis clips on both. A list anchored inside the cell was cut
+	// off at the wrapper's edge, so on the LAST row (Spare Tyre) almost none of it
+	// was reachable: the names appeared but nothing could be clicked. Middle rows
+	// were fine, which is why only the last one looked broken.
+	function pickDriver(input, onPick) {
+		var list = null, items = [], timer = null;
+
+		function ensureList() {
+			if (list) return list;
+			list = document.createElement("div");
+			list.className = "jc-ac";
+			// Above the cards it now floats over; it is no longer inside one.
+			list.style.cssText = "display:none;position:fixed;z-index:1200;";
+			list.addEventListener("mousedown", function (e) {
+				var el = e.target.closest("[data-i]"); if (!el) return;
+				e.preventDefault();
+				var it = items[+el.dataset.i];
+				hide();
+				onPick(it.value, it.label);
+			});
+			document.body.appendChild(list);
+			return list;
+		}
+		function place() {
+			if (!list || list.style.display === "none") return;
+			var r = input.getBoundingClientRect();
+			var w = Math.max(r.width, 210);
+			list.style.width = w + "px";
+			list.style.left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8)) + "px";
+			// Below the box normally; above it when the last rows sit near the
+			// bottom of the window and the list would run off-screen.
+			var h = Math.min(list.offsetHeight || 240, 240);
+			var below = window.innerHeight - r.bottom;
+			list.style.top = (below < h + 8 && r.top > below ? Math.max(8, r.top - h - 4) : r.bottom + 2) + "px";
+		}
+		function hide() {
+			if (!list) return;
+			list.style.display = "none";
+			if (openDriverList === place) openDriverList = null;
+			// The row this belonged to has been removed — take the list with it.
+			if (!input.isConnected) { list.remove(); list = null; }
+		}
+		function render(rows) {
+			items = rows || [];
+			var el = ensureList();
+			el.innerHTML = items.length
+				? items.map(function (it, i) {
+					return '<div class="jc-ac-item" data-i="' + i + '"><div class="jc-ac-label">' + esc(it.label) + "</div>" +
+						(it.sub ? '<div class="jc-ac-sub">' + esc(it.sub) + "</div>" : "") + "</div>";
+				}).join("")
+				: '<div class="jc-ac-empty">No matches</div>';
+			el.style.display = "block";
+			openDriverList = place;
+			place();
+		}
+		function run() { Promise.resolve(driverSource(input.value.trim())).then(render).catch(hide); }
+		input.addEventListener("input", function () {
+			// Typing over a chosen driver unsets it: the text no longer names them.
+			onPick("");
+			clearTimeout(timer);
+			timer = setTimeout(run, 180);
+		});
+		input.addEventListener("focus", run);
+		input.addEventListener("blur", function () { setTimeout(hide, 150); });
+	}
+
 	function driverSource(q) {
 		return callMethod("garagedesk.api.fleet.search_drivers", { search: q, limit: 10 }).then(function (rows) {
 			return (rows || []).map(function (d) { return { label: d.full_name || d.name, sub: d.cell_number || "", value: d.name }; });
 		});
 	}
-	attachAutocomplete(document.querySelector('#ho-form [name="from_driver_label"]'), "from_driver", driverSource);
+	var fromDriverInput = document.querySelector('#ho-form [name="from_driver_label"]');
+	attachAutocomplete(fromDriverInput, "from_driver", driverSource);
+	// Correcting who the vehicle is coming back from re-points every row still
+	// carrying the suggestion, and offers it to faults recorded before the header
+	// was filled in. Deferred a tick: the autocomplete writes the hidden id on
+	// mousedown, which lands after the blur this also hears.
+	["input", "change", "blur"].forEach(function (ev) {
+		fromDriverInput.addEventListener(ev, function () {
+			setTimeout(refreshResponsibleDefaults, 0);
+		});
+	});
+
+	// Applies to the walk-round and to every attachment view: the two tables ask
+	// the same question and have to answer it the same way.
+	function refreshResponsibleDefaults() {
+		function apply(r) {
+			r.resp.refreshDefault();
+			r.resp.applyDefault();
+		}
+		walkRows.forEach(apply);
+		Object.keys(viewPanels).forEach(function (k) {
+			viewPanels[k].rows.forEach(apply);
+		});
+	}
 	attachAutocomplete(document.querySelector('#ho-form [name="to_driver_label"]'), "to_driver", driverSource);
 
 	// ------------------------------------- dynamic tick lists (checklist + attachments)
@@ -612,6 +883,12 @@
 				'<input data-serial placeholder="' + esc(label) + " #" + (i + 1) + '">';
 			unitWrap.appendChild(line);
 			box.appendChild(unitWrap);
+			// The plate picks from the attachments this fleet has registered of
+			// this type, rather than being typed in again on every handover — a
+			// typo there is a unit nobody can trace. Free text still goes through:
+			// a trailer borrowed for the day is not on the books and must not stop
+			// the inspection being filed.
+			attachmentPicker(line.querySelector("[data-serial]"), item);
 			buildViewPanel(item, i + 1, label + " #" + (i + 1), unitWrap);
 			// A unit only exists because the attachment is ticked, so its views are
 			// open from the start -- there is nothing to reveal.
@@ -707,7 +984,9 @@
 	}
 
 	// --------------------------------------------------------- prefill
-	callMethod("garagedesk.api.fleet.get_handover_prefill", { vehicle: window.ho_vehicle })
+	// Only for an inspection being taken. A handover being read back is loaded by
+	// loadFiledHandover() at the foot of this file.
+	if (!RO) callMethod("garagedesk.api.fleet.get_handover_prefill", { vehicle: window.ho_vehicle })
 		.then(function (p) {
 			var ctx = document.getElementById("ho-context");
 			if (!p.is_own_fleet) {
@@ -720,10 +999,30 @@
 			if (p.attachment_views && p.attachment_views.length) {
 				ATTACHMENT_VIEWS = p.attachment_views;
 			}
+			// Settled before anything reads it: what the record is decides which
+			// halves of this form get built at all.
+			isAttachment = !!p.is_attachment;
+			// A towed unit has no engine, so the odometer and fuel gauge come off
+			// the form — and with them the readings the review would ask for.
+			if (isAttachment) {
+				document.querySelectorAll("#ho-form [data-motor]").forEach(function (f) {
+					f.style.display = "none";
+				});
+			}
 			renderTicks(chkBox, p.checklist,
 				"No checklist items configured yet. Add them in Desk &rarr; Handover Checklist Item.");
-			renderTicks(attBox, p.attachments,
-				"No attachments configured yet. Add them in Desk &rarr; Handover Attachment Item.", true);
+			// An attachment is not something you couple attachments to. The card is
+			// removed rather than left empty, and with it every view panel, so
+			// nothing downstream -- the review, the payload, the uploads -- has an
+			// attachment to account for.
+			if (isAttachment) {
+				var attCard = document.getElementById("ho-attachments-card");
+				if (attCard) attCard.style.display = "none";
+				attBox.innerHTML = "";
+			} else {
+				renderTicks(attBox, p.attachments,
+					"No attachments configured yet. Add them in Desk &rarr; Handover Attachment Item.", true);
+			}
 			// The walk-round first: the attachment views borrow its condition
 			// wording, so the table has to be built before any panel is.
 			buildWalkTable(p.inspection_areas, p.area_conditions,
@@ -741,22 +1040,30 @@
 				buildViewPanel(row.getAttribute("data-item"), 0,
 					(row.textContent || "Attachment").trim(), row.parentNode);
 			});
+
 			// Odometer and fuel take one shot each, inline at the end of the field.
 			// Every other camera on this handover hangs off a row in a table.
-			attachFieldPhoto("odometer", { target: "odometer" }, { title: "Odometer photo" });
-			attachFieldPhoto("fuel_level", { target: "fuel" }, { title: "Fuel gauge photo" });
+			if (!isAttachment) {
+				attachFieldPhoto("odometer", { target: "odometer" }, { title: "Odometer photo" });
+				attachFieldPhoto("fuel_level", { target: "fuel" }, { title: "Fuel gauge photo" });
+			}
 			ctx.innerHTML = "<b>" + esc(p.model) + "</b> · Plate " + esc(p.plate) +
 				(p.current_driver && p.current_driver.driver_name ? " · Current driver: <b>" + esc(p.current_driver.driver_name) + "</b>" : "") +
 				(p.odometer ? " · Last odometer " + p.odometer.toLocaleString() + " km" : "");
 			if (p.current_driver && p.current_driver.driver) {
 				document.querySelector('#ho-form [name="from_driver"]').value = p.current_driver.driver;
 				document.querySelector('#ho-form [name="from_driver_label"]').value = p.current_driver.driver_name || p.current_driver.driver;
+				// Setting .value fires no event, so the rows already on screen —
+				// built before the vehicle's current driver was known — are told
+				// to pick the name up.
+				refreshResponsibleDefaults();
 			}
 			if (p.previous_handover) {
 				// Rows the previous inspection left carrying damage come back
 				// pre-set, shaded, for this one to confirm or clear.
 				var seeded = seedWalkRows("area", p.previous_areas) +
-					seedWalkRows("tyre", p.previous_tyres);
+					seedWalkRows("tyre", p.previous_tyres) +
+					seedAttachmentViews(p.previous_attachment_views, p.previous_attachment_units);
 				var note = document.getElementById("ho-prev-note");
 				note.style.display = "";
 				note.innerHTML = '<i class="fa-solid fa-circle-info"></i> Previous handover <b>' +
@@ -764,9 +1071,10 @@
 					", held by " + esc(p.previous_handover.holder || "—") + "). " +
 					(seeded
 						? "The " + seeded + " shaded row" + (seeded === 1 ? "" : "s") +
-						  " below still carried damage at that inspection — confirm each one, " +
-						  "update the remark if it is worse, or clear the condition if it has been repaired."
-						: "Nothing was left outstanding on it.");
+						  " below " + (seeded === 1 ? "is" : "are") + " damage still open against this vehicle, " +
+						  "with whoever was held responsible when it was found. Confirm each one and update " +
+						  "the remark if it is worse — it stays on the record until a repair job card is raised for it."
+						: "No damage is open against this vehicle.");
 			}
 		})
 		.catch(function (err) {
@@ -1030,7 +1338,21 @@
 			route: route,
 			opts: opts,
 			multi: multi,
-			files: function () { return shots.map(function (s) { return s.file; }); },
+			// Only what still has to be uploaded. A shot read back off a filed
+			// handover is already on the server and has no File behind it, so
+			// handing it to the upload loop would post a null.
+			files: function () {
+				return shots.filter(function (s) { return s.file; })
+					.map(function (s) { return s.file; });
+			},
+			// Photos already on the record, shown exactly as the capture path
+			// shows fresh ones so the lightbox and the thumbnails need no branch.
+			setRemote: function (urls) {
+				(urls || []).forEach(function (u) {
+					if (u) shots.push({ file: null, url: u, remote: true });
+				});
+				render();
+			},
 			routeFor: function (i) { return route; },
 			shots: function () { return shots; },
 			// The lightbox drives these on whichever shot is on screen.
@@ -1040,7 +1362,7 @@
 			upload: function () { picker.click(); },
 			removeAt: function (i) {
 				if (!shots[i]) return;
-				try { URL.revokeObjectURL(shots[i].url); } catch (e) {}
+				if (!shots[i].remote) { try { URL.revokeObjectURL(shots[i].url); } catch (e) {} }
 				shots.splice(i, 1); render();
 			},
 		};
@@ -1057,7 +1379,10 @@
 			render();
 		}
         function revokeAll() {
-			shots.forEach(function (sh) { try { URL.revokeObjectURL(sh.url); } catch (e) {} });
+			shots.forEach(function (sh) {
+				if (sh.remote) return;
+				try { URL.revokeObjectURL(sh.url); } catch (e) {}
+			});
 		}
 		picker.addEventListener("change", function () {
 			Array.prototype.forEach.call(picker.files, add);
@@ -1067,8 +1392,12 @@
 		function render() {
 			var body;
 			if (!shots.length) {
-				body = '<button type="button" class="ho-ph-btn" data-act="menu" title="' +
-					esc(opts.title || "Add photo") + '"><i class="fa-solid fa-camera"></i></button>';
+				// Nothing was photographed here and nothing can be now; an empty
+				// camera button on a filed record invites a tap that does nothing.
+				body = RO
+					? '<span class="ho-ph-none muted">—</span>'
+					: '<button type="button" class="ho-ph-btn" data-act="menu" title="' +
+					  esc(opts.title || "Add photo") + '"><i class="fa-solid fa-camera"></i></button>';
 			} else {
 				body = '<span class="ho-ph-strip" data-act="open">' +
 					shots.slice(0, 4).map(function (sh) {
@@ -1076,7 +1405,7 @@
 					}).join("") +
 					(shots.length > 4 ? '<span class="ho-ph-more">+' + (shots.length - 4) + "</span>" : "") +
 					"</span>";
-				if (multi) {
+				if (multi && !RO) {
 					body += '<button type="button" class="ho-ph-btn ho-ph-add" data-act="menu" title="Add another photo">' +
 						'<i class="fa-solid fa-plus"></i></button>';
 				}
@@ -1093,6 +1422,7 @@
 			if (!act || !host.contains(act)) return;
 			e.preventDefault();
 			if (act.dataset.act === "menu") {
+				if (RO) return;
 				openPhotoMenu(act, {
 					camera: function () {
 						openCamera(add, { once: !multi, sub: opts.title || "Capture photo" });
@@ -1115,13 +1445,178 @@
 	function dropWidgetsIn(node) {
 		photoWidgets = photoWidgets.filter(function (w) {
 			if (!node.contains(w.host)) return true;
-			w.shots().forEach(function (sh) { try { URL.revokeObjectURL(sh.url); } catch (e) {} });
+			w.shots().forEach(function (sh) {
+				if (sh.remote) return;
+				try { URL.revokeObjectURL(sh.url); } catch (e) {}
+			});
 			return false;
 		});
 	}
 
 	// Put a widget on the label line of a plain form field, so it lines up with
 	// the label rather than fighting the input (or a select's own chevron).
+	// Who the vehicle is coming back from. Read off the header every time rather
+	// than snapshotted at load: an inspector who corrects "From Driver" has also
+	// corrected who answers for whatever they are about to find.
+	function currentFromDriver() {
+		var id = document.querySelector('#ho-form [name="from_driver"]');
+		var label = document.querySelector('#ho-form [name="from_driver_label"]');
+		return { id: id ? id.value.trim() : "",
+		         name: label ? label.value.trim() : "" };
+	}
+
+	// ------------------------------------------------------- responsible party
+	// Who answers for what a row records: the company absorbs it, or one driver
+	// does. The two are exclusive and the cell says so by construction -- ticking
+	// Company takes the driver box away, and naming a driver takes the tick away.
+	// Neither is a default: a row nobody has decided on stays undecided rather
+	// than quietly billing the fleet.
+	function responsibleCell(label) {
+		var cell = document.createElement("td");
+		cell.className = "resp";
+
+		if (RO) {
+			// Same interface as the live cell, so every caller is unchanged; only
+			// `set` does anything, and it writes the name rather than a control.
+			var text = document.createElement("span");
+			text.className = "ho-resp-ro muted";
+			text.textContent = "—";
+			cell.appendChild(text);
+			var shown = "";
+			return {
+				el: cell,
+				value: function () { return { responsible_party: "", responsible_driver: "" }; },
+				applyDefault: function () {},
+				refreshDefault: function () {},
+				set: function (party, id, name) {
+					shown = party === "Driver" ? (name || id || "Driver") : (party || "");
+					text.textContent = shown || "—";
+					text.classList.toggle("muted", !shown);
+					text.classList.toggle("is-driver", party === "Driver");
+				},
+				answered: function () { return !!shown; },
+				label: function () { return shown; },
+			};
+		}
+
+		var company = document.createElement("label");
+		company.className = "check ho-resp-company";
+		var box = document.createElement("input");
+		box.type = "checkbox";
+		box.setAttribute("aria-label", label + " — company is responsible");
+		company.appendChild(box);
+		company.appendChild(document.createTextNode(" Company"));
+
+		var picker = document.createElement("span");
+		picker.className = "ho-resp-driver";
+		var input = document.createElement("input");
+		input.type = "text";
+		input.placeholder = "Driver…";
+		input.autocomplete = "off";
+		input.setAttribute("aria-label", label + " — responsible driver");
+		picker.appendChild(input);
+		var clear = document.createElement("button");
+		clear.type = "button";
+		clear.className = "ho-resp-clear";
+		clear.title = "Clear the driver";
+		clear.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+		picker.appendChild(clear);
+
+		cell.appendChild(company);
+		cell.appendChild(picker);
+
+		var driver = "";        // the Driver id once one is picked
+		// True while the name in the box was filled in FOR the inspector rather
+		// than BY them. It is a suggestion until they act on it, which is what
+		// keeps Company on offer beside it and what lets the row take the default
+		// back when the fault it was filled in for is cleared.
+		var isDefault = false;
+
+		function paint() {
+			// Whichever answer has been given is the only one still on screen --
+			// except a name nobody has confirmed yet, which is not an answer.
+			company.style.display = (driver && !isDefault) ? "none" : "";
+			picker.style.display = box.checked ? "none" : "";
+			clear.style.display = driver ? "" : "none";
+			input.classList.toggle("is-set", !!driver && !isDefault);
+			input.classList.toggle("is-default", !!driver && isDefault);
+		}
+
+		box.addEventListener("change", function () {
+			// Ticking Company answers the row, so a name that was only suggested
+			// goes; one the inspector chose was never on screen to tick beside.
+			if (box.checked && isDefault) { driver = ""; input.value = ""; isDefault = false; }
+			paint();
+		});
+		clear.addEventListener("click", function () {
+			driver = "";
+			input.value = "";
+			isDefault = false;
+			paint();
+			input.focus();
+		});
+		// The shared autocomplete writes into a form field by name, which a table
+		// of rows has no use for; this one hands the pick straight back.
+		pickDriver(input, function (value, text) {
+			driver = value || "";
+			if (text !== undefined) { input.value = text; }
+			isDefault = false;
+			paint();
+		});
+		paint();
+
+		return {
+			el: cell,
+			value: function () {
+				if (driver) { return { responsible_party: "Driver", responsible_driver: driver }; }
+				if (box.checked) { return { responsible_party: "Company", responsible_driver: "" }; }
+				return { responsible_party: "", responsible_driver: "" };
+			},
+			set: function (party, id, name) {
+				driver = (party === "Driver" && id) ? id : "";
+				input.value = driver ? (name || id) : "";
+				box.checked = party === "Company";
+				isDefault = false;
+				paint();
+			},
+			// Offer the driver handing the vehicle back, whatever the row's
+			// condition. The name is who held the vehicle over this period, which
+			// is true of a panel passed as Good just as much as a dented one -- and
+			// re-typing it down twenty rows is how the column got left empty. It
+			// stays a suggestion, dashed and with Company still beside it, until
+			// the inspector picks a driver themselves or ticks Company.
+			//
+			// Only ever fills an unanswered row, so it cannot overwrite an answer.
+			applyDefault: function () {
+				if (driver || box.checked) return;   // already answered
+				var d = currentFromDriver();
+				if (!d.id) return;
+				driver = d.id;
+				input.value = d.name || d.id;
+				isDefault = true;
+				paint();
+			},
+			// The header's From Driver changed; rows still carrying the suggestion
+			// follow it, rows the inspector answered themselves do not.
+			refreshDefault: function () {
+				if (!isDefault) return;
+				var d = currentFromDriver();
+				if (!d.id) { driver = ""; input.value = ""; isDefault = false; }
+				else { driver = d.id; input.value = d.name || d.id; }
+				paint();
+			},
+			// Whether the inspector answered this row themselves. A name filled in
+			// for them is a suggestion, so it is not on its own evidence that the
+			// row was ever looked at -- which is what decides whether an otherwise
+			// untouched row is saved at all.
+			answered: function () { return (!!driver && !isDefault) || box.checked; },
+			label: function () {
+				if (driver) { return input.value.trim() || driver; }
+				return box.checked ? "Company" : "";
+			},
+		};
+	}
+
 	// ------------------------------------------- vehicle unit condition record
 	// One table for the whole walk-round: the body panels first, then the tyres,
 	// every row carrying a condition, a remark and its photos. The tyres used to
@@ -1135,6 +1630,7 @@
 	// here (garagedesk.api.fleet._derived_damages). The form no longer carries a
 	// damage table of its own, which asked a second time for what the inspector
 	// had already assessed on this table.
+	var isAttachment = false;   // a trailer / bed / box handed over in its own right
 	var walkRows = [];
 	var tyreGroupTr = null;                 // where added areas are spliced in above
 	var AREA_FALLBACK = ["Front View", "Rear / Back View", "Left Side View",
@@ -1163,7 +1659,7 @@
 		var tr = document.createElement("tr");
 		tr.className = "ho-area-grp";
 		var td = document.createElement("td");
-		td.colSpan = 6;
+		td.colSpan = 7;
 		td.textContent = title;
 		tr.appendChild(td);
 		body.appendChild(tr);
@@ -1171,10 +1667,26 @@
 	}
 
 	function paintCondition(row) {
+		if (RO) {
+			row.seg.innerHTML = row.condition
+				? '<span class="ho-cond-ro ' + conditionTone(row.condition) + '">' +
+				  esc(row.condition) + "</span>"
+				: '<span class="muted">—</span>';
+			return;
+		}
 		row.seg.querySelectorAll("button").forEach(function (b) {
 			b.classList.toggle("is-on", b.dataset.c === row.condition);
 		});
 		syncRemarkHint(row);
+	}
+
+	// Damaged and Requires Attention are the two verdicts that mean something is
+	// wrong (they are what _derived_damages raises a damage line from), so they
+	// are the two that have to be findable scanning down a filed inspection.
+	function conditionTone(c) {
+		if (c === "Damaged") return "is-bad";
+		if (c === "Requires Attention" || c === "Worn") return "is-warn";
+		return "is-ok";
 	}
 
 	// A row that reports a fault with no remark is a handover that says something
@@ -1199,7 +1711,7 @@
 		var tdName = document.createElement("td");
 		tdName.className = "area";
 		var nameInput = null;
-		if (custom) {
+		if (custom && !RO) {
 			// Added rows name themselves; the photo route reads the name live, so
 			// renaming one before saving still lands its picture correctly.
 			nameInput = document.createElement("input");
@@ -1228,9 +1740,16 @@
 		tdRem.className = "rem";
 		var remark = document.createElement("input");
 		remark.type = "text";
-		remark.placeholder = "Optional note";
+		remark.placeholder = RO ? "—" : "Optional note";
+		remark.readOnly = RO;
 		remark.setAttribute("aria-label", (label || "Row") + " remark");
 		tdRem.appendChild(remark);
+
+		var resp = responsibleCell(label || (isTyre ? "Tyre" : "Area"));
+		// Carries the driver from the moment the row exists, so the column reads
+		// the same down the whole table. A seeded row overwrites it a moment later
+		// with whoever was actually held responsible when the damage was found.
+		resp.applyDefault();
 
 		// Tread depth is a tyre reading; the column stays empty on a body row
 		// rather than the two kinds of row being laid out differently.
@@ -1241,6 +1760,7 @@
 			depthWrap.className = "ho-depth";
 			depth = document.createElement("input");
 			depth.type = "number"; depth.min = "0"; depth.step = "0.1"; depth.placeholder = "—";
+			depth.readOnly = RO;
 			depth.setAttribute("aria-label", (label || "Tyre") + " tread depth in mm");
 			depthWrap.appendChild(depth);
 			var unit = document.createElement("span");
@@ -1258,7 +1778,7 @@
 		tdRm.style.width = "34px";
 
 		tr.appendChild(tdName); tr.appendChild(tdCond); tr.appendChild(tdRem);
-		tr.appendChild(tdDepth); tr.appendChild(tdPhoto); tr.appendChild(tdRm);
+		tr.appendChild(resp.el); tr.appendChild(tdDepth); tr.appendChild(tdPhoto); tr.appendChild(tdRm);
 
 		if (before) {
 			body.insertBefore(tr, before);
@@ -1275,6 +1795,7 @@
 			seg: seg,
 			depth: depth,
 			remark: remark,
+			resp: resp,
 			tr: tr,
 		};
 		row.value = function () {
@@ -1287,28 +1808,35 @@
 			       : { target: "area_row", area: row.value },
 			{ title: (label || (isTyre ? "Tyre" : "Inspection area")) + " photo" });
 
-		seg.addEventListener("click", function (e) {
-			var btn = e.target.closest("button[data-c]");
-			if (!btn) return;
-			// Tapping the chosen one again clears it — there is no "unset" button,
-			// and a mis-tap should not be permanent.
-			row.condition = (row.condition === btn.dataset.c) ? "" : btn.dataset.c;
+		if (RO) {
 			paintCondition(row);
-		});
-		remark.addEventListener("input", function () { syncRemarkHint(row); });
+		} else {
+			seg.addEventListener("click", function (e) {
+				var btn = e.target.closest("button[data-c]");
+				if (!btn) return;
+				// Tapping the chosen one again clears it — there is no "unset" button,
+				// and a mis-tap should not be permanent.
+				row.condition = (row.condition === btn.dataset.c) ? "" : btn.dataset.c;
+				// Every row carries the suggestion already; this only covers a row
+				// answered before the header named a driver.
+				row.resp.applyDefault();
+				paintCondition(row);
+			});
+			remark.addEventListener("input", function () { syncRemarkHint(row); });
 
-		// Every row is removable — a van has no cabin worth a separate shot, a
-		// trailer has no interior at all. Standard rows come back on reload.
-		var rm = document.createElement("button");
-		rm.type = "button"; rm.className = "ho-area-rm";
-		rm.title = isTyre ? "Remove this position" : "Remove this row";
-		rm.innerHTML = '<i class="fa-solid fa-xmark"></i>';
-		rm.addEventListener("click", function () {
-			dropWidgetsIn(tr);
-			tr.remove();
-			walkRows = walkRows.filter(function (r) { return r !== row; });
-		});
-		tdRm.appendChild(rm);
+			// Every row is removable — a van has no cabin worth a separate shot, a
+			// trailer has no interior at all. Standard rows come back on reload.
+			var rm = document.createElement("button");
+			rm.type = "button"; rm.className = "ho-area-rm";
+			rm.title = isTyre ? "Remove this position" : "Remove this row";
+			rm.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+			rm.addEventListener("click", function () {
+				dropWidgetsIn(tr);
+				tr.remove();
+				walkRows = walkRows.filter(function (r) { return r !== row; });
+			});
+			tdRm.appendChild(rm);
+		}
 
 		walkRows.push(row);
 		return row;
@@ -1355,41 +1883,145 @@
 			if (!row) return;
 			if (conditions.indexOf(seed.condition) !== -1) row.condition = seed.condition;
 			if (seed.remark) row.remark.value = seed.remark;
+			// Who was answering for this damage last time is part of the damage.
+			if (seed.responsible_party) {
+				row.resp.set(seed.responsible_party, seed.responsible_driver,
+					seed.responsible_driver_name);
+			}
 			paintCondition(row);
 			row.tr.classList.add("ho-prev-row");
+			originTag(row.tr.querySelector("td.area"), seed.origin_handover);
+			seeded += 1;
+		});
+		return seeded;
+	}
+
+	// Where a carried damage was first found, under the row's name -- so the
+	// inspector reads "open since HND-…" rather than wondering why a panel is
+	// already marked Damaged on a form they have only just opened.
+	function originTag(cell, handover) {
+		if (!cell || !handover) return;
+		var tag = document.createElement("div");
+		tag.className = "ho-since";
+		tag.innerHTML = 'open since <a href="/a3-workshop/vehicle-history-handover?handover=' +
+			encodeURIComponent(handover) + '" target="_blank" rel="noopener">' + esc(handover) + "</a>";
+		cell.appendChild(tag);
+	}
+
+	// Attachment views the ledger still holds damage against. The attachment is
+	// ticked -- at the quantity its damaged unit needs, with the plates the
+	// previous handover recorded so the form files without asking for them
+	// again -- and each view comes back pre-set and shaded like a walk-round row.
+	// An attachment since retired from the master has no row to tick; its line
+	// is still carried by the controller, it just cannot be re-marked here.
+	function seedAttachmentViews(views, units) {
+		if (isAttachment || !views || !views.length) return 0;
+		var rowsByItem = {};
+		attBox.querySelectorAll(".ho-chk-row").forEach(function (r) {
+			rowsByItem[r.getAttribute("data-item")] = r;
+		});
+		var unitsByItem = {};
+		(units || []).forEach(function (u) {
+			(unitsByItem[u.attachment_item] = unitsByItem[u.attachment_item] || []).push(u);
+		});
+		var need = {};
+		views.forEach(function (v) {
+			need[v.attachment_item] = Math.max(need[v.attachment_item] || 0, v.unit_no || 0);
+		});
+		Object.keys(need).forEach(function (item) {
+			var row = rowsByItem[item];
+			if (!row) return;
+			var chk = row.querySelector("[data-chk]");
+			if (!chk.checked) {
+				chk.checked = true;
+				chk.dispatchEvent(new Event("change", { bubbles: true }));
+			}
+			var qtyEl = row.querySelector("[data-qty]");
+			if (!qtyEl) return;
+			var prevUnits = unitsByItem[item] || [];
+			var qty = Math.max(prevUnits.length, need[item], 1);
+			if (parseInt(qtyEl.value, 10) !== qty) {
+				qtyEl.value = qty;
+				qtyEl.dispatchEvent(new Event("change", { bubbles: true }));
+			}
+			var serialEls = row.parentNode.querySelectorAll("[data-serial]");
+			prevUnits.forEach(function (u) {
+				var el = serialEls[(u.unit_no || 1) - 1];
+				if (el && !el.value) el.value = u.serial_no || "";
+			});
+		});
+
+		var seeded = 0;
+		var conditions = lastAreaConditions || AREA_FALLBACK_CONDITIONS;
+		views.forEach(function (v) {
+			var key = viewKey(v.attachment_item, v.unit_no || 0);
+			var p = viewPanels[key];
+			if (!p) return;
+			var wanted = String(v.view || "").trim().toLowerCase();
+			var row = p.rows.filter(function (r) { return r.view().toLowerCase() === wanted; })[0];
+			if (!row) {
+				// A view added by hand last time comes back as an added row.
+				row = addViewRow(key, v.view, true);
+				if (row && row.name) row.name.value = v.view;
+			}
+			if (!row) return;
+			if (conditions.indexOf(v.condition) !== -1) row.condition = v.condition;
+			if (v.remark) row.remark.value = v.remark;
+			if (v.responsible_party) {
+				row.resp.set(v.responsible_party, v.responsible_driver, v.responsible_driver_name);
+			}
+			paintCondition(row);
+			var tr = row.seg.closest("tr");
+			if (tr) {
+				tr.classList.add("ho-prev-row");
+				originTag(tr.querySelector("td.vw"), v.origin_handover);
+			}
+			p.el.classList.add("is-open");
 			seeded += 1;
 		});
 		return seeded;
 	}
 
 	// Rows the inspector actually assessed. A photo or a remark on its own counts,
-	// so the server keeps the row for the upload to land on.
+	// so the server keeps the row for the upload to land on. The responsible
+	// column is read through `answered` rather than `label`: every row now shows
+	// the driver as a suggestion, and a suggestion is not evidence the row was
+	// looked at -- testing the label would save a row for every panel on the
+	// vehicle whether or not anyone assessed it.
 	function collectAreas() {
 		return areaRows().filter(function (r) {
-			return r.value() &&
-				(r.condition || r.remark.value.trim() || r.widget.shots().length);
+			return r.value() && (r.condition || r.remark.value.trim() ||
+				r.resp.answered() || r.widget.shots().length);
 		}).map(function (r) {
-			return {
+			var out = {
 				area: r.value(),
 				condition: r.condition,
 				remark: r.remark.value.trim(),
 				has_photo: r.widget.shots().length ? 1 : 0,
 			};
+			var resp = r.resp.value();
+			out.responsible_party = resp.responsible_party;
+			out.responsible_driver = resp.responsible_driver;
+			return out;
 		});
 	}
 
 	function collectTyres() {
 		return tyreRows().filter(function (r) {
 			return r.value() && (r.condition || r.depth.value !== "" ||
-				r.remark.value.trim() || r.widget.shots().length);
+				r.remark.value.trim() || r.resp.answered() || r.widget.shots().length);
 		}).map(function (r) {
-			return {
+			var out = {
 				position: r.value(),
 				condition: r.condition,
 				tread_depth_mm: r.depth.value === "" ? null : Number(r.depth.value),
 				remark: r.remark.value.trim(),
 				has_photo: r.widget.shots().length ? 1 : 0,
 			};
+			var resp = r.resp.value();
+			out.responsible_party = resp.responsible_party;
+			out.responsible_driver = resp.responsible_driver;
+			return out;
 		});
 	}
 
@@ -1433,26 +2065,28 @@
 		var table = document.createElement("table");
 		table.className = "ho-view-tbl";
 		table.innerHTML = "<thead><tr><th>View</th><th>Condition</th><th class=\"rem\">Remark</th>" +
-			"<th>Photo</th><th></th></tr></thead>";
+			"<th class=\"resp\">Responsible</th><th>Photo</th><th></th></tr></thead>";
 		var tbody = document.createElement("tbody");
 		table.appendChild(tbody);
 		panel.appendChild(table);
 
-		var add = document.createElement("button");
-		add.type = "button";
-		add.className = "btn btn--outline btn--sm";
-		add.style.marginTop = "10px";
-		add.innerHTML = '<i class="fa-solid fa-plus"></i> Add View';
-		add.addEventListener("click", function () {
-			var row = addViewRow(key, "", true);
-			if (row && row.name) row.name.focus();
-		});
-		panel.appendChild(add);
+		if (!RO) {
+			var add = document.createElement("button");
+			add.type = "button";
+			add.className = "btn btn--outline btn--sm";
+			add.style.marginTop = "10px";
+			add.innerHTML = '<i class="fa-solid fa-plus"></i> Add View';
+			add.addEventListener("click", function () {
+				var row = addViewRow(key, "", true);
+				if (row && row.name) row.name.focus();
+			});
+			panel.appendChild(add);
+		}
 		mount.appendChild(panel);
 
 		viewPanels[key] = { el: panel, body: tbody, rows: [], item: item,
 			unit_no: unitNo || 0, label: label };
-		ATTACHMENT_VIEWS.forEach(function (vw) { addViewRow(key, vw, false); });
+		if (!RO) ATTACHMENT_VIEWS.forEach(function (vw) { addViewRow(key, vw, false); });
 		return viewPanels[key];
 	}
 
@@ -1469,7 +2103,7 @@
 		var tdV = document.createElement("td");
 		tdV.className = "vw";
 		var nameInput = null;
-		if (custom) {
+		if (custom && !RO) {
 			// Added views name themselves — "Roof", "Coupling", whatever this
 			// attachment actually needs. The route reads the name at upload time.
 			nameInput = document.createElement("input");
@@ -1495,9 +2129,15 @@
 		tdRem.className = "rem";
 		var remark = document.createElement("input");
 		remark.type = "text";
-		remark.placeholder = "Optional note";
+		remark.placeholder = RO ? "—" : "Optional note";
+		remark.readOnly = RO;
 		remark.setAttribute("aria-label", p.label + " " + (vw || "view") + " remark");
 		tdRem.appendChild(remark);
+
+		var resp = responsibleCell(p.label + " " + (vw || "view"));
+		// Same as the walk-round: the attachment views ask the same question and
+		// have to answer it the same way.
+		resp.applyDefault();
 
 		var tdP = document.createElement("td");
 		var host = document.createElement("span");
@@ -1508,11 +2148,12 @@
 		tdRm.style.width = "34px";
 
 		tr.appendChild(tdV); tr.appendChild(tdC); tr.appendChild(tdRem);
-		tr.appendChild(tdP); tr.appendChild(tdRm);
+		tr.appendChild(resp.el); tr.appendChild(tdP); tr.appendChild(tdRm);
 
 		p.body.appendChild(tr);
 
-		var row = { name: nameInput, label: vw || "", condition: "", remark: remark, seg: seg };
+		var row = { name: nameInput, label: vw || "", condition: "", remark: remark,
+		            resp: resp, seg: seg };
 		row.view = function () {
 			return row.name ? row.name.value.trim() : row.label;
 		};
@@ -1520,24 +2161,29 @@
 			{ target: "attachment_view", item: p.item, unit_no: p.unit_no, view: row.view },
 			{ title: p.label + " — " + (vw || "view") });
 
-		seg.addEventListener("click", function (e) {
-			var btn = e.target.closest("button[data-c]");
-			if (!btn) return;
-			row.condition = (row.condition === btn.dataset.c) ? "" : btn.dataset.c;
+		if (RO) {
 			paintCondition(row);
-		});
-		remark.addEventListener("input", function () { syncRemarkHint(row); });
+		} else {
+			seg.addEventListener("click", function (e) {
+				var btn = e.target.closest("button[data-c]");
+				if (!btn) return;
+				row.condition = (row.condition === btn.dataset.c) ? "" : btn.dataset.c;
+				row.resp.applyDefault();
+				paintCondition(row);
+			});
+			remark.addEventListener("input", function () { syncRemarkHint(row); });
 
-		var rm = document.createElement("button");
-		rm.type = "button"; rm.className = "ho-area-rm";
-		rm.title = "Remove this view";
-		rm.innerHTML = '<i class="fa-solid fa-xmark"></i>';
-		rm.addEventListener("click", function () {
-			dropWidgetsIn(tr);
-			tr.remove();
-			p.rows = p.rows.filter(function (r) { return r !== row; });
-		});
-		tdRm.appendChild(rm);
+			var rm = document.createElement("button");
+			rm.type = "button"; rm.className = "ho-area-rm";
+			rm.title = "Remove this view";
+			rm.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+			rm.addEventListener("click", function () {
+				dropWidgetsIn(tr);
+				tr.remove();
+				p.rows = p.rows.filter(function (r) { return r !== row; });
+			});
+			tdRm.appendChild(rm);
+		}
 
 		p.rows.push(row);
 		return row;
@@ -1552,13 +2198,18 @@
 			p.rows.forEach(function (r) {
 				if (!r.view()) return;
 				var remark = r.remark.value.trim();
-				if (!r.condition && !remark && !r.widget.shots().length) return;
+				var resp = r.resp.value();
+				// `answered`, not the value: the driver is suggested on every view,
+				// and a suggestion must not make an unassessed view look assessed.
+				if (!r.condition && !remark && !r.resp.answered() && !r.widget.shots().length) return;
 				out.push({
 					attachment_item: p.item,
 					unit_no: p.unit_no,
 					view: r.view(),
 					condition: r.condition,
 					remark: remark,
+					responsible_party: resp.responsible_party,
+					responsible_driver: resp.responsible_driver,
 					has_photo: r.widget.shots().length ? 1 : 0,
 				});
 			});
@@ -1674,6 +2325,10 @@
 		lbNote.textContent = e.note || "";
 		lbCount.textContent = (lbAt + 1) + " / " + lbList.length;
 		lbRetakeLbl.textContent = e.w.multi ? "Take another" : "Retake";
+		// Retake / Upload / Remove all edit the capture they are looking at, which
+		// a record that has already been filed does not have.
+		lbEl.querySelectorAll("[data-lb-retake],[data-lb-upload],[data-lb-remove]")
+			.forEach(function (b) { b.hidden = RO; });
 		lbEl.querySelector("[data-lb-prev]").hidden = lbList.length < 2;
 		lbEl.querySelector("[data-lb-next]").hidden = lbList.length < 2;
 	}
@@ -1824,26 +2479,32 @@
 		var sections = [];
 
 		var readings = [];
-		[["odometer", "Odometer", val("odometer") ? val("odometer") + " km" : ""],
-		 ["fuel", "Fuel gauge", val("fuel_level")]].forEach(function (f) {
-			var w = fieldWidget(f[0]);
-			if (w) readings.push(confirmCard(w, f[1], f[2], ""));
-		});
+		if (!isAttachment) {
+			[["odometer", "Odometer", val("odometer") ? val("odometer") + " km" : ""],
+			 ["fuel", "Fuel gauge", val("fuel_level")]].forEach(function (f) {
+				var w = fieldWidget(f[0]);
+				if (w) readings.push(confirmCard(w, f[1], f[2], ""));
+			});
+		}
 		sections.push(["Readings", readings]);
 
 		// Body panels and tyres share one table on the form; the review keeps them
 		// apart, because "is every tyre photographed" is its own question.
+		// The note under a review card: what was written, then who answers for it.
+		function cardNote(row, extra) {
+			return [extra, row.remark.value.trim(), row.resp.label()]
+				.filter(Boolean).join(" · ");
+		}
+
 		sections.push(["Vehicle unit", areaRows().filter(function (r) { return r.value(); })
 			.map(function (r) {
-				return confirmCard(r.widget, r.value(), r.remark.value.trim(), r.condition);
+				return confirmCard(r.widget, r.value(), cardNote(r), r.condition);
 			})]);
 
 		sections.push(["Tyres", tyreRows().filter(function (r) { return r.value(); })
 			.map(function (r) {
-				var note = r.depth.value !== "" ? r.depth.value + " mm" : "";
-				var remark = r.remark.value.trim();
 				return confirmCard(r.widget, r.value(),
-					[note, remark].filter(Boolean).join(" · "), r.condition);
+					cardNote(r, r.depth.value !== "" ? r.depth.value + " mm" : ""), r.condition);
 			})]);
 
 		Object.keys(viewPanels).forEach(function (k) {
@@ -1851,7 +2512,7 @@
 			if (!panelIsOnHandover(p)) return;
 			sections.push([p.label, p.rows.filter(function (r) { return r.view(); })
 				.map(function (r) {
-					return confirmCard(r.widget, r.view(), r.remark.value.trim(), r.condition);
+					return confirmCard(r.widget, r.view(), cardNote(r), r.condition);
 				})]);
 		});
 
@@ -1917,7 +2578,10 @@
 
 	saveBtn.addEventListener("click", function () {
 		var odo = val("odometer");
-		if (!odo || !Number(odo)) { alert("Odometer reading is required."); return; }
+		if (!isAttachment && (!odo || !Number(odo))) {
+			alert("Odometer reading is required.");
+			return;
+		}
 		if (!val("from_driver") && !val("to_driver")) { alert("Pick at least one driver (From and/or To)."); return; }
 		var chk = collectTicks(chkBox);
 		if (chk.missing) { alert('Please enter a value for the checklist item "' + chk.missing + '".'); return; }
@@ -2027,60 +2691,17 @@
 				}).then(function () { res.photos_failed = failed; return res; });
 			});
 		}).then(function (res) {
-			// Show the auto-diff outcome before leaving the page.
+			// The receipt: what is open against the vehicle, in the two tables
+			// the inspector signs off on, before leaving the page.
 			var overlay = document.getElementById("ho-result-modal");
 			document.getElementById("ho-result-sub").textContent = res.name;
-			var body = document.getElementById("ho-result-body");
-			if (res.discrepancy_found) {
-				body.innerHTML =
-					'<div style="font-weight:700;color:var(--red);margin-bottom:12px"><i class="fa-solid fa-triangle-exclamation"></i> ' +
-					res.new_damages.length + " new damage" + (res.new_damages.length > 1 ? "s" : "") + " found since the previous handover</div>" +
-					res.new_damages.map(function (x) {
-						// The description is where a derived line says what and where —
-						// the tyre position, or the attachment, unit and view. Without
-						// it a row off an attachment reads only "Other — Other".
-						return '<div class="vh-dmg is-new"><div class="t">' + esc(x.area) + " — " + esc(x.damage_type) +
-							(x.severity ? ' <span class="badge badge--soft">' + esc(x.severity) + "</span>" : "") +
-							(x.previous_severity ? ' <span class="badge badge--pending">was ' + esc(x.previous_severity) + "</span>" : "") +
-							"</div>" +
-							(x.description ? '<div class="muted" style="margin-top:3px">' + esc(x.description) + "</div>" : "") +
-							"</div>";
-					}).join("") +
-					(res.responsible_driver_name || res.responsible_driver
-						? '<div class="row-between" style="margin-top:14px"><span class="muted">Responsible driver</span><b style="color:var(--red)">' +
-						  esc(res.responsible_driver_name || res.responsible_driver) + "</b></div>"
-						: "") +
-					'<div class="muted" style="font-size:13px;margin-top:10px">Rectification is now marked <b>Pending</b> — resolve or document it before the next handover.</div>';
-			} else {
-				body.innerHTML = '<div style="font-weight:700;color:var(--green)"><i class="fa-solid fa-circle-check"></i> ' +
-					"No new damage since the previous handover.</div>";
-			}
-
-			// Then everything this handover put on the record, new or not. Without
-			// it a panel marked Damaged that was already damaged last time reads as
-			// "nothing noted" — it is known damage, and it is still recorded here.
-			var noted = res.damages || [];
-			if (noted.length) {
-				body.innerHTML += '<div class="ho-cf-sec" style="margin-top:20px">' +
-					"<h4>Damage recorded on this handover · " + noted.length + "</h4>" +
-					noted.map(function (d) {
-						return '<div class="vh-dmg"><div class="t">' + esc(d.area) + " — " + esc(d.damage_type) +
-							(d.severity ? ' <span class="badge badge--soft">' + esc(d.severity) + "</span>" : "") +
-							"</div>" +
-							(d.description ? '<div class="muted" style="margin-top:3px">' + esc(d.description) + "</div>" : "") +
-							"</div>";
-					}).join("") + "</div>";
-			}
-			if (res.photos_failed) {
-				body.innerHTML +=
-					'<div style="margin-top:14px;font-weight:600;color:var(--amber,#d98324)">' +
-					'<i class="fa-solid fa-triangle-exclamation"></i> ' + res.photos_failed +
-					" photograph" + (res.photos_failed === 1 ? "" : "s") + " could not be uploaded.</div>" +
-					'<div class="muted" style="font-size:13px;margin-top:6px">The handover itself is saved — ' +
-					"do not record it again. Open the vehicle and add the missing photos there.</div>";
-			}
+			renderResult(res);
+			// Straight to the Handovers tab, not the Overview the page opens on:
+			// the handover just filed is the row they are going to look for, and
+			// it is where its damages and Create Job Card button live.
 			document.getElementById("ho-result-done").href =
-				"/a3-workshop/vehicle-history-detail?vehicle=" + encodeURIComponent(window.ho_vehicle);
+				"/a3-workshop/vehicle-history-detail?vehicle=" +
+				encodeURIComponent(window.ho_vehicle) + "#handovers";
 			document.getElementById("ho-result-print").href =
 				"/a3-workshop/vehicle-history-print?handover=" + encodeURIComponent(res.name);
 			confirmModal.classList.remove("is-open");
@@ -2100,6 +2721,468 @@
 					"\n\nDo not record it again — open the vehicle to check it.");
 			}
 		});
+	}
+
+	// ==================================================== filed handover (read-only)
+	// ?handover= rebuilds this same page from what was recorded, rather than
+	// opening a summary dialog beside it. It runs at the foot of the file because
+	// it drives the builders above -- buildViewPanel, addWalkRow, renderTicks --
+	// and they close over state declared as it goes.
+
+	function dash(v) { return (v === "—" || v == null) ? "" : String(v); }
+
+	// get_handover hands back the responsible party already resolved to something
+	// readable ("Company", or the driver's full name) -- the id would tell whoever
+	// signed for the vehicle nothing. The cell only needs to know which of the two
+	// it is looking at.
+	function setResp(cell, label) {
+		label = dash(label).trim();
+		if (!label) return;
+		if (label === "Company") cell.set("Company", "", "");
+		else cell.set("Driver", "", label);
+	}
+
+	function fillWalkRow(row, rec) {
+		if (!row) return;
+		row.condition = dash(rec.condition);
+		if (rec.remark) row.remark.value = rec.remark;
+		if (row.depth && rec.tread_depth_mm) row.depth.value = rec.tread_depth_mm;
+		setResp(row.resp, rec.responsible);
+		if (rec.photo) row.widget.setRemote([rec.photo]);
+		paintCondition(row);
+	}
+
+	// Only what the inspection actually assessed: an untouched row is dropped on
+	// save (see _area_rows / _tyre_rows), so laying the standard set out here
+	// would show panels that handover never had a verdict on.
+	function buildFiledWalkTable(areas, tyres) {
+		lastAreaConditions = AREA_FALLBACK_CONDITIONS;
+		lastTyreConditions = TYRE_FALLBACK_CONDITIONS;
+		var body = document.getElementById("ho-area-rows");
+		if (!body) return;
+		body.innerHTML = "";
+		walkRows = [];
+		if (!areas.length && !tyres.length) {
+			body.innerHTML = '<tr><td colspan="7" class="muted" style="padding:18px 0">' +
+				"No walk-round rows were recorded on this handover.</td></tr>";
+			return;
+		}
+		if (areas.length) {
+			addGroupRow("Body & interior");
+			areas.forEach(function (a) {
+				fillWalkRow(addWalkRow("area", a.area, lastAreaConditions, false), a);
+			});
+		}
+		if (tyres.length) {
+			tyreGroupTr = addGroupRow("Tyres");
+			tyres.forEach(function (t) {
+				fillWalkRow(addWalkRow("tyre", t.position, lastTyreConditions, false), t);
+			});
+		}
+	}
+
+	// The panel a recorded view belongs under. Normally one of the panels the tick
+	// list just built; a view whose attachment has since been retired from
+	// Handover Attachment Item has none, and is given one of its own rather than
+	// being dropped -- it is on the record, and the record is what this page is.
+	var orphanViewMount = null;
+	function filedViewPanel(item, unitNo, label) {
+		var existing = viewPanels[viewKey(item, unitNo)];
+		if (existing) return existing;
+		if (!orphanViewMount) {
+			orphanViewMount = document.createElement("div");
+			attBox.appendChild(orphanViewMount);
+		}
+		return buildViewPanel(item, unitNo, label, orphanViewMount);
+	}
+
+	function fillAttachmentViews(rows) {
+		(rows || []).forEach(function (rec) {
+			var label = rec.attachment_item || "Attachment";
+			if (rec.unit_no) label += " #" + rec.unit_no;
+			var p = filedViewPanel(rec.attachment_item, rec.unit_no || 0, label);
+			if (!p) return;
+			p.el.classList.add("is-open");
+			var row = addViewRow(viewKey(rec.attachment_item, rec.unit_no || 0),
+				rec.view || "View", false);
+			if (!row) return;
+			row.condition = dash(rec.condition);
+			if (rec.remark) row.remark.value = rec.remark;
+			setResp(row.resp, rec.responsible);
+			if (rec.photo) row.widget.setRemote([rec.photo]);
+			paintCondition(row);
+		});
+	}
+
+	// The tick rows are set through the control the inspector would have used and
+	// a dispatched change, so wireTicks does its own revealing -- the remark box,
+	// the qty spinner, the serial lines and each unit's views table all appear the
+	// way they did when the handover was taken. Freezing them comes afterwards.
+	function fillTicks(box, records) {
+		box.querySelectorAll(".ho-chk-row").forEach(function (row) {
+			var item = row.getAttribute("data-item");
+			var rec = records[item];
+			if (!rec) return;
+			var chk = row.querySelector("[data-chk]");
+			if (chk && rec.checked) { chk.checked = true; chk.dispatchEvent(new Event("change", { bubbles: true })); }
+			var qtyEl = row.querySelector("[data-qty]");
+			if (qtyEl && rec.qty) {
+				qtyEl.value = rec.qty;
+				qtyEl.dispatchEvent(new Event("change", { bubbles: true }));
+			}
+			var valEl = row.querySelector("[data-val]");
+			if (valEl && rec.value) valEl.value = rec.value;
+			var remEl = row.parentNode.querySelector("[data-remark]");
+			if (remEl && rec.remark) remEl.value = rec.remark;
+			var serialEls = row.parentNode.querySelectorAll("[data-serial]");
+			(rec.serials || []).forEach(function (sn, i) {
+				if (serialEls[i]) serialEls[i].value = sn || "";
+			});
+		});
+	}
+
+	// Nothing on this page writes, but a control that still takes a keystroke
+	// invites one -- and the value it would then show is not what was filed.
+	function freezeInputs() {
+		document.querySelectorAll(
+			"#ho-form input, #ho-form textarea, .ho-area-tbl input, .ho-view-tbl input, " +
+			".ho-chk-row input, .ho-chk-rem input, .ho-serial input"
+		).forEach(function (el) {
+			if (el.type === "checkbox" || el.type === "radio") { el.disabled = true; return; }
+			el.readOnly = true;
+		});
+		// readOnly does nothing to a select; disabled is the only thing that holds.
+		document.querySelectorAll("#ho-form select").forEach(function (el) { el.disabled = true; });
+	}
+
+	// ------------------------------------------------ damage tables (shared)
+	// Existing damage -- found on an earlier handover and still open -- and new
+	// damage, first found on this one. Drawn the same way on the result dialog
+	// and on a filed record. Every line names who answers for it; an existing
+	// one also says which handover first found it and, once one is raised, the
+	// repair job card.
+	function dmgCell(d, showJobCard) {
+		return "<b>" + esc(d.area || "—") + "</b> — " + esc(d.damage_type || "—") +
+			(d.severity ? ' <span class="badge badge--soft">' + esc(d.severity) + "</span>" : "") +
+			(d.previous_severity ? ' <span class="badge badge--pending">was ' +
+				esc(d.previous_severity) + "</span>" : "") +
+			(d.description ? '<div class="muted" style="font-size:12px;margin-top:2px">' +
+				esc(d.description) + "</div>" : "") +
+			// On a filed record a new line may since have been repaired; the
+			// existing table says so in its Handover column, this one here.
+			(showJobCard && d.job_card
+				? '<div class="muted" style="font-size:12px;margin-top:2px">Repaired under JC <a class="vh-jc-link" href="/a3-workshop/job-card/detail?id=' +
+				  encodeURIComponent(d.job_card) + '">' + esc(d.job_card) + "</a></div>"
+				: "");
+	}
+	function respCell(d) {
+		if (!d.responsible) return '<span class="muted">—</span>';
+		return d.responsible_party === "Driver"
+			? '<b style="color:var(--red)">' + esc(d.responsible) + "</b>"
+			: "<b>" + esc(d.responsible) + "</b>";
+	}
+	function handoverCell(d) {
+		var h = d.origin_handover
+			? '<a href="/a3-workshop/vehicle-history-handover?handover=' +
+			  encodeURIComponent(d.origin_handover) + '">' + esc(d.origin_handover) + "</a>"
+			: '<span class="muted">—</span>';
+		if (d.job_card) {
+			h += '<div class="muted" style="font-size:12px">JC <a class="vh-jc-link" href="/a3-workshop/job-card/detail?id=' +
+				encodeURIComponent(d.job_card) + '">' + esc(d.job_card) + "</a></div>";
+		}
+		return h;
+	}
+	function damageTable(rows, withHandover, isNew) {
+		return '<table class="ho-dmg-tbl"><thead><tr><th>Damage</th>' +
+			(withHandover ? "<th>Handover</th>" : "") + "<th>Responsible</th></tr></thead><tbody>" +
+			rows.map(function (d) {
+				return "<tr" + (isNew ? ' class="is-new"' : "") + "><td>" + dmgCell(d, !withHandover) + "</td>" +
+					(withHandover ? "<td>" + handoverCell(d) + "</td>" : "") +
+					"<td>" + respCell(d) + "</td></tr>";
+			}).join("") + "</tbody></table>";
+	}
+	function damageTables(existing, fresh, opts) {
+		opts = opts || {};
+		return '<div class="ho-dmg-sec"><h4>Existing damage · ' + existing.length + "</h4>" +
+			(existing.length
+				? damageTable(existing, true, false)
+				: '<div class="muted" style="font-size:13px">Nothing carried forward from earlier handovers.</div>') +
+			"</div>" +
+			'<div class="ho-dmg-sec"><div class="row-between" style="align-items:center;margin-bottom:10px">' +
+			'<h4 style="margin:0">New damage · ' + fresh.length + "</h4>" +
+			(opts.addButton
+				? '<button type="button" class="btn btn--outline btn--sm" id="ho-add-dmg">' +
+				  '<i class="fa-solid fa-plus"></i> Add Damage</button>'
+				: "") +
+			"</div>" +
+			(fresh.length
+				? damageTable(fresh, false, true)
+				: '<div class="muted" style="font-size:13px">No new damage found on this handover.</div>') +
+			'<div id="ho-add-dmg-form"></div></div>';
+	}
+
+	// ------------------------------------------------------- result dialog
+	var lastResult = null;
+
+	function renderResult(res) {
+		lastResult = res;
+		var body = document.getElementById("ho-result-body");
+		var existing = res.existing_damages || [];
+		var fresh = res.new_damages || [];
+		var head;
+		if (fresh.length) {
+			head = '<div style="font-weight:700;color:var(--red);margin-bottom:14px">' +
+				'<i class="fa-solid fa-triangle-exclamation"></i> ' + fresh.length + " new damage" +
+				(fresh.length > 1 ? "s" : "") + " found on this handover</div>";
+		} else if (existing.length) {
+			head = '<div style="font-weight:700;color:var(--amber,#d98324);margin-bottom:14px">' +
+				'<i class="fa-solid fa-circle-info"></i> No new damage — ' + existing.length +
+				" earlier damage" + (existing.length > 1 ? "s" : "") + " still open</div>";
+		} else {
+			head = '<div style="font-weight:700;color:var(--green);margin-bottom:14px">' +
+				'<i class="fa-solid fa-circle-check"></i> No damage on record — vehicle recorded clean.</div>';
+		}
+		var foot = "";
+		if (res.responsible_driver_name || res.responsible_driver) {
+			foot += '<div class="row-between" style="margin-top:16px"><span class="muted">Responsible driver</span>' +
+				'<b style="color:var(--red)">' + esc(res.responsible_driver_name || res.responsible_driver) + "</b></div>";
+		}
+		if (res.discrepancy_found) {
+			foot += '<div class="muted" style="font-size:13px;margin-top:8px">Rectification is now marked <b>Pending</b>. ' +
+				"Every line above stays open until a repair job card is raised for it.</div>";
+		}
+		if (res.photos_failed) {
+			foot += '<div style="margin-top:14px;font-weight:600;color:var(--amber,#d98324)">' +
+				'<i class="fa-solid fa-triangle-exclamation"></i> ' + res.photos_failed +
+				" photograph" + (res.photos_failed === 1 ? "" : "s") + " could not be uploaded.</div>" +
+				'<div class="muted" style="font-size:13px;margin-top:6px">The handover itself is saved — ' +
+				"do not record it again. Open the vehicle and add the missing photos there.</div>";
+		}
+		body.innerHTML = head + damageTables(existing, fresh, { addButton: true }) + foot;
+		var add = document.getElementById("ho-add-dmg");
+		if (add) add.addEventListener("click", function () { openAddDamageForm(res); });
+	}
+
+	// Something the walk-round rows had no place for, noticed as the receipt
+	// was being read. Picks from the same lists the Desk uses, asks who answers
+	// for it the same way a row does, and lands on the record through
+	// fleet.add_handover_damage -- the tables redraw from what came back.
+	function openAddDamageForm(res) {
+		var host = document.getElementById("ho-add-dmg-form");
+		if (!host || host.firstChild) return;
+		var o = res.damage_options || {};
+		function select(label, list, first) {
+			var el = document.createElement("select");
+			el.setAttribute("aria-label", label);
+			el.innerHTML = '<option value="">' + esc(label) + "…</option>" +
+				(list || []).map(function (v) { return '<option value="' + esc(v) + '">' + esc(v) + "</option>"; }).join("");
+			if (first) el.value = first;
+			return el;
+		}
+		var area = select("Area", o.areas);
+		var type = select("Damage type", o.damage_types);
+		var severity = select("Severity", o.severities, "Minor");
+		var desc = document.createElement("input");
+		desc.type = "text"; desc.placeholder = "What is wrong? (optional)";
+		desc.setAttribute("aria-label", "Damage description");
+		var resp = responsibleCell("New damage");
+		// A damage being added is a fault, so the driver handing the vehicle
+		// back is offered here as it is on a row.
+		resp.applyDefault(true);
+
+		var table = document.createElement("table");
+		table.className = "ho-dmg-tbl ho-dmg-add";
+		var tr = document.createElement("tr");
+		var td1 = document.createElement("td");
+		var line = document.createElement("div"); line.className = "ho-dmg-add-line";
+		line.appendChild(area); line.appendChild(type); line.appendChild(severity);
+		td1.appendChild(line); td1.appendChild(desc);
+		var td3 = document.createElement("td"); td3.className = "ho-dmg-add-act";
+		var go = document.createElement("button");
+		go.type = "button"; go.className = "btn btn--primary btn--sm";
+		go.innerHTML = '<i class="fa-solid fa-plus"></i> Add';
+		var cancel = document.createElement("button");
+		cancel.type = "button"; cancel.className = "btn btn--outline btn--sm";
+		cancel.textContent = "Cancel";
+		td3.appendChild(go); td3.appendChild(cancel);
+		tr.appendChild(td1); tr.appendChild(resp.el); tr.appendChild(td3);
+		table.appendChild(tr);
+		var msg = document.createElement("div");
+		msg.className = "ho-dmg-add-msg"; msg.style.display = "none";
+		host.appendChild(table); host.appendChild(msg);
+		area.focus();
+
+		function fail(text) { msg.style.display = ""; msg.textContent = text; }
+		cancel.addEventListener("click", function () { host.innerHTML = ""; });
+		go.addEventListener("click", function () {
+			if (!area.value) return fail("Pick the area.");
+			if (!type.value) return fail("Pick the damage type.");
+			var who = resp.value();
+			go.disabled = true; cancel.disabled = true;
+			go.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Adding…';
+			callMethod("garagedesk.api.fleet.add_handover_damage", {
+				handover: res.name,
+				area: area.value,
+				damage_type: type.value,
+				severity: severity.value,
+				description: desc.value.trim(),
+				responsible_party: who.responsible_party,
+				responsible_driver: who.responsible_driver,
+			}).then(function (tables) {
+				lastResult.existing_damages = tables.existing_damages || [];
+				lastResult.new_damages = tables.new_damages || [];
+				lastResult.discrepancy_found = lastResult.new_damages.length ? 1 : lastResult.discrepancy_found;
+				renderResult(lastResult);
+			}).catch(function (err) {
+				go.disabled = false; cancel.disabled = false;
+				go.innerHTML = '<i class="fa-solid fa-plus"></i> Add';
+				fail("Could not add the damage: " + (err && err.message || err));
+			});
+		});
+	}
+
+	// ------------------------------------------------- filed record: damage card
+	function renderFiledDamages(h) {
+		var box = document.getElementById("ho-damage-body");
+		if (!box) return;
+		var existing = h.existing_damages || [];
+		var fresh = (h.damages || []).filter(function (d) { return !d.is_existing; });
+		var html = damageTables(existing, fresh, {});
+		if (h.comparison_damages && h.comparison_damages.length) {
+			html += '<div class="ho-dmg-sec"><h4>Damage found by comparing photographs · ' +
+				h.comparison_damages.length + "</h4>" + damageTable(h.comparison_damages, false, true) + "</div>";
+		}
+		var foot = [];
+		if (dash(h.responsible_driver)) {
+			foot.push('<div class="row-between"><span class="muted">Responsible driver</span><b style="color:var(--red)">' +
+				esc(h.responsible_driver) + "</b></div>");
+		}
+		if (h.rectification_status && h.rectification_status !== "Not Required") {
+			foot.push('<div class="row-between"><span class="muted">Rectification</span><b>' +
+				esc(h.rectification_status) + "</b></div>");
+		}
+		if (h.rectification_job_card) {
+			foot.push('<div class="row-between"><span class="muted">Job card</span>' +
+				'<a class="vh-jc-link" href="/a3-workshop/job-card/detail?id=' +
+				encodeURIComponent(h.rectification_job_card) + '">' +
+				esc(h.rectification_job_card) + "</a></div>");
+		}
+		if (dash(h.rectification_notes)) {
+			foot.push('<div class="muted" style="font-size:13px;margin-top:8px">' +
+				esc(h.rectification_notes) + "</div>");
+		}
+		box.innerHTML = html + (foot.length
+			? '<div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--border)">' +
+			  foot.join("") + "</div>"
+			: "");
+	}
+
+	function renderFiledHandover(h) {
+		document.body.classList.add("ho-ro");
+		isAttachment = !!h.is_attachment;
+		if (isAttachment) {
+			document.querySelectorAll("#ho-form [data-motor]").forEach(function (f) {
+				f.style.display = "none";
+			});
+		}
+
+		document.getElementById("ho-context").innerHTML =
+			"<b>" + esc(h.model || h.vehicle) + "</b> · Plate " + esc(h.plate || "—") +
+			" · " + esc(h.date || "—") +
+			(dash(h.handover_type) ? " · " + esc(h.handover_type) : "") +
+			(h.odometer ? " · " + h.odometer.toLocaleString() + " km" : "") +
+			(h.km_since_previous ? " (+" + h.km_since_previous.toLocaleString() + " km)" : "");
+
+		function put(name, v) {
+			var el = document.querySelector('#ho-form [name="' + name + '"]');
+			if (el) el.value = dash(v);
+		}
+		put("handover_type", h.handover_type);
+		put("odometer", h.odometer || "");
+		put("from_driver_label", h.from_driver);
+		put("to_driver_label", h.to_driver);
+		put("fuel_level", h.fuel_level);
+		put("overall_condition", h.overall_condition);
+		put("observations", h.observations);
+
+		if (!isAttachment) {
+			var odoW = attachFieldPhoto("odometer", { target: "odometer" }, { title: "Odometer photo" });
+			if (odoW && h.odometer_photo) odoW.setRemote([h.odometer_photo]);
+			var fuelW = attachFieldPhoto("fuel_level", { target: "fuel" }, { title: "Fuel gauge photo" });
+			if (fuelW && h.fuel_photo) fuelW.setRemote([h.fuel_photo]);
+		}
+
+		buildFiledWalkTable(h.area_inspections || [], h.tyre_readings || []);
+
+		// Older handovers predate the master-driven checklist and carry only the
+		// four flags; they are shown as the same list rather than as nothing.
+		var checklist = h.checklist_items || [];
+		if (!checklist.length) {
+			var legacy = h.checklist || {};
+			checklist = [
+				{ item: "Spare Tyre Present", checked: legacy.spare_tyre },
+				{ item: "Tools / Jack Present", checked: legacy.tools_present },
+				{ item: "Registration Documents Present", checked: legacy.documents_present },
+				{ item: "First Aid Kit Present", checked: legacy.first_aid_kit },
+			];
+		}
+		var chkRecords = {};
+		checklist.forEach(function (r) { chkRecords[r.item] = r; });
+		renderTicks(chkBox, checklist.map(function (r) {
+			return { name: r.item, item_name: r.item,
+			         response_type: r.response_type || "Check",
+			         value_label: r.value_label || "Value" };
+		}), "No checklist was recorded on this handover.");
+		fillTicks(chkBox, chkRecords);
+
+		var attachments = h.attachment_items || [];
+		var attCard = document.getElementById("ho-attachments-card");
+		if (isAttachment) {
+			if (attCard) attCard.style.display = "none";
+			attBox.innerHTML = "";
+		} else {
+			var attRecords = {};
+			attachments.forEach(function (r) { attRecords[r.item] = r; });
+			renderTicks(attBox, attachments.map(function (r) {
+				return { name: r.item, item_name: r.item,
+				         response_type: r.response_type || "Check",
+				         // Each unit's views table is titled with this ("Trailer #2"),
+				         // so it falls back to the attachment rather than to the word
+				         // "Serial" when the master no longer names one.
+				         value_label: r.value_label || r.item || "Unit" };
+			}), "No attachments were recorded on this handover.", true);
+			// Panels for whole-attachment views first, exactly as the live form
+			// does after rendering the list; the unit panels come out of the qty
+			// change fillTicks dispatches.
+			attBox.querySelectorAll(".ho-chk-row").forEach(function (row) {
+				if (row.getAttribute("data-type") === "Check + Quantity") return;
+				buildViewPanel(row.getAttribute("data-item"), 0,
+					(row.textContent || "Attachment").trim(), row.parentNode);
+			});
+			fillTicks(attBox, attRecords);
+			fillAttachmentViews(h.attachment_views);
+		}
+
+		if (h.previous_handover) {
+			var note = document.getElementById("ho-prev-note");
+			note.style.display = "";
+			note.innerHTML = '<i class="fa-solid fa-circle-info"></i> Compared against previous handover ' +
+				'<a href="/a3-workshop/vehicle-history-handover?handover=' +
+				encodeURIComponent(h.previous_handover) + '"><b>' + esc(h.previous_handover) + "</b></a>.";
+		}
+
+		renderFiledDamages(h);
+		freezeInputs();
+	}
+
+	if (RO) {
+		callMethod("garagedesk.api.fleet.get_handover", { name: window.ho_handover })
+			.then(renderFiledHandover)
+			.catch(function (err) {
+				document.getElementById("ho-context").innerHTML =
+					'<span style="color:var(--red)">Could not load handover: ' +
+					esc(err && err.message || err) + "</span>";
+			});
 	}
 })();
 </script>

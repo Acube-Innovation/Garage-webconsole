@@ -41,25 +41,14 @@
 	<div class="vh-pane" id="pane-activities"></div>
 </div></div>
 
-<!-- Handover comparison modal -->
-<div class="modal-overlay" id="vh-hand-modal" role="dialog" aria-modal="true">
-	<div class="modal" style="max-width:760px">
-		<div class="modal__head">
-			<div><h3>Handover Inspection</h3><div class="sub" id="vh-hand-sub">—</div></div>
-			<button type="button" class="modal__close" data-close aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
-		</div>
-		<div class="modal__body" id="vh-hand-body"><div class="empty">Loading…</div></div>
-		<div class="modal__foot">
-			<a class="btn btn--outline btn--sm" id="vh-hand-print" href="#" target="_blank" rel="noopener"><i class="fa-solid fa-print"></i> Print Inspection</a>
-			<button type="button" class="btn btn--primary btn--sm" data-close>Close</button>
-		</div>
-	</div>
-</div>
+
 
 <!-- Damage comparison: this handover's photographs beside the previous
-     handover's, slot for slot, with the damages the inspector finds noted below. -->
+     handover's, slot for slot, with the damages the inspector finds noted below
+     and the repair they plan for them. Save records both; the job card itself is
+     raised from the Handovers tab, which opens the wizard on what was saved. -->
 <div class="modal-overlay" id="vh-cmp-modal" role="dialog" aria-modal="true">
-	<div class="modal" style="max-width:980px">
+	<div class="modal" style="max-width:1080px">
 		<div class="modal__head">
 			<div><h3>Damage Comparison</h3><div class="sub" id="vh-cmp-sub">—</div></div>
 			<button type="button" class="modal__close" data-close aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
@@ -67,9 +56,63 @@
 		<div class="modal__body" id="vh-cmp-body"><div class="empty">Loading…</div></div>
 		<div class="modal__foot">
 			<span class="muted" id="vh-cmp-msg" style="margin-right:auto;font-size:12px"></span>
-			<button type="button" class="btn btn--outline btn--sm" id="vh-cmp-add"><i class="fa-solid fa-plus"></i> Add Damage</button>
-			<button type="button" class="btn btn--navy btn--sm" id="vh-cmp-save"><i class="fa-solid fa-floppy-disk"></i> Save Damages</button>
-			<a class="btn btn--primary btn--sm" id="vh-cmp-jc" href="#" style="display:none"><i class="fa-solid fa-plus"></i> Create Job Card</a>
+			<button type="button" class="btn btn--primary btn--sm" id="vh-cmp-save"><i class="fa-solid fa-floppy-disk"></i> Save</button>
+		</div>
+	</div>
+</div>
+
+<!-- The three dialogs below are the Create Job Card wizard's own, opened from a
+     service row. They come after the comparison modal in the document so they
+     stack above it. -->
+
+<!-- Kit-components picker (mirrors the wizard's Add Kit Components dialog) -->
+<div class="modal-overlay" id="vh-kit-modal" role="dialog" aria-modal="true" aria-labelledby="vh-kit-title">
+	<div class="modal" style="max-width:860px">
+		<div class="modal__head">
+			<div><h3 id="vh-kit-title">Add Kit Components</h3><div class="sub" id="vh-kit-sub">—</div></div>
+			<div class="row" style="gap:8px; align-items:center">
+				<button type="button" class="btn btn--outline btn--sm" id="vh-kit-std"><i class="fa-solid fa-floppy-disk"></i> Create / Update Standard</button>
+				<button type="button" class="modal__close" data-close aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+			</div>
+		</div>
+		<div class="modal__body" id="vh-kit-body"><div class="empty">Loading…</div></div>
+		<div class="modal__foot">
+			<button type="button" class="btn btn--outline btn--sm" data-close>Cancel</button>
+			<button type="button" class="btn btn--primary btn--sm" id="vh-kit-add"><i class="fa-solid fa-plus"></i> Add to Job</button>
+		</div>
+	</div>
+</div>
+
+<!-- Technician Activity Board picker -->
+<div class="modal-overlay" id="vh-tech-modal" role="dialog" aria-modal="true" aria-labelledby="vh-tech-title">
+	<div class="modal" style="max-width:560px">
+		<div class="modal__head">
+			<div><h3 id="vh-tech-title">Technician Activity Board</h3><div class="sub">By technician — Add to assign</div></div>
+			<button type="button" class="modal__close" data-close aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+		</div>
+		<div class="modal__body stack" id="vh-tech-body"><div class="empty">Loading…</div></div>
+		<div class="modal__foot">
+			<button type="button" class="btn btn--outline btn--sm" data-close>Close</button>
+		</div>
+	</div>
+</div>
+
+<!-- New Service / Task — opened from the "Create …" row of the Service type-ahead -->
+<div class="modal-overlay" id="vh-svc-modal" role="dialog" aria-modal="true" aria-labelledby="vh-svc-title">
+	<div class="modal" style="max-width:460px">
+		<div class="modal__head">
+			<div><h3 id="vh-svc-title">New Service / Task</h3><div class="sub" id="vh-svc-sub">—</div></div>
+			<button type="button" class="modal__close" data-close aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+		</div>
+		<div class="modal__body stack">
+			<div class="field"><label>Job Type</label><input id="vh-svc-jobtype" type="text" readonly></div>
+			<div class="field"><label>Service / Task <span class="req">*</span></label>
+				<input id="vh-svc-name" type="text" placeholder="e.g. Panel Respray" autocomplete="off"></div>
+			<div class="vh-svc-err" id="vh-svc-err" hidden></div>
+		</div>
+		<div class="modal__foot">
+			<button type="button" class="btn btn--outline btn--sm" data-close>Cancel</button>
+			<button type="button" class="btn btn--primary btn--sm" id="vh-svc-create"><i class="fa-solid fa-plus"></i> Create Service</button>
 		</div>
 	</div>
 </div>
@@ -105,6 +148,48 @@
 		color:var(--text); background:var(--surface); border:1px solid var(--border); border-radius:7px; }
 	.vh-cmp-rm { background:none; border:none; color:var(--muted); cursor:pointer; font-size:13px; }
 	.vh-cmp-rm:hover { color:var(--red); }
+	/* A section head that carries its own button (Damages found, Service jobs):
+	   the button takes the place of the rule that normally fills the line. */
+	.vh-cmp-sec h4.has-btn::after { display:none; }
+	/* The head is small uppercase grey; the button inside it must not inherit
+	   any of that. */
+	.vh-cmp-sec h4 .vh-h4-btn { margin-left:auto; text-transform:none;
+		letter-spacing:normal; font-size:12.5px; color:var(--text); }
+	.vh-cmp-note { font-size:12px; color:var(--muted); margin:-4px 0 9px; }
+	.vh-cmp-note b { color:var(--text); }
+	/* Service jobs: job-type picker on the left, the rows it feeds on the right. */
+	.vh-jobs { display:grid; grid-template-columns:230px 1fr; gap:14px; align-items:start; }
+	@media (max-width:820px){ .vh-jobs { grid-template-columns:1fr; } }
+	.vh-jt-list { display:flex; flex-direction:column; gap:6px; max-height:260px; overflow-y:auto; }
+	.vh-jt { display:flex; align-items:center; gap:8px; padding:8px 10px; border:1px solid var(--border);
+		border-radius:8px; cursor:pointer; background:var(--surface); font-size:13px; }
+	.vh-jt:hover { border-color:var(--red); }
+	.vh-jt.is-active { border-color:var(--red); background:var(--red-soft); }
+	.vh-jt i:first-child { color:var(--red); width:16px; text-align:center; }
+	.vh-jt .tick { margin-left:auto; color:var(--red); display:none; }
+	.vh-jt.is-active .tick { display:inline; }
+	.vh-jt-search { width:100%; padding:7px 9px; font:inherit; font-size:12.5px; margin-bottom:8px;
+		border:1px solid var(--border); border-radius:7px; background:var(--surface); color:var(--text); }
+	.vh-svc-combo { position:relative; }
+	.vh-svc-combo .svc-input.is-unsaved { border-color:var(--red); }
+	.vh-labor-code { display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600;
+		background:#eef4ff; color:#1b4fd6; border:1px solid #cfe0ff; border-radius:6px; padding:3px 8px;
+		cursor:pointer; white-space:nowrap; }
+	.vh-labor-code.is-empty { background:transparent; color:var(--muted); border-style:dashed; font-weight:500; }
+	.vh-tech-cell { display:flex; align-items:center; gap:6px; }
+	.vh-tech-pick { flex:0 0 auto; border:1px solid var(--border); background:var(--surface); border-radius:6px;
+		padding:5px 8px; cursor:pointer; color:var(--red); line-height:1; }
+	.vh-tech-pick:hover { background:var(--red-soft); }
+	.vh-kit-sum { font-size:12px; color:var(--muted); margin-top:9px; }
+	.vh-kit-sum b { color:var(--text); }
+	.vh-svc-err { font-size:12.5px; color:var(--red); font-weight:600; }
+	#vh-svc-jobtype { background:var(--bg); color:var(--muted); cursor:not-allowed; }
+	#vh-kit-std { background:var(--red-soft); border-color:var(--red); color:var(--red); }
+	#vh-kit-body .kit-grp { margin-bottom:18px; }
+	#vh-kit-body .kit-grp__head { display:flex; align-items:center; justify-content:space-between;
+		gap:8px; font-size:13px; font-weight:800; margin:0 0 8px; }
+	#vh-kit-modal .table th, #vh-kit-modal .table td { padding:6px 8px; }
+	#vh-kit-body .kit-none { color:var(--muted); font-size:13px; padding:6px 2px; }
 	.vh-tabs { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:18px; }
 	.vh-tab { border:1px solid var(--border); background:var(--surface); border-radius:999px;
 		padding:8px 16px; font-size:13px; font-weight:600; color:var(--muted); cursor:pointer; font-family:var(--font); }
@@ -119,16 +204,6 @@
 	.vh-chart { margin:6px 0 20px; }
 	.vh-cmp { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
 	@media (max-width:640px){ .vh-cmp { grid-template-columns:1fr; } }
-	.vh-dmg { border:1px solid var(--border); border-radius:var(--radius-sm,9px); padding:8px 12px; margin-bottom:8px; font-size:13px; }
-	.vh-dmg.is-new { border-color:var(--red); background:var(--red-soft); }
-	.vh-dmg .t { font-weight:700; }
-	.vh-dmg .s { color:var(--muted); font-size:12px; }
-	.vh-kv { display:grid; grid-template-columns:repeat(3,1fr); gap:10px 18px; margin-bottom:16px; }
-	.vh-kv .k { color:var(--muted); font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
-	.vh-kv .v { font-weight:600; margin-top:2px; }
-	.vh-photos { display:grid; grid-template-columns:repeat(auto-fill,minmax(110px,1fr)); gap:10px; }
-	.vh-photos a { border:1px solid var(--border); border-radius:8px; overflow:hidden; display:block; }
-	.vh-photos img { width:100%; height:86px; object-fit:cover; display:block; }
 	.vh-jc-link { font-weight:700; color:var(--navy); white-space:nowrap; }
 </style>
 
@@ -362,7 +437,8 @@
 						: '<span class="badge badge--success">None</span>') + "</span>",
 					'<span data-jccell="' + esc(h.name) + '">' + jobCardCell(h) + "</span>",
 					h.discrepancy_found ? statusBadge(h.rectification_status || "Pending") : '<span class="muted">—</span>',
-					'<button type="button" class="btn btn--outline btn--sm" data-handover="' + esc(h.name) + '">View</button> ' +
+					'<a class="btn btn--outline btn--sm" href="/a3-workshop/vehicle-history-handover?handover=' +
+						encodeURIComponent(h.name) + '">View</a> ' +
 					'<button type="button" class="btn btn--outline btn--sm" data-cmp="' + esc(h.name) + '"><i class="fa-solid fa-images"></i> Damages</button>'
 				];
 			}),
@@ -383,13 +459,16 @@
 				var info = map[n] || {};
 				var cards = info.job_cards || [];
 
-				if (info.noted) {
-					var dc = document.querySelector('[data-dmgcell="' + cssEsc(n) + '"]');
-					// Only relabel a cell the auto-diff left as "None" — a real
-					// discrepancy count must not be overwritten by this.
-					if (dc && dc.querySelector(".badge--success")) {
-						dc.innerHTML = '<span class="badge badge--danger">' + info.noted +
-							" found</span>";
+				var dc = document.querySelector('[data-dmgcell="' + cssEsc(n) + '"]');
+				if (dc) {
+					if (info.noted) {
+						// Damage confirmed by eye in the popup — the count a person
+						// stands behind, so it wins over the auto-diff's.
+						dc.innerHTML = '<span class="badge badge--danger">' + info.noted + " found</span>";
+					} else if (info.new_damages) {
+						// Same lines the popup would pre-fill, so the badge and the
+						// popup agree on an old handover holding duplicate rows.
+						dc.innerHTML = '<span class="badge badge--danger">' + info.new_damages + " new</span>";
 					}
 				}
 
@@ -416,17 +495,11 @@
 	// data, so quote it rather than trusting that.
 	function cssEsc(v) { return String(v).replace(/["\\]/g, "\\$&"); }
 
-	// Hand the wizard everything it needs to open pre-filled, plus the handover it
-	// is rectifying — the wizard links back via fleet.link_rectification_job_card
-	// as soon as the card is created.
+	// The card this handover would raise, shown before it exists: the Job Card
+	// page in draft mode, built from the damages and service jobs saved against
+	// the handover. It is edited and created there — this page raises nothing.
 	function newJobCardUrl(handover) {
-		var v = (D && D.vehicle) || {};
-		var q = "?handover=" + encodeURIComponent(handover) +
-			"&vehicle=" + encodeURIComponent(v.name || window.vh_vehicle) +
-			"&vehicle_label=" + encodeURIComponent(v.model || v.name || "");
-		if (v.customer) q += "&customer=" + encodeURIComponent(v.customer);
-		if (v.customer_name) q += "&customer_name=" + encodeURIComponent(v.customer_name);
-		return "/a3-workshop/job-card/new" + q;
+		return "/a3-workshop/job-card/detail?handover=" + encodeURIComponent(handover);
 	}
 
 	function renderActivities(d) {
@@ -447,23 +520,27 @@
 	}
 
 	// ------------------------------------------------- handover comparison modal
+	// Escape closes only the topmost open dialog: the comparison modal opens the
+	// kit / technician / service ones on top of itself, and closing all of them
+	// would throw away the job card the user is part-way through describing.
+	var modalStack = [];
 	function wireModal(overlay) {
-		function close() { overlay.classList.remove("is-open"); }
+		function close() {
+			overlay.classList.remove("is-open");
+			modalStack = modalStack.filter(function (o) { return o !== overlay; });
+		}
+		function open() {
+			overlay.classList.add("is-open");
+			modalStack = modalStack.filter(function (o) { return o !== overlay; });
+			modalStack.push(overlay);
+		}
 		overlay.querySelectorAll("[data-close]").forEach(function (b) { b.addEventListener("click", close); });
 		overlay.addEventListener("click", function (e) { if (e.target === overlay) close(); });
-		document.addEventListener("keydown", function (e) { if (e.key === "Escape") close(); });
-		return { open: function () { overlay.classList.add("is-open"); }, close: close };
+		document.addEventListener("keydown", function (e) {
+			if (e.key === "Escape" && modalStack[modalStack.length - 1] === overlay) close();
+		});
+		return { open: open, close: close, el: overlay };
 	}
-	var handModal = wireModal(document.getElementById("vh-hand-modal"));
-
-	function dmgCard(x) {
-		return '<div class="vh-dmg' + (x.is_new ? " is-new" : "") + '"><div class="t">' + esc(x.area) + " — " + esc(x.damage_type) +
-			(x.severity ? ' <span class="badge badge--soft">' + esc(x.severity) + "</span>" : "") +
-			(x.is_new ? ' <span class="badge badge--danger">NEW</span>' : "") +
-			(x.previous_severity ? ' <span class="badge badge--pending">was ' + esc(x.previous_severity) + "</span>" : "") +
-			'</div>' + (x.description ? '<div class="s">' + esc(x.description) + "</div>" : "") + "</div>";
-	}
-
 	// ------------------------------------------------- damage comparison
 	// This handover's photographs beside the previous one's, slot for slot, with
 	// the damages found written down underneath. Kept apart from the auto-diff
@@ -471,11 +548,96 @@
 	// lines, this is a person comparing pictures.
 	var cmpModal = wireModal(document.getElementById("vh-cmp-modal"));
 	var cmpHandover = null, cmpOpts = { areas: [], damage_types: [], severities: [] };
+	var cmpJobCard = "";   // a card already raised for this handover, if any
 
 	function opts(list, sel) {
 		return '<option value=""></option>' + list.map(function (o) {
 			return '<option' + (o === sel ? " selected" : "") + ">" + esc(o) + "</option>";
 		}).join("");
+	}
+	function escAttr(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+		return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+
+	// A type-ahead over a text input, with the same behaviour as the job-card
+	// wizard's: a row carrying `action` is a command (e.g. "Create …"), so it
+	// fires onSelect without writing its label into the box.
+	function attachAutocomplete(input, source, onSelect) {
+		if (!input || input.dataset.acset) return;
+		input.dataset.acset = "1";
+		var wrap = input.parentNode;
+		wrap.style.position = "relative";
+		var list = document.createElement("div");
+		list.className = "jc-ac"; list.style.display = "none";
+		wrap.appendChild(list);
+		var items = [], active = -1, timer = null;
+		function hide() { list.style.display = "none"; active = -1; }
+		function pick(it) {
+			if (!it) return;
+			if (!it.action) input.value = it.label;
+			hide();
+			if (onSelect) onSelect(it);
+		}
+		function render(rows) {
+			items = rows || [];
+			if (!items.length) { list.innerHTML = '<div class="jc-ac-empty">No matches</div>'; list.style.display = "block"; return; }
+			list.innerHTML = items.map(function (it, i) {
+				return '<div class="jc-ac-item' + (it.action ? " is-create" : "") + '" data-i="' + i + '">' +
+					'<div class="jc-ac-label">' + it.label + "</div>" +
+					(it.sub ? '<div class="jc-ac-sub">' + it.sub + "</div>" : "") + "</div>";
+			}).join("");
+			active = -1; list.style.display = "block";
+		}
+		function run() { Promise.resolve(source(input.value.trim())).then(render).catch(hide); }
+		input.addEventListener("input", function () { clearTimeout(timer); timer = setTimeout(run, 180); });
+		input.addEventListener("focus", run);
+		input.addEventListener("blur", function () { setTimeout(hide, 150); });
+		list.addEventListener("mousedown", function (e) {
+			var el = e.target.closest("[data-i]"); if (!el) return;
+			e.preventDefault();
+			pick(items[+el.dataset.i]);
+		});
+		input.addEventListener("keydown", function (e) {
+			if (list.style.display === "none" || !items.length) return;
+			if (e.key === "ArrowDown") active = Math.min(items.length - 1, active + 1);
+			else if (e.key === "ArrowUp") active = Math.max(0, active - 1);
+			else if (e.key === "Enter" && active >= 0) { e.preventDefault(); pick(items[active]); return; }
+			else if (e.key === "Escape") { hide(); return; }
+			else return;
+			e.preventDefault();
+			Array.prototype.forEach.call(list.children, function (c, i) { c.classList.toggle("is-active", i === active); });
+		});
+	}
+
+	// ------------------------------------------------- job card masters
+	// The same catalogue the Create Job Card wizard loads, fetched once the first
+	// time a comparison is opened. Everything the popup needs to build a card --
+	// job types, their services, the labor standard each service carries, and the
+	// technicians a row can be assigned to.
+	var JOBCARD_TYPES = [], JOB_SERVICES = [], EMPLOYEES = [], UOMS = [];
+	var LTS_BY_SERVICE = {}, LTS_LABEL = {};
+	var optionsLoaded = null;
+	function loadJobCardOptions() {
+		if (optionsLoaded) return optionsLoaded;
+		optionsLoaded = callMethod("garagedesk.api.front_office.get_job_card_options", {})
+			.then(function (o) {
+				o = o || {};
+				JOBCARD_TYPES = o.jobcard_types || [];
+				JOB_SERVICES = o.job_type_services || [];
+				EMPLOYEES = o.service_advisors || [];
+				UOMS = o.uoms || [];
+				LTS_BY_SERVICE = {}; LTS_LABEL = {};
+				(o.labor_standards || []).forEach(function (s) {
+					if (s.operation_name && !LTS_BY_SERVICE[s.operation_name]) LTS_BY_SERVICE[s.operation_name] = s.name;
+					LTS_LABEL[s.name] = s.standard_code || s.name;
+				});
+			})
+			.catch(function (err) {
+				// Let the next open try again rather than leaving the popup
+				// permanently unable to raise a card.
+				optionsLoaded = null;
+				throw err;
+			});
+		return optionsLoaded;
 	}
 
 	function cmpAddRow(d) {
@@ -509,21 +671,236 @@
 		return out;
 	}
 
-	// Create Job Card only means anything once there is damage to repair.
-	function cmpSync() {
-		var link = document.getElementById("vh-cmp-jc");
-		link.style.display = cmpRows().length ? "" : "none";
+	// ------------------------------------------------- service jobs
+	// The Service Jobs step of the job-card wizard, inside the popup: job types
+	// on the left, the service rows they allow on the right, each row able to
+	// pull its kit components. What is entered here is what the card is created
+	// with -- there is no second screen to finish it on.
+	var jtSelected = [];                            // ticked Jobcard Type names
+	var kitLabor = [], kitParts = [], kitSublet = []; // committed kit lines
+
+	function jtBody() { return document.getElementById("vh-jt-list"); }
+	function svcBody() { return document.getElementById("vh-svc-body"); }
+
+	function renderJobTypes() {
+		var box = jtBody(); if (!box) return;
+		var q = ((document.getElementById("vh-jt-search") || {}).value || "").trim().toLowerCase();
+		// A ticked type stays visible whatever the search says — a selection the
+		// user cannot see is one they will create a card with unintentionally.
+		var shown = JOBCARD_TYPES.filter(function (t) {
+			return jtSelected.indexOf(t.name) >= 0 || !q ||
+				((t.type_name || t.name) + " " + (t.description || "")).toLowerCase().indexOf(q) >= 0;
+		});
+		box.innerHTML = shown.map(function (t) {
+			var on = jtSelected.indexOf(t.name) >= 0;
+			return '<div class="vh-jt' + (on ? " is-active" : "") + '" data-jt="' + escAttr(t.name) + '">' +
+				'<i class="fa-solid ' + escAttr(t.icon || "fa-wrench") + '"></i>' +
+				"<span>" + esc(t.type_name || t.name) + "</span>" +
+				'<i class="fa-solid fa-check tick"></i></div>';
+		}).join("") || '<div class="jc-ac-empty">' +
+			(JOBCARD_TYPES.length ? "No job types match." : "No job card types configured.") + "</div>";
+		var hint = document.getElementById("vh-jt-hint");
+		if (hint) hint.textContent = jtSelected.length ? jtSelected.length + " selected" : "Select one or more";
 	}
+
+	function jobTypeOptions(sel) {
+		return '<option value="">— select —</option>' + jtSelected.map(function (t) {
+			return "<option" + (t === sel ? " selected" : "") + ">" + esc(t) + "</option>";
+		}).join("");
+	}
+	function technicianOptions(sel) {
+		return '<option value="">— technician —</option>' + EMPLOYEES.map(function (e) {
+			return '<option value="' + escAttr(e.name) + '"' + (e.name === sel ? " selected" : "") + ">" +
+				esc(e.employee_name || e.name) + "</option>";
+		}).join("");
+	}
+	function serviceLabel(name) {
+		if (!name) return "";
+		var hit = JOB_SERVICES.filter(function (s) { return s.name === name; })[0];
+		return hit ? (hit.service_name || hit.name) : name;
+	}
+	function svcInput(tr) { return tr && tr.querySelector(".svc-input"); }
+	function svcHidden(tr) { return tr && tr.querySelector(".svc"); }
+	function markSvcUnsaved(tr) {
+		var input = svcInput(tr), hidden = svcHidden(tr);
+		if (!input || !hidden) return;
+		input.classList.toggle("is-unsaved", !!input.value.trim() && !hidden.value);
+	}
+
+	function addServiceRow(v) {
+		v = v || {};
+		var tb = svcBody(); if (!tb) return;
+		var tr = document.createElement("tr");
+		tr.dataset.labour = v.labour_service_code || "";
+		tr.innerHTML =
+			'<td><select class="vh-jt-sel">' + jobTypeOptions(v.jobtype || jtSelected[0] || "") + "</select></td>" +
+			'<td><div class="vh-svc-combo">' +
+				'<input type="text" class="svc-input" placeholder="Type a service…" autocomplete="off" value="' +
+				escAttr(serviceLabel(v.service || "")) + '">' +
+				'<input type="hidden" class="svc" value="' + escAttr(v.service || "") + '"></div></td>' +
+			'<td><span class="vh-labor-code is-empty" data-labor-code>—</span></td>' +
+			'<td><input class="vh-desc" placeholder="Description" value="' + escAttr(v.description || "") + '"></td>' +
+			'<td><div class="vh-tech-cell"><select class="vh-tech">' + technicianOptions(v.technician || "") + "</select>" +
+				'<button type="button" class="vh-tech-pick" title="Technician Activity Board"><i class="fa-solid fa-user"></i></button></div></td>' +
+			'<td><input class="vh-hrs" type="number" min="0" step="0.5" value="' +
+				(v.hours != null && v.hours !== "" ? v.hours : 1) + '"></td>' +
+			'<td style="width:32px"><button type="button" class="vh-cmp-rm" title="Remove"><i class="fa-solid fa-xmark"></i></button></td>';
+		tr.querySelector(".vh-cmp-rm").addEventListener("click", function () {
+			var std = tr.dataset.labour || "";
+			tr.remove(); cleanupKitForStandard(std); cmpSync();
+		});
+		tb.appendChild(tr);
+		renderLaborCode(tr);
+		attachServiceAutocomplete(tr);
+		cmpSync();
+	}
+
+	function serviceMatches(jobtype, q) {
+		q = (q || "").trim().toLowerCase();
+		return JOB_SERVICES.filter(function (s) {
+			if (s.jobcard_type !== jobtype) return false;
+			return !q || (s.service_name || s.name || "").toLowerCase().indexOf(q) >= 0;
+		});
+	}
+	function attachServiceAutocomplete(tr) {
+		attachAutocomplete(svcInput(tr), function (q) {
+			var jt = (tr.querySelector(".vh-jt-sel") || {}).value || "";
+			if (!jt) return [{ label: "Pick a job type first", action: "noop" }];
+			var rows = serviceMatches(jt, q).slice(0, 12).map(function (s) {
+				return { label: esc(s.service_name || s.name), value: s.name };
+			});
+			var typed = (q || "").trim();
+			var exact = rows.some(function (r) { return r.label.toLowerCase() === esc(typed).toLowerCase(); });
+			if (typed && !exact) {
+				rows.push({
+					action: "create", typed: typed, jobtype: jt,
+					label: '<i class="fa-solid fa-plus"></i> Create “' + esc(typed) + "”",
+					sub: "Adds it under " + esc(jt)
+				});
+			}
+			return rows;
+		}, function (it) {
+			if (it.action === "noop") return;
+			if (it.action === "create") { openServiceDialog(it.jobtype, it.typed, tr); return; }
+			setRowService(tr, it.value, serviceLabel(it.value));
+		});
+		svcInput(tr).addEventListener("input", function () {
+			var hidden = svcHidden(tr);
+			if (hidden && hidden.value && this.value.trim() !== serviceLabel(hidden.value)) {
+				clearRowService(tr, true);
+			}
+			markSvcUnsaved(tr);
+		});
+	}
+	function serviceAlreadyUsed(service, exceptTr) {
+		if (!service || !svcBody()) return false;
+		return Array.prototype.some.call(svcBody().children, function (tr) {
+			var sv = svcHidden(tr);
+			return tr !== exceptTr && sv && sv.value === service;
+		});
+	}
+	function clearRowService(tr, keepText) {
+		var hidden = svcHidden(tr), input = svcInput(tr);
+		if (hidden) hidden.value = "";
+		if (input && !keepText) input.value = "";
+		var prev = tr.dataset.labour || "";
+		setRowLaborCode(tr, "");
+		if (prev) cleanupKitForStandard(prev);
+		markSvcUnsaved(tr);
+		cmpSync();
+	}
+	// Commit a service onto a row, then offer its kit — the wizard's behaviour:
+	// picking a service is what opens the kit popup, with the standard's lines
+	// already in it, or empty when the service has no standard yet.
+	function setRowService(tr, name, label) {
+		var hidden = svcHidden(tr), input = svcInput(tr);
+		var prev = tr.dataset.labour || "";
+		label = label || serviceLabel(name);
+		if (name && serviceAlreadyUsed(name, tr)) {
+			alert("“" + label + "” is already added. Each service can only be added once.");
+			if (input) input.value = "";
+			if (hidden) hidden.value = "";
+			setRowLaborCode(tr, "");
+			if (prev) cleanupKitForStandard(prev);
+			markSvcUnsaved(tr);
+			return;
+		}
+		if (hidden) hidden.value = name || "";
+		if (input) input.value = label || "";
+		markSvcUnsaved(tr);
+		var standard = name ? (LTS_BY_SERVICE[name] || "") : "";
+		setRowLaborCode(tr, standard);
+		if (prev && prev !== standard) cleanupKitForStandard(prev);
+		cmpSync();
+		if (name) openKitDialog(standard, name, tr, label);
+	}
+	function setRowLaborCode(tr, standard) { tr.dataset.labour = standard || ""; renderLaborCode(tr); }
+	function renderLaborCode(tr) {
+		var span = tr.querySelector("[data-labor-code]"); if (!span) return;
+		var code = tr.dataset.labour || "";
+		span.className = code ? "vh-labor-code" : "vh-labor-code is-empty";
+		span.textContent = code ? (LTS_LABEL[code] || code) : "+ Kit";
+		span.title = code ? "Click to pick kit components" : "Click to add kit components manually";
+	}
+	function standardStillUsed(standard) {
+		if (!standard || !svcBody()) return true;
+		return Array.prototype.some.call(svcBody().children, function (tr) {
+			return (tr.dataset.labour || "") === standard;
+		});
+	}
+	// Drop kit lines whose standard no longer has a service row behind it.
+	function cleanupKitForStandard(standard) {
+		if (!standard || standardStillUsed(standard)) return;
+		var keep = function (arr) { return arr.filter(function (r) { return (r.source_standard || "") !== standard; }); };
+		kitLabor = keep(kitLabor); kitParts = keep(kitParts); kitSublet = keep(kitSublet);
+		renderKitSummary();
+	}
+	function cmpServiceRows() {
+		var out = [], tb = svcBody();
+		if (!tb) return out;
+		Array.prototype.forEach.call(tb.children, function (tr) {
+			var jt = (tr.querySelector(".vh-jt-sel") || {}).value || "";
+			var sv = (svcHidden(tr) || {}).value || "";
+			if (!jt && !sv) return;
+			out.push({
+				jobtype: jt, service: sv,
+				labour_service_code: tr.dataset.labour || "",
+				description: (tr.querySelector(".vh-desc") || {}).value || "",
+				technician: (tr.querySelector(".vh-tech") || {}).value || "",
+				hours: (tr.querySelector(".vh-hrs") || {}).value || 0
+			});
+		});
+		return out;
+	}
+	function renderKitSummary() {
+		var el = document.getElementById("vh-kit-sum"); if (!el) return;
+		var n = kitLabor.length + kitParts.length + kitSublet.length;
+		el.innerHTML = n
+			? '<i class="fa-solid fa-box"></i> Kit components on this job: <b>' + kitLabor.length +
+			  "</b> labor · <b>" + kitParts.length + "</b> parts · <b>" + kitSublet.length + "</b> sublet"
+			: '<i class="fa-solid fa-box"></i> No kit components yet — pick a service, or click its <b>+ Kit</b> chip.';
+	}
+
+	// Everything in this popup is saved by one button, so there is nothing to
+	// enable or disable — only the kit tally under the table to keep current.
+	function cmpSync() { renderKitSummary(); }
 
 	function openComparison(handover) {
 		cmpHandover = handover;
+		cmpJobCard = "";
+		jtSelected = [];
+		kitLabor = []; kitParts = []; kitSublet = [];
 		var body = document.getElementById("vh-cmp-body");
 		body.innerHTML = '<div class="empty">Loading…</div>';
 		document.getElementById("vh-cmp-msg").textContent = "";
-		document.getElementById("vh-cmp-jc").style.display = "none";
 		cmpModal.open();
 
-		callMethod("garagedesk.api.handover_comparison.get_comparison", { handover: handover })
+		// Masters alongside the comparison: the Service Jobs table cannot be
+		// drawn without the job types, and neither call depends on the other.
+		Promise.all([
+			callMethod("garagedesk.api.handover_comparison.get_comparison", { handover: handover }),
+			loadJobCardOptions()
+		]).then(function (r) { return r[0]; })
 			.then(function (c) {
 				cmpOpts = { areas: c.areas, damage_types: c.damage_types, severities: c.severities };
 				document.getElementById("vh-cmp-sub").textContent = c.previous
@@ -551,16 +928,65 @@
 					html += "</div>";
 				});
 
-				html += '<div class="vh-cmp-sec"><h4>Damages found</h4>' +
+				html += '<div class="vh-cmp-sec"><h4 class="has-btn">Damages found' +
+					'<button type="button" class="btn btn--outline btn--sm vh-h4-btn" id="vh-dmg-add">' +
+					'<i class="fa-solid fa-plus"></i> Add Damage</button></h4>' +
+					(c.prefilled
+						? '<div class="vh-cmp-note">Filled in from the <b>' + (c.damages || []).length +
+						  " new damage" + ((c.damages || []).length === 1 ? "" : "s") +
+						  "</b> this handover found. Correct anything that is wrong, then save.</div>"
+						: "") +
+					(c.carried_open
+						? '<div class="vh-cmp-note"><i class="fa-solid fa-circle-info"></i> <b>' +
+						  c.carried_open + "</b> older damage" + (c.carried_open === 1 ? "" : "s") +
+						  " still open on this vehicle " + (c.carried_open === 1 ? "is" : "are") +
+						  " not listed here, but a job card raised now closes " +
+						  (c.carried_open === 1 ? "it" : "them") + " too.</div>"
+						: "") +
 					'<table class="vh-cmp-tbl"><thead><tr><th style="width:22%">Area</th>' +
 					'<th style="width:18%">Damage Type</th><th style="width:15%">Severity</th>' +
 					"<th>Description</th><th></th></tr></thead>" +
 					'<tbody id="vh-cmp-dmg"></tbody></table></div>';
+
+				// Service Jobs — what will be repaired, and by whom.
+				html += '<div class="vh-cmp-sec"><h4 class="has-btn">Service jobs' +
+					'<button type="button" class="btn btn--outline btn--sm vh-h4-btn" id="vh-svc-add">' +
+					'<i class="fa-solid fa-plus"></i> Add</button></h4>' +
+					'<div class="vh-jobs"><div>' +
+						'<input class="vh-jt-search" id="vh-jt-search" placeholder="Search job types…" autocomplete="off">' +
+						'<div class="jc-ac-sub" id="vh-jt-hint" style="margin-bottom:6px">Select one or more</div>' +
+						'<div class="vh-jt-list" id="vh-jt-list"></div>' +
+					"</div><div>" +
+						'<table class="vh-cmp-tbl"><thead><tr><th style="width:17%">Job Type</th>' +
+						'<th style="width:20%">Service / Task</th><th style="width:16%">Labor Code</th>' +
+						"<th>Description</th><th style=\"width:18%\">Technician</th>" +
+						'<th style="width:58px">Hrs</th><th></th></tr></thead>' +
+						'<tbody id="vh-svc-body"></tbody></table>' +
+						'<div class="vh-kit-sum" id="vh-kit-sum"></div>' +
+					"</div></div></div>";
+
 				body.innerHTML = html;
 
 				(c.damages || []).forEach(cmpAddRow);
+
+				// The repair planned the last time this was saved. Every job type
+				// it names is ticked first, so each row's dropdown can offer it.
+				(c.services || []).forEach(function (s) {
+					if (s.jobtype && jtSelected.indexOf(s.jobtype) < 0) jtSelected.push(s.jobtype);
+				});
+				renderJobTypes();
+				(c.services || []).forEach(addServiceRow);
+				kitLabor = (c.kit_labor || []).map(function (r) { return buildKitRow("labor", r); });
+				kitParts = (c.kit_parts || []).map(function (r) { return buildKitRow("parts", r); });
+				kitSublet = (c.kit_sublet || []).map(function (r) { return buildKitRow("sublet", r); });
+				renderKitSummary();
+
+				cmpJobCard = c.job_card || "";
+				if (cmpJobCard) {
+					document.getElementById("vh-cmp-msg").innerHTML =
+						"Job card <b>" + esc(cmpJobCard) + "</b> has already been raised for this handover.";
+				}
 				cmpSync();
-				document.getElementById("vh-cmp-jc").href = newJobCardUrl(handover);
 			})
 			.catch(function (err) {
 				body.innerHTML = '<div class="empty">Could not load the comparison: ' +
@@ -576,21 +1002,397 @@
 				: '<span class="none">No photo</span>') + "</div>";
 	}
 
-	document.getElementById("vh-cmp-add").addEventListener("click", function () { cmpAddRow(); });
+	// The comparison body is redrawn on every open, so its controls are handled
+	// by delegation rather than bound to elements that will not survive.
+	document.getElementById("vh-cmp-body").addEventListener("click", function (e) {
+		if (e.target.closest("#vh-dmg-add")) { cmpAddRow(); return; }
+		if (e.target.closest("#vh-svc-add")) { addServiceRow(); return; }
+		var jt = e.target.closest("[data-jt]");
+		if (jt) {
+			var name = jt.getAttribute("data-jt"), i = jtSelected.indexOf(name);
+			if (i >= 0) jtSelected.splice(i, 1); else jtSelected.push(name);
+			renderJobTypes();
+			// A row whose job type was just un-ticked no longer has a valid
+			// service, so it is cleared the way the wizard clears it.
+			Array.prototype.forEach.call(svcBody() ? svcBody().children : [], function (tr) {
+				var sel = tr.querySelector(".vh-jt-sel"); if (!sel) return;
+				var v = sel.value; sel.innerHTML = jobTypeOptions(v);
+				if (v && jtSelected.indexOf(v) < 0) clearRowService(tr);
+			});
+			cmpSync();
+			return;
+		}
+		var chip = e.target.closest("[data-labor-code]");
+		if (chip) {
+			var row = chip.closest("tr");
+			var svc = (svcHidden(row) || {}).value || "", code = row.dataset.labour || "";
+			if (svc || code) openKitDialog(code, svc, row, "");
+			return;
+		}
+		var tech = e.target.closest(".vh-tech-pick");
+		if (tech) { openTechBoard(tech.closest("tr")); }
+	});
+	document.getElementById("vh-cmp-body").addEventListener("input", function (e) {
+		if (e.target.id === "vh-jt-search") renderJobTypes();
+	});
+	// Changing a row's job type cascades: its service belonged to the old one.
+	document.getElementById("vh-cmp-body").addEventListener("change", function (e) {
+		if (e.target.matches(".vh-jt-sel")) clearRowService(e.target.closest("tr"));
+	});
 
+	// ------------------------------------------------- kit components dialog
+	var kitModal = wireModal(document.getElementById("vh-kit-modal"));
+	var kitData = { labor: [], parts: [], sublet: [] };
+	var kitStandard = "", kitService = "", kitRow = null;
+	var KIT_ITEMS = [];
+
+	function ensureKitItems() {
+		if (KIT_ITEMS.length) return;
+		callMethod("garagedesk.api.front_office.get_estimate_items", {
+			services: cmpServiceRows().map(function (r) { return r.service; }).filter(Boolean)
+		}).then(function (o) { o = o || {}; KIT_ITEMS = (o.mapped || []).concat(o.others || []); })
+			.catch(function () {});
+	}
+	function attachKitItemAutocomplete(input) {
+		attachAutocomplete(input, function (q) {
+			q = (q || "").toLowerCase();
+			return KIT_ITEMS.filter(function (it) {
+				return !q || (it.item || "").toLowerCase().indexOf(q) >= 0 ||
+					(it.item_name || "").toLowerCase().indexOf(q) >= 0;
+			}).slice(0, 10).map(function (it) {
+				return { label: esc(it.item), sub: (it.item_name && it.item_name !== it.item) ? esc(it.item_name) : "",
+					value: it.item, rate: it.rate, uom: it.uom };
+			});
+		}, function (it) {
+			input.value = it.value;
+			var tr = input.closest("tr");
+			var rate = tr.querySelector(".ke-rate");
+			if (rate && it.rate && !parseFloat(rate.value)) rate.value = it.rate;
+			// The unit belongs to the item, not to whoever types the row.
+			var uom = tr.querySelector(".ke-uom");
+			if (uom && it.uom && !uom.value.trim()) uom.value = it.uom;
+		});
+	}
+	// The item's own name, looked up rather than stored: the labour kit row has
+	// no item_name field, and the name belongs to the Item anyway.
+	function itemNameOf(code) {
+		if (!code) return "";
+		var hit = KIT_ITEMS.filter(function (it) { return it.item === code; })[0];
+		return hit ? (hit.item_name || "") : "";
+	}
+	// The labour Item: what a Sales Order raised from this job bills the line
+	// against. A line without one is unbillable unless Workshop Settings names a
+	// Default Labour Item, so the cell offers the service (non-stock) Items.
+	function attachLabourItemAutocomplete(input) {
+		function syncName() {
+			var tr = input.closest("tr"), name = tr && tr.querySelector(".ke-opname");
+			if (name) name.textContent = itemNameOf(input.value.trim());
+		}
+		attachAutocomplete(input, function (q) {
+			q = (q || "").toLowerCase();
+			return KIT_ITEMS.filter(function (it) {
+				if (it.is_stock || it.is_item === 0) return false;
+				return !q || (it.item || "").toLowerCase().indexOf(q) >= 0 ||
+					(it.item_name || "").toLowerCase().indexOf(q) >= 0;
+			}).slice(0, 10).map(function (it) {
+				return { label: esc(it.item), sub: (it.item_name && it.item_name !== it.item) ? esc(it.item_name) : "",
+					value: it.item, rate: it.rate };
+			});
+		}, function (it) {
+			input.value = it.value;
+			var rate = input.closest("tr").querySelector(".ke-rate");
+			if (rate && it.rate && !parseFloat(rate.value)) rate.value = it.rate;
+			syncName();
+		});
+		input.addEventListener("input", syncName);
+	}
+	// UOM is a Link on the kit row: anything that is not a real UOM is dropped
+	// on save, so the cell offers the list rather than taking free text.
+	function attachUomAutocomplete(input) {
+		attachAutocomplete(input, function (q) {
+			return matchUoms(UOMS, q).map(function (u) { return { label: esc(u), value: u }; });
+		}, function (it) { input.value = it.value; });
+	}
+	// "Li" has to offer Litre before Calibre: a unit whose name STARTS with what
+	// was typed comes first, anything merely containing it after. The list
+	// arrives with the units this workshop's items actually use at the front.
+	function matchUoms(list, q) {
+		q = (q || "").trim().toLowerCase();
+		if (!q) return (list || []).slice(0, 12);
+		var starts = [], contains = [];
+		(list || []).forEach(function (u) {
+			var i = u.toLowerCase().indexOf(q);
+			if (i === 0) starts.push(u); else if (i > 0) contains.push(u);
+		});
+		return starts.concat(contains).slice(0, 12);
+	}
+	function kitEditRow(group, r) {
+		r = r || {};
+		if (group === "labor") return "<tr>" +
+			'<td><div class="vh-svc-combo"><input class="ke-op" value="' + escAttr(r.operation || "") + '" placeholder="Labour item" autocomplete="off"></div></td>' +
+			'<td><span class="ke-opname muted">' + esc(itemNameOf(r.operation)) + "</span></td>" +
+			'<td><input class="ke-desc" value="' + escAttr(r.description || "") + '" placeholder="Description"></td>' +
+			'<td><input class="ke-hours" type="number" min="0" step="0.1" value="' + (r.hours != null ? r.hours : 0) + '"></td>' +
+			'<td><input class="ke-rate" type="number" min="0" step="0.01" value="' + (r.rate != null ? r.rate : 0) + '"></td>' +
+			'<td><input class="ke-skill" value="' + escAttr(r.skill_level || "") + '" placeholder="Skill"></td>' +
+			'<td style="width:32px"><button type="button" class="vh-cmp-rm" data-kdel><i class="fa-solid fa-xmark"></i></button></td></tr>';
+		if (group === "parts") return "<tr>" +
+			'<td><div class="vh-svc-combo"><input class="ke-item" value="' + escAttr(r.item_code || "") + '" placeholder="Item code" autocomplete="off"></div></td>' +
+			'<td><input class="ke-qty" type="number" min="0" step="1" value="' + (r.qty != null ? r.qty : 1) + '"></td>' +
+			'<td><div class="vh-svc-combo"><input class="ke-uom" value="' + escAttr(r.uom || "") + '" placeholder="UOM" autocomplete="off"></div></td>' +
+			'<td><input class="ke-rate" type="number" min="0" step="0.01" value="' + (r.rate != null ? r.rate : 0) + '"></td>' +
+			'<td style="width:32px"><button type="button" class="vh-cmp-rm" data-kdel><i class="fa-solid fa-xmark"></i></button></td></tr>';
+		return "<tr>" +
+			'<td><input class="ke-desc" value="' + escAttr(r.service_description || "") + '" placeholder="Service"></td>' +
+			'<td><input class="ke-vendor" value="' + escAttr(r.vendor || "") + '" placeholder="Vendor"></td>' +
+			'<td><input class="ke-cost" type="number" min="0" step="0.01" value="' + (r.cost != null ? r.cost : 0) + '"></td>' +
+			'<td><input class="ke-markup" type="number" min="0" step="1" value="' + (r.markup_pct != null ? r.markup_pct : 0) + '"></td>' +
+			'<td style="width:32px"><button type="button" class="vh-cmp-rm" data-kdel><i class="fa-solid fa-xmark"></i></button></td></tr>';
+	}
+	function kitSection(group, title, headers) {
+		return '<div class="kit-grp"><div class="kit-grp__head">' + esc(title) +
+			'<button type="button" class="btn btn--outline btn--sm" data-kadd="' + group + '">' +
+			'<i class="fa-solid fa-plus"></i> Add row</button></div>' +
+			'<table class="vh-cmp-tbl"><thead><tr>' +
+			headers.map(function (h) { return "<th>" + esc(h) + "</th>"; }).join("") + "<th></th></tr></thead>" +
+			'<tbody id="vh-kmod-' + group + '">' +
+			(kitData[group] || []).map(function (r) { return kitEditRow(group, r); }).join("") +
+			"</tbody></table></div>";
+	}
+	function renderKitBody() {
+		document.getElementById("vh-kit-body").innerHTML =
+			'<div class="kit-none" style="margin-bottom:10px">Kit items for this service — edit quantities and rates, add rows if needed, then “Add to Job”.</div>' +
+			kitSection("labor", "Kit Labor", ["Item", "Item Name", "Description", "Hours", "Rate", "Skill"]) +
+			kitSection("parts", "Kit Parts", ["Item", "Qty", "UOM", "Rate"]) +
+			kitSection("sublet", "Kit Sublet", ["Service", "Vendor", "Cost", "Markup %"]);
+		document.querySelectorAll("#vh-kit-body .ke-item").forEach(attachKitItemAutocomplete);
+		document.querySelectorAll("#vh-kit-body .ke-uom").forEach(attachUomAutocomplete);
+		document.querySelectorAll("#vh-kit-body .ke-op").forEach(attachLabourItemAutocomplete);
+	}
+	// Works with or without a Labor Time Standard: with one the tables open
+	// pre-filled from it, without one they open empty for manual entry.
+	function openKitDialog(standard, service, row, label) {
+		kitStandard = standard || ""; kitService = service || ""; kitRow = row || null;
+		var btn = document.getElementById("vh-kit-std");
+		btn.disabled = false;
+		btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> ' + (standard ? "Update Standard" : "Create Standard");
+		ensureKitItems();
+		document.getElementById("vh-kit-sub").textContent =
+			label || LTS_LABEL[standard] || serviceLabel(service) || standard || "Manual kit";
+		kitModal.open();
+		if (!standard) { kitData = { labor: [], parts: [], sublet: [] }; renderKitBody(); return; }
+		document.getElementById("vh-kit-body").innerHTML = '<div class="empty">Loading…</div>';
+		callMethod("garagedesk.workshop.doctype.workshop_job_card.workshop_job_card.kit_components_for_standard",
+			{ standard: standard })
+			.then(function (d) {
+				d = d || {};
+				kitData = { labor: d.labor || [], parts: d.parts || [], sublet: d.sublet || [] };
+				renderKitBody();
+			})
+			.catch(function () {
+				document.getElementById("vh-kit-body").innerHTML =
+					'<div class="kit-none">Could not load kit components.</div>';
+			});
+	}
+	document.getElementById("vh-kit-body").addEventListener("click", function (e) {
+		var add = e.target.closest("[data-kadd]");
+		if (add) {
+			var tb = document.getElementById("vh-kmod-" + add.dataset.kadd);
+			tb.insertAdjacentHTML("beforeend", kitEditRow(add.dataset.kadd, {}));
+			if (add.dataset.kadd === "parts") {
+				attachKitItemAutocomplete(tb.lastElementChild.querySelector(".ke-item"));
+				attachUomAutocomplete(tb.lastElementChild.querySelector(".ke-uom"));
+			} else if (add.dataset.kadd === "labor") {
+				attachLabourItemAutocomplete(tb.lastElementChild.querySelector(".ke-op"));
+			}
+			return;
+		}
+		var del = e.target.closest("[data-kdel]");
+		if (del) del.closest("tr").remove();
+	});
+	function gatherKit(group) {
+		var tb = document.getElementById("vh-kmod-" + group);
+		if (!tb) return [];
+		return Array.prototype.map.call(tb.children, function (tr) {
+			function v(sel) { var el = tr.querySelector(sel); return el ? el.value : ""; }
+			if (group === "labor") return { description: v(".ke-desc"), operation: (v(".ke-op") || "").trim(), hours: v(".ke-hours"), rate: v(".ke-rate"), skill_level: v(".ke-skill") };
+			if (group === "parts") return { item_code: v(".ke-item"), qty: v(".ke-qty"), uom: v(".ke-uom"), rate: v(".ke-rate") };
+			return { service_description: v(".ke-desc"), vendor: v(".ke-vendor"), cost: v(".ke-cost"), markup_pct: v(".ke-markup") };
+		});
+	}
+	// Dedupe keys mirror the wizard's, so one line is never carried twice.
+	function kitKey(group, r) {
+		if (group === "labor") return "labor|" + (r.operation || "") + "|" + (r.description || "") + "|" + (r.hours || "");
+		if (group === "parts") return "parts|" + (r.item_code || "");
+		return "sublet|" + (r.vendor || "") + "|" + (r.service_description || "");
+	}
+	function buildKitRow(group, s) {
+		var b;
+		if (group === "labor") b = { operation: s.operation || "", description: s.description || "",
+			description_ar: s.description_ar || "", hours: s.hours || 0, rate: s.rate || 0,
+			amount: s.amount || 0, skill_level: s.skill_level || "" };
+		else if (group === "parts") b = { item_code: s.item_code || "", item_name: s.item_name || "",
+			qty: s.qty || 0, uom: s.uom || "", rate: s.rate || 0, markup_pct: s.markup_pct || 0, amount: s.amount || 0 };
+		else b = { vendor: s.vendor || "", service_description: s.service_description || "",
+			cost: s.cost || 0, markup_pct: s.markup_pct || 0, sell_amount: s.sell_amount || 0,
+			warranty_months: s.warranty_months || 0 };
+		b.source_standard = s.source_standard || "";
+		return b;
+	}
+	document.getElementById("vh-kit-add").addEventListener("click", function () {
+		var have = {};
+		[["labor", kitLabor], ["parts", kitParts], ["sublet", kitSublet]].forEach(function (p) {
+			p[1].forEach(function (r) { have[kitKey(p[0], r)] = 1; });
+		});
+		[["labor", kitLabor], ["parts", kitParts], ["sublet", kitSublet]].forEach(function (p) {
+			var group = p[0], target = p[1];
+			gatherKit(group).forEach(function (src) {
+				if (group === "labor" && !(src.description || "").trim()) return;
+				if (group === "parts" && !(src.item_code || "").trim()) return;
+				if (group === "sublet" && !(src.service_description || "").trim()) return;
+				var row = buildKitRow(group, src);
+				row.source_standard = kitStandard || "";
+				var k = kitKey(group, row);
+				if (have[k]) return;
+				have[k] = 1; target.push(row);
+			});
+		});
+		renderKitSummary();
+		kitModal.close();
+	});
+	// Persist what was typed back onto the Labor Time Standard, so the next job
+	// card for this service starts with it.
+	document.getElementById("vh-kit-std").addEventListener("click", function () {
+		var btn = this;
+		if (!kitService && !kitStandard) { alert("Pick a service before saving to a Labor Time Standard."); return; }
+		btn.disabled = true;
+		callMethod("garagedesk.workshop.doctype.workshop_job_card.workshop_job_card.save_kit_to_standard", {
+			service: kitService, standard: kitStandard,
+			kit_labor: gatherKit("labor"), kit_parts: gatherKit("parts"), kit_sublet: gatherKit("sublet")
+		}).then(function (r) {
+			var std = (r && r.standard) || kitStandard || "";
+			if (std) {
+				kitStandard = std;
+				if (kitService) LTS_BY_SERVICE[kitService] = std;
+				LTS_LABEL[std] = (r && r.standard_code) || std;
+				if (kitRow && kitRow.isConnected) setRowLaborCode(kitRow, std);
+			}
+			btn.innerHTML = '<i class="fa-solid fa-check"></i> Saved';
+			setTimeout(function () { btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Update Standard'; }, 1600);
+		}).catch(function (err) {
+			alert("Could not save to Labor Time Standard: " + (err && err.message ? err.message : err));
+		}).then(function () { btn.disabled = false; });
+	});
+
+	// ------------------------------------------------- technician board
+	var techModal = wireModal(document.getElementById("vh-tech-modal"));
+	var techRow = null;
+	function openTechBoard(row) {
+		techRow = row;
+		var body = document.getElementById("vh-tech-body");
+		body.innerHTML = '<div class="empty">Loading…</div>';
+		techModal.open();
+		callMethod("garagedesk.api.front_office.get_technician_board", {})
+			.then(function (rows) {
+				rows = rows || [];
+				if (!rows.length) { body.innerHTML = '<div class="kit-none">No technicians found.</div>'; return; }
+				body.innerHTML = rows.map(function (t) {
+					var jobs = (t.jobs && t.jobs.length)
+						? t.jobs.map(function (j) { return esc(j); }).join(" &nbsp;·&nbsp; ")
+						: '<span class="muted">No open jobs</span>';
+					return '<div class="tech-card"><div class="row-between"><b>' + esc(t.employee_name || t.name) + "</b>" +
+						'<button type="button" class="btn btn--primary btn--sm" data-tech="' + escAttr(t.name) + '">' +
+						'<i class="fa-solid fa-plus"></i> Add</button></div>' +
+						'<div class="muted" style="font-size:12px;margin:4px 0 2px">' + (t.jobs ? t.jobs.length : 0) +
+						" jobs · " + (t.hours || 0) + " hrs</div>" +
+						'<div class="muted" style="font-size:12px;margin-bottom:6px">' + jobs + "</div>" +
+						'<div class="row-between" style="font-size:12px;margin-bottom:4px"><span class="muted">Productivity</span><b>' +
+						(t.prod || 0) + "%</b></div>" +
+						'<div class="bar"><span style="width:' + (t.prod || 0) + '%"></span></div></div>';
+				}).join("");
+			})
+			.catch(function () { body.innerHTML = '<div class="kit-none">Could not load the technician board.</div>'; });
+	}
+	document.getElementById("vh-tech-body").addEventListener("click", function (e) {
+		var add = e.target.closest("[data-tech]"); if (!add) return;
+		if (techRow && techRow.isConnected) {
+			var sel = techRow.querySelector(".vh-tech");
+			if (sel) sel.value = add.getAttribute("data-tech");
+		}
+		techModal.close();
+	});
+
+	// ------------------------------------------------- new service / task
+	var svcModal = wireModal(document.getElementById("vh-svc-modal"));
+	var svcRow = null;
+	function svcError(msg) {
+		var box = document.getElementById("vh-svc-err");
+		box.textContent = msg || ""; box.hidden = !msg;
+	}
+	function openServiceDialog(jobtype, typed, row) {
+		svcRow = row || null;
+		document.getElementById("vh-svc-jobtype").value = jobtype || "";
+		document.getElementById("vh-svc-name").value = typed || "";
+		document.getElementById("vh-svc-sub").textContent = "Added under " + (jobtype || "—");
+		svcError("");
+		svcModal.open();
+		var el = document.getElementById("vh-svc-name");
+		el.focus(); el.select();
+	}
+	document.getElementById("vh-svc-name").addEventListener("keydown", function (e) {
+		if (e.key === "Enter") { e.preventDefault(); document.getElementById("vh-svc-create").click(); }
+	});
+	document.getElementById("vh-svc-create").addEventListener("click", function () {
+		var btn = this;
+		var jobtype = document.getElementById("vh-svc-jobtype").value;
+		var name = document.getElementById("vh-svc-name").value.trim();
+		if (!name) { svcError("Enter a service / task name."); return; }
+		var row = svcRow;
+		btn.disabled = true;
+		callMethod("garagedesk.api.front_office.create_job_type_service", {
+			jobcard_type: jobtype, service_name: name
+		}).then(function (res) {
+			if (!res || !res.name) throw new Error("No service returned.");
+			// Into the in-page catalogue, so every other row's type-ahead sees it.
+			if (!JOB_SERVICES.some(function (s) { return s.name === res.name; })) {
+				JOB_SERVICES.push({ name: res.name, jobcard_type: res.jobcard_type, service_name: res.service_name });
+			}
+			svcModal.close();
+			if (row && row.isConnected) setRowService(row, res.name, res.service_name);
+		}).catch(function (err) {
+			svcError("Could not create the service: " + ((err && err.message) || err));
+		}).then(function () { btn.disabled = false; });
+	});
+
+
+	// Save records both halves of this popup: the damages, and the repair planned
+	// for them. Nothing is created here — the job card is raised from the
+	// Handovers tab, which opens the wizard on exactly what was saved.
+	//
+	// The popup closes once it has saved, so the confirmation is the Handovers
+	// row itself: refreshed underneath, it shows the damage count and the Create
+	// Job Card button that raises the card from what was just written. A failure
+	// leaves the popup open with the work still in it.
 	document.getElementById("vh-cmp-save").addEventListener("click", function () {
 		if (!cmpHandover) return;
 		var btn = this, original = btn.innerHTML;
+		var handover = cmpHandover;
 		btn.disabled = true;
 		btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving…';
-		callMethod("garagedesk.api.handover_comparison.save_comparison",
-			{ handover: cmpHandover, damages: JSON.stringify(cmpRows()) })
-			.then(function (r) {
-				document.getElementById("vh-cmp-msg").textContent =
-					r.count + " damage" + (r.count === 1 ? "" : "s") + " saved against this handover.";
+		callMethod("garagedesk.api.handover_comparison.save_comparison", {
+			handover: handover,
+			damages: JSON.stringify(cmpRows()),
+			services: JSON.stringify(cmpServiceRows()),
+			kit_labor: JSON.stringify(kitLabor),
+			kit_parts: JSON.stringify(kitParts),
+			kit_sublet: JSON.stringify(kitSublet)
+		})
+			.then(function () {
+				cmpModal.close();
+				mergeHandoverLinks([handover]);
 			})
 			.catch(function (err) {
-				alert("Could not save the damages: " + (err && err.message ? err.message : err));
+				alert("Could not save: " + (err && err.message ? err.message : err));
 			})
 			.then(function () { btn.disabled = false; btn.innerHTML = original; });
 	});
@@ -601,103 +1403,13 @@
 		if (img) window.open(img.getAttribute("data-zoom"), "_blank", "noopener");
 	});
 
+	// View is a link to the handover's own page; only the two buttons that do
+	// something here are handled.
 	document.getElementById("pane-handovers").addEventListener("click", function (e) {
 		var cmp = e.target.closest("[data-cmp]");
 		if (cmp) { openComparison(cmp.getAttribute("data-cmp")); return; }
 		var jc = e.target.closest("[data-newjc]");
-		if (jc) { window.location.href = newJobCardUrl(jc.getAttribute("data-newjc")); return; }
-		var b = e.target.closest("[data-handover]");
-		if (!b) return;
-		var body = document.getElementById("vh-hand-body");
-		document.getElementById("vh-hand-print").href =
-			"/a3-workshop/vehicle-history-print?handover=" + encodeURIComponent(b.getAttribute("data-handover"));
-		body.innerHTML = '<div class="empty">Loading…</div>';
-		handModal.open();
-		callMethod("garagedesk.api.fleet.get_handover", { name: b.getAttribute("data-handover") })
-			.then(function (h) {
-				document.getElementById("vh-hand-sub").textContent = h.name + "  •  " + h.date;
-				function kv(k, v) { return '<div><div class="k">' + esc(k) + '</div><div class="v">' + v + "</div></div>"; }
-				function ticks(rows) {
-					return rows.map(function (c) {
-						// A Check + Quantity row carries a count and one serial per unit
-						// ("Trailer x3 — TRL-1, TRL-2, TRL-3"); the others carry at most one value.
-						var extra = "";
-						if (c.serials && c.serials.length) {
-							extra = ' <b>&times;' + c.serials.length + '</b> <span style="color:var(--muted)">' +
-								c.serials.map(esc).join(", ") + "</span>";
-						} else if (c.qty) {
-							extra = " <b>&times;" + c.qty + "</b>";
-						} else if (c.value) {
-							extra = ": <b>" + esc(c.value) + "</b>";
-						}
-						return '<span style="margin-right:10px;font-size:12px">' +
-							(c.checked ? '<i class="fa-solid fa-check" style="color:var(--green)"></i>' : '<i class="fa-solid fa-xmark" style="color:var(--muted)"></i>') +
-							" " + esc(c.item) + extra + "</span>";
-					}).join(" ");
-				}
-				var html = '<div class="vh-kv">' +
-					kv("From Driver", esc(h.from_driver)) + kv("To Driver", esc(h.to_driver)) +
-					kv("Odometer", h.odometer.toLocaleString() + " km") +
-					kv("KM Since Previous", (h.km_since_previous || 0).toLocaleString()) +
-					kv("Fuel", esc(h.fuel_level)) + kv("Condition", esc(h.overall_condition)) +
-					kv("Tyres", esc(h.tyre_condition)) +
-					kv("Checklist", (h.checklist_items && h.checklist_items.length)
-						? ticks(h.checklist_items)
-						// Handovers recorded before the checklist master existed only
-						// carry the four legacy flags.
-						: ["spare_tyre", "tools_present", "documents_present", "first_aid_kit"].map(function (k) {
-							return h.checklist[k] ? '<i class="fa-solid fa-check" style="color:var(--green)"></i>' : '<i class="fa-solid fa-xmark" style="color:var(--muted)"></i>';
-						}).join(" ")) +
-					kv("Attachments", (h.attachment_items && h.attachment_items.length)
-						? ticks(h.attachment_items) : '<span class="muted">—</span>') +
-					kv("Responsible", h.responsible_driver ? '<b style="color:var(--red)">' + esc(h.responsible_driver) + "</b>" : "—") +
-					"</div>";
-				html += '<div class="vh-cmp">';
-				html += "<div><div class=\"vd-section-title\" style=\"font-size:12px;font-weight:800;text-transform:uppercase;color:var(--muted);margin-bottom:10px\">Recorded Condition (" + h.damages.length + ")</div>" +
-					(h.damages.length ? h.damages.map(dmgCard).join("") : '<div class="muted" style="font-size:13px">No damages recorded.</div>') + "</div>";
-				// Both kinds count here: the controller's automatic diff, and what
-				// the inspector found comparing photographs in the Damages popup.
-				// Counting only the first said "no new damage" on a handover that
-				// plainly had damage recorded against it.
-				var found = (h.new_damages || []).concat(h.comparison_damages || []);
-				html += "<div><div class=\"vd-section-title\" style=\"font-size:12px;font-weight:800;text-transform:uppercase;color:var(--muted);margin-bottom:10px\">New vs Previous Handover (" + found.length + ")</div>" +
-					(found.length ? found.map(function (x) { x.is_new = 1; return dmgCard(x); }).join("")
-						: '<div class="muted" style="font-size:13px">No new damage — matches the previous record.</div>') + "</div>";
-				html += "</div>";
-				if (h.discrepancy_found) {
-					html += '<div class="row-between" style="margin-top:16px"><span class="muted">Rectification</span><span>' +
-						statusBadge(h.rectification_status) + "</span></div>";
-					if (h.rectification_notes) html += '<div class="muted" style="font-size:13px;margin-top:6px">' + esc(h.rectification_notes) + "</div>";
-					// The repair job card IS the rectification: raising one closes the
-					// discrepancy, so there is no manual "Mark Rectified" step here.
-					if (h.rectification_job_card) {
-						html += '<div class="row-between" style="margin-top:8px"><span class="muted">Repair job card</span>' +
-							'<a class="vh-jc-link" href="/a3-workshop/job-card/detail?id=' +
-							encodeURIComponent(h.rectification_job_card) + '">' + esc(h.rectification_job_card) + "</a></div>";
-					} else {
-						html += '<div style="display:flex;justify-content:flex-end;margin-top:10px">' +
-							'<button type="button" class="btn btn--navy btn--sm" data-newjc="' + esc(h.name) +
-							'"><i class="fa-solid fa-plus"></i> Create Job Card</button></div>';
-					}
-				}
-				if (h.attachments.length) {
-					html += '<div class="vd-section-title" style="font-size:12px;font-weight:800;text-transform:uppercase;color:var(--muted);margin:18px 0 10px">Photos (' + h.attachments.length + ")</div>" +
-						'<div class="vh-photos">' + h.attachments.map(function (a) {
-							return '<a href="' + esc(a.file_url) + '" target="_blank" rel="noopener"><img src="' + esc(a.file_url) + '" alt="' + esc(a.file_name) + '"></a>';
-						}).join("") + "</div>";
-				}
-				body.innerHTML = html;
-			})
-			.catch(function (err) {
-				body.innerHTML = '<div class="empty">Could not load handover.<br><span class="muted">' + esc(err.message || err) + "</span></div>";
-			});
-	});
-
-	// "Create Job Card" inside the modal — same hand-off as the table cell.
-	document.getElementById("vh-hand-body").addEventListener("click", function (e) {
-		var b = e.target.closest("[data-newjc]");
-		if (!b) return;
-		window.location.href = newJobCardUrl(b.getAttribute("data-newjc"));
+		if (jc) { window.location.href = newJobCardUrl(jc.getAttribute("data-newjc")); }
 	});
 
 })();

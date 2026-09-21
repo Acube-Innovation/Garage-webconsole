@@ -2,7 +2,11 @@
 {% from "templates/macros/workshop.html" import field %}
 
 {% block page_content %}
-{%- set steps = ["Customer Details", "Service Jobs", "Complaints / Check-Up", "Readings", "Estimate", "Billing"] -%}
+{#- Step order is the order the work is actually done in: the vehicle is
+    received and read, what the customer reports is written down, and only then
+    are the jobs that answer those complaints raised. Each `data-tab` below
+    matches its position here. -#}
+{%- set steps = ["Customer Details", "Readings", "Complaints / Check-Up", "Service Jobs", "Estimate", "Billing"] -%}
 
 <style>
 	.jc-ac { position:absolute; left:0; right:0; top:100%; z-index:60; margin-top:2px; background:#fff;
@@ -20,6 +24,13 @@
 	<div class="card__body" id="jc-handover-note"></div>
 </div>
 
+<!-- Shown once the last step's button has written the card, just before the
+     browser leaves for the Job Cards list — so the job number is seen rather
+     than only appearing in a row on the next page. -->
+<div class="card" id="jc-done" style="display:none;margin-bottom:14px;border-color:var(--green)">
+	<div class="card__body" id="jc-done-msg"></div>
+</div>
+
 <!-- progress tabs -->
 <div class="card"><div class="stepper" id="wizard-stepper">
 	{%- for s in steps %}{%- set n = loop.index %}
@@ -30,7 +41,7 @@
 	{%- endfor %}
 </div></div>
 
-<!-- TAB 1 — Customer Details -->
+<!-- STEP 1 — Customer Details -->
 <section class="wizard-tab is-active" data-tab="1" style="margin-top:18px">
 	<div class="card"><div class="card__head"><h3>Customer Details</h3></div>
 	<div class="card__body"><form class="form-grid">
@@ -41,24 +52,32 @@
 			<div class="field"><label>Vehicle <span class="req">*</span></label><input name="vehicle" placeholder="Plate / chassis"></div>
 			<button type="button" class="btn btn--navy btn--icon" title="New vehicle"><i class="fa-solid fa-plus"></i></button>
 		</div>
-		{{ field("Mobile Number","mobile",placeholder="+971 ...") }}
-		{{ field("Job Number","job_no",placeholder="Auto (on save)") }}
+		{#- Carried, not shown. The mobile is the customer's own -- it fills from
+		    the customer picked above and is saved onto the card with everything
+		    else -- and the job number is assigned on the first save; neither is
+		    something the advisor types here. -#}
+		<input type="hidden" name="mobile">
+		<input type="hidden" name="job_no">
 		<div class="field"><label>Handover</label>
 			<input name="handover_label" placeholder="Search handovers…" autocomplete="off">
 			<input type="hidden" name="handover"></div>
 		{{ field("Booking Date","booking_date",type="date",required=True) }}
 		{{ field("Promised Delivery","delivery",type="date") }}
 		{{ field("Service Advisor","advisor",type="select") }}
-		{{ field("Booking Channel","channel",type="select",options=["Walk-in","Phone","WhatsApp","Website","Corporate"]) }}
-		<div class="field"><label>Options</label><label class="check"><input type="checkbox" name="project_booking"> Project Booking</label></div>
 	</form></div></div>
 </section>
 
-<!-- TAB 2 — Service Jobs (LHS job types, RHS detail child table) -->
-<section class="wizard-tab" data-tab="2" style="margin-top:18px">
+<!-- STEP 4 — Service Jobs (LHS job types, RHS detail child table).
+     The sections below are in their original document order, which is no longer
+     the order of the steps; `data-tab` is what places each one, and only the
+     active one is ever displayed. -->
+<section class="wizard-tab" data-tab="4" style="margin-top:18px">
 	<div class="split">
-		<div class="card"><div class="card__head"><h3>Job Type</h3><span class="muted">Select one or more</span></div>
-			<div class="card__body"><div class="jobtype-list" id="jobtype-list"></div></div>
+		<div class="card"><div class="card__head"><h3>Job Type</h3><span class="muted" id="jobtype-hint">Select one or more</span></div>
+			<div class="card__body">
+				<div class="field" style="margin-bottom:12px"><input id="jobtype-search" placeholder="Search job types…" autocomplete="off" aria-label="Search job types"></div>
+				<div class="jobtype-list" id="jobtype-list"></div>
+			</div>
 		</div>
 		<div class="card"><div class="card__head"><h3>Job Details</h3>
 			<button type="button" class="btn btn--primary btn--sm" id="add-job-detail"><i class="fa-solid fa-plus"></i> Add</button></div>
@@ -78,7 +97,7 @@
 			<div class="kit-block">
 				<h4 class="kit-title">Kit Labor <span class="muted" id="kit-labor-count"></span></h4>
 				<table class="table editable"><thead><tr>
-					<th>Description</th><th style="width:80px">Hours</th><th style="width:110px">Rate</th><th style="width:100px">Skill</th><th style="width:40px"></th>
+					<th style="width:112px">Item</th><th style="width:150px">Item Name</th><th>Description</th><th style="width:70px">Hours</th><th style="width:100px">Rate</th><th style="width:86px">Skill</th><th style="width:40px"></th>
 				</tr></thead><tbody id="kit-labor-body"></tbody></table>
 				<div class="empty kit-empty" id="kit-labor-empty">No kit labor lines.</div>
 			</div>
@@ -191,7 +210,7 @@
 	#kit-card .kit-block { overflow-x:auto; }
 </style>
 
-<!-- TAB 3 — Complaints / Check-Up -->
+<!-- STEP 3 — Complaints / Check-Up -->
 <section class="wizard-tab" data-tab="3" style="margin-top:18px">
 	<div class="card"><div class="card__head"><h3>Complaints / Check-Up</h3>
 		<button type="button" class="btn btn--primary btn--sm" id="add-complaint"><i class="fa-solid fa-plus"></i> Add Complaint</button></div>
@@ -204,8 +223,8 @@
 	</div>
 </section>
 
-<!-- TAB 4 — Readings + body condition drawing -->
-<section class="wizard-tab" data-tab="4" style="margin-top:18px">
+<!-- STEP 2 — Readings + body condition drawing -->
+<section class="wizard-tab" data-tab="2" style="margin-top:18px">
 	<div class="card"><div class="card__head"><h3>Readings</h3></div>
 		<div class="card__body"><div class="readings-grid">
 			{{ field("Odometer (KM)","km",type="number",placeholder="0") }}
@@ -257,7 +276,7 @@
 	</div>
 </section>
 
-<!-- TAB 5 — Estimate (LHS items, RHS cart, totals) -->
+<!-- STEP 5 — Estimate (LHS items, RHS cart, totals) -->
 <section class="wizard-tab" data-tab="5" style="margin-top:18px">
 	<div class="split">
 		<div class="card"><div class="card__head"><h3>Items</h3>
@@ -289,7 +308,7 @@
 	</div>
 </section>
 
-<!-- TAB 6 — Billing (LHS completed tasks, RHS editable kit billing tables) -->
+<!-- STEP 6 — Billing (LHS completed tasks, RHS editable kit billing tables) -->
 <section class="wizard-tab" data-tab="6" style="margin-top:18px">
 	<div id="billing-need-save" class="card" style="display:none"><div class="card__body">
 		<div class="empty">Save the job card first — billing appears once the card exists and its tasks are completed.</div></div></div>
@@ -307,8 +326,13 @@
 			<div class="card__body">
 				<div class="kit-block">
 					<h4 class="bill-kit-title">Labor <button type="button" class="btn btn--outline btn--sm" data-badd="labor"><i class="fa-solid fa-plus"></i> Add</button></h4>
+					{#- The Item is what the Sales Order actually bills against: a
+					    labour line with none, and no Default Labour Item in Workshop
+					    Settings, stops Create Sales Order. It used to be carried
+					    invisibly from the kit, so a line typed here had no way to
+					    get one. -#}
 					<table class="table editable"><thead><tr>
-						<th>Description</th><th style="width:66px">Hrs</th><th style="width:96px">Rate</th><th style="width:88px">Skill</th><th style="width:34px"></th>
+						<th style="width:104px">Item</th><th style="width:128px">Item Name</th><th>Description</th><th style="width:56px">Hrs</th><th style="width:82px">Rate</th><th style="width:74px">Skill</th><th style="width:34px"></th>
 					</tr></thead><tbody id="bill-labor-body"></tbody></table>
 					<div class="empty" id="bill-labor-empty">No labor lines.</div>
 				</div>
@@ -386,6 +410,9 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 <script>
 (function () {
 	var TOTAL = 6, cur = 1;
+	// The canvas can only be sized once its tab is on screen, so the step that
+	// holds it is named rather than written as a number in three places.
+	var READINGS_STEP = 2;
 	var isEditing = false; // true when the wizard was opened on an existing card (?id=)
 	var steps = document.querySelectorAll('#wizard-stepper .step');
 	var lines = document.querySelectorAll('#wizard-stepper .step__line');
@@ -405,9 +432,10 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 		nextBtn.innerHTML = cur === TOTAL
 			? '<i class="fa-solid fa-check"></i> ' + (isEditing ? 'Update Job Card' : 'Create Job Card')
 			: 'Next <i class="fa-solid fa-arrow-right"></i>';
-		if (cur === 4) sizeCanvas();
+		// Step numbers, not document order: Readings is step 2 (see the stepper).
+		if (cur === READINGS_STEP) sizeCanvas();
 		if (cur === 5) loadEstimateItems();
-		if (cur === 6) loadBillingData();
+		if (cur === TOTAL) loadBillingData();
 	}
 	function goTo(n) { cur = Math.max(1, Math.min(TOTAL, n)); render(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
 	steps.forEach(function (s) { s.addEventListener('click', function () { goTo(+s.dataset.goto); }); });
@@ -510,6 +538,7 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 			JOBCARD_TYPES = o.jobcard_types || [];
 			JOB_SERVICES = o.job_type_services || [];
 			EMPLOYEES = o.service_advisors || [];
+			UOMS = o.uoms || [];
 			LABOR_STANDARDS = o.labor_standards || [];
 			LTS_BY_SERVICE = {}; LTS_LABEL = {};
 			LABOR_STANDARDS.forEach(function (s) {
@@ -629,20 +658,99 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 		loadHandoverComplaints();
 	}
 
+	// Open on everything the handover's Damages popup recorded: its damages as
+	// complaints, and the repair planned beside them as Service Jobs, kit and
+	// readings. The advisor checks and changes it here, then creates the card —
+	// the popup itself creates nothing.
+	// Put the handover's customer and vehicle onto the form.
+	//
+	// Filling empty fields needs no permission. Replacing ones already holding a
+	// DIFFERENT customer or vehicle does: the handover names one specific vehicle,
+	// so the two cannot both be right, and silently overwriting what the advisor
+	// chose would be worse than asking. Declining leaves the form untouched and
+	// stops the rest of the prefill, so the card never ends up describing one
+	// vehicle's damage against another.
+	function applyHandoverParty(r) {
+		var wantC = r.customer || "", wantV = r.vehicle || "";
+		var haveC = val("customer_id"), haveV = val("vehicle_id");
+		var clash = (haveC && wantC && haveC !== wantC) || (haveV && wantV && haveV !== wantV);
+		if (clash) {
+			var ok = confirm("Handover " + r.handover + " is for " +
+				(r.vehicle_label || wantV) + " (" + (r.customer_name || wantC) + ").\n\n" +
+				"Replace the customer and vehicle already on this job card?");
+			if (!ok) return false;
+		}
+		if (wantC && wantC !== haveC) {
+			setVal("customer_id", wantC);
+			setVal("customer", r.customer_name || wantC);
+			if (r.mobile_no) setVal("mobile", r.mobile_no);
+			// The Vehicle box suggests from the chosen customer's vehicles, so
+			// that list has to follow the customer or it would offer nothing.
+			loadCustomerVehicles(wantC);
+		}
+		if (wantV && wantV !== haveV) {
+			setVal("vehicle_id", wantV);
+			setVal("vehicle", r.vehicle_label || wantV);
+		}
+		return true;
+	}
+
 	function loadHandoverComplaints() {
 		if (!handoverRef) return;
 		callMethod("garagedesk.api.handover_comparison.get_job_card_complaints", {
 			handover: handoverRef
 		}).then(function (r) {
 			handoverHasDiscrepancy = !!r.discrepancy_found;
-			if (!r.complaints || !r.complaints.length) return;
-			// Only seed an empty table — a card being edited, or one the advisor
+			var added = [];
+
+			// Who and what the handover is for. A card opened from the vehicle
+			// history already carries these in its URL; one where the advisor
+			// picked the handover here does not, and it is the same two fields
+			// they would otherwise go and find by hand.
+			if (!isEditing && applyHandoverParty(r) === false) return;
+
+			// Only seed empty tables — a card being edited, or one the advisor
 			// has already typed into, must not be duplicated over.
-			if (cBody.children.length) return;
-			r.complaints.forEach(addComplaintRow);
-			hoNote.innerHTML += ' <br><span class="muted" style="font-size:12px">' +
-				r.complaints.length + " damage item" + (r.complaints.length === 1 ? "" : "s") +
-				" from that handover added to Complaints.</span>";
+			if ((r.complaints || []).length && !cBody.children.length) {
+				r.complaints.forEach(addComplaintRow);
+				added.push(r.complaints.length + " damage item" + (r.complaints.length === 1 ? "" : "s") + " as Complaints");
+			}
+
+			if ((r.services || []).length && !jdBody.children.length) {
+				// Tick each job type first: a row's Job Type dropdown only offers
+				// what is selected on the left.
+				r.services.forEach(function (s) {
+					if (s.jobtype && selected.indexOf(s.jobtype) < 0) selected.push(s.jobtype);
+				});
+				renderJobTypeList();
+				r.services.forEach(function (s) { addServiceRow(s); });
+				added.push(r.services.length + " service job" + (r.services.length === 1 ? "" : "s"));
+
+				// Kit rides with the services, so it is only taken when they were.
+				var kit = (r.kit_labor || []).length + (r.kit_parts || []).length + (r.kit_sublet || []).length;
+				if (kit && !kitLabor.length && !kitParts.length && !kitSublet.length) {
+					kitLabor = (r.kit_labor || []).map(function (x) { return buildKitRow('labor', x); });
+					kitParts = (r.kit_parts || []).map(function (x) { return buildKitRow('parts', x); });
+					kitSublet = (r.kit_sublet || []).map(function (x) { return buildKitRow('sublet', x); });
+					renderKitTables();
+					added.push(kit + " kit line" + (kit === 1 ? "" : "s"));
+				}
+			}
+
+			// The vehicle was read at the handover; don't make them read it again.
+			// Never on a saved card: that one carries its own readings, and the
+			// fuel slider always holds a value, so there is no "empty" to test.
+			var rd = r.readings || {};
+			if (!isEditing) {
+				if (rd.odometer && !val("km")) setVal("km", rd.odometer);
+				var fuel = document.querySelector('[name="fuel"]');
+				if (rd.fuel_level && fuel) { fuel.value = rd.fuel_level; fuel.dispatchEvent(new Event("input")); }
+			}
+
+			if (added.length) {
+				hoNote.innerHTML += ' <br><span class="muted" style="font-size:12px">' +
+					added.join(", ") + " carried over from that handover — check and edit before creating.</span>";
+			}
 		}).catch(function (err) {
 			console.warn("Could not load handover damages:", err);
 		});
@@ -669,7 +777,31 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 	}, function (it) {
 		setVal("vehicle_id", it.value);
 	});
+	// The three fields Customer Details marks with an asterisk. Nothing enforced
+	// them, so Next or Save Draft on an untouched form wrote a job card with no
+	// customer, no vehicle and no date — indistinguishable from real work in the
+	// Job Cards list. Checked here so the advisor is told which field is missing
+	// and taken to it; save_job_card refuses the blank case regardless.
+	function missingRequired() {
+		var gaps = [];
+		if (!val("customer_id")) gaps.push(["Customer Name", "customer"]);
+		if (!val("vehicle_id")) gaps.push(["Vehicle", "vehicle"]);
+		if (!val("booking_date")) gaps.push(["Booking Date", "booking_date"]);
+		return gaps;
+	}
 	function saveJobCard(advance) {
+		var gaps = missingRequired();
+		if (gaps.length) {
+			alert("Fill in " + gaps.map(function (g) { return g[0]; }).join(", ") +
+				" on Customer Details before saving." +
+				(val("customer_id") || !val("customer")
+					? ""
+					: "\n\nPick the customer from the suggestions — typing the name alone does not select one."));
+			goTo(1);
+			var el = document.querySelector('[name="' + gaps[0][1] + '"]');
+			if (el) el.focus();
+			return Promise.reject(new Error("required fields missing"));
+		}
 		return callMethod("garagedesk.api.front_office.save_job_card", {
 			job_card: jobCardName,
 			customer: val("customer_id"),
@@ -678,8 +810,6 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 			booking_date: val("booking_date"),
 			promised_delivery: val("delivery"),
 			service_advisor: val("advisor"),
-			booking_channel: val("channel"),
-			project_booking: document.querySelector('[name="project_booking"]').checked ? 1 : 0,
 			services: gatherServices(),
 			complaints: gatherComplaints(),
 			readings: gatherReadings(),
@@ -692,16 +822,40 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 			jobCardName = res.name;
 			setVal("job_no", res.name); // Job Number appears once saved as draft
 			linkHandover(res.name);
-			if (advance && cur < TOTAL) goTo(cur + 1);
+			if (advance) {
+				// Next on the middle steps moves on; on the last one it IS the
+				// Create / Update button, so the card is finished with here.
+				if (cur < TOTAL) goTo(cur + 1);
+				else finishAndLeave(res.name);
+			}
 			return res;
 		}).catch(function (err) {
 			alert("Could not save job card: " + (err && err.message ? err.message : err));
 			throw err;
 		});
 	}
-	// Both buttons save a draft; Next also advances to the next page.
-	nextBtn.addEventListener('click', function () { saveJobCard(true); });
-	document.getElementById('wiz-save').addEventListener('click', function () { saveJobCard(false); });
+	// The card is written by now. Show its number, then hand over to the Job
+	// Cards list where it can be found again — the wizard has nothing left to
+	// ask. The pause is there so the number can actually be read; the button is
+	// disabled meanwhile so a second click cannot re-save on the way out.
+	function finishAndLeave(name) {
+		var box = document.getElementById('jc-done');
+		document.getElementById('jc-done-msg').innerHTML =
+			'<i class="fa-solid fa-circle-check" style="color:var(--green)"></i> Job card <b>' +
+			esc(name) + '</b> ' + (isEditing ? 'updated' : 'created') +
+			'. <span class="muted">Opening the Job Cards list…</span>';
+		box.style.display = '';
+		window.scrollTo({ top: 0, behavior: 'smooth' });
+		nextBtn.disabled = true;
+		document.getElementById('wiz-save').disabled = true;
+		setTimeout(function () { window.location.href = '/a3-workshop/job-cards'; }, 1600);
+	}
+	// Both buttons save a draft; Next also advances to the next page. The catch
+	// swallows the rejection a missing required field raises — it has already
+	// been reported and the advisor sent to the field.
+	function noop() {}
+	nextBtn.addEventListener('click', function () { saveJobCard(true).catch(noop); });
+	document.getElementById('wiz-save').addEventListener('click', function () { saveJobCard(false).catch(noop); });
 
 	// Options first (so advisor / service / technician dropdowns exist), then either
 	// load an existing card for editing (?id=) or prefill from a lead's Save & Job Card.
@@ -713,7 +867,23 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 		// it resolves would add the handover's damages on top of the complaints
 		// the saved card already has.
 		prefillFromHandover();
+		// A card raised now is nearly always booked in today, so the date is
+		// filled rather than typed — and it stays an ordinary date field, so any
+		// other day can be picked over it.
+		//
+		// New cards only. A saved card missing its date is not silently stamped
+		// with today's: nobody knows when it was really booked, so the advisor is
+		// asked for it instead (see missingRequired).
+		if (!qparam("id") && !val("booking_date")) setVal("booking_date", todayISO());
 	});
+
+	// yyyy-mm-dd — what an <input type="date"> takes, in local time. toISOString
+	// would shift the day backwards for anyone east of UTC, which here is every
+	// day before 04:00.
+	function todayISO() {
+		var d = new Date(), pad = function (n) { return (n < 10 ? "0" : "") + n; };
+		return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+	}
 
 	// Load a saved Workshop Job Card into every tab for editing.
 	function loadJobCard(id) {
@@ -725,8 +895,6 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 			setVal("vehicle_id", jc.vehicle); setVal("vehicle", jc.vehicle_label);
 			setVal("mobile", jc.mobile_no);
 			setVal("booking_date", jc.booking_date); setVal("delivery", jc.promised_delivery);
-			setVal("channel", jc.booking_channel);
-			var pb = document.querySelector('[name="project_booking"]'); if (pb) pb.checked = !!jc.project_booking;
 			var adv = document.querySelector('select[name="advisor"]'); if (adv) adv.value = jc.service_advisor || "";
 			if (jc.customer) loadCustomerVehicles(jc.customer);
 			// Tab 2 / 3 — service + complaint rows (+ kit components)
@@ -765,7 +933,7 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 	function toggleEmpty(body, el) { el.style.display = body.children.length ? 'none' : 'block'; }
 
 	// ---- Service Jobs: LHS = Jobcard Type, RHS = service rows -----------
-	var JOBCARD_TYPES = [], JOB_SERVICES = [], EMPLOYEES = [];
+	var JOBCARD_TYPES = [], JOB_SERVICES = [], EMPLOYEES = [], UOMS = [];
 	var LABOR_STANDARDS = [], LTS_BY_SERVICE = {}, LTS_LABEL = {}; // service -> Labor Time Standard
 	var kitLabor = [], kitParts = [], kitSublet = []; // kit lines picked from the popup
 	var selected = []; // selected Jobcard Type names
@@ -773,21 +941,56 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 	var jdEmpty = document.getElementById('job-detail-empty');
 	var jtList = document.getElementById('jobtype-list');
 
+	var jtSearch = document.getElementById('jobtype-search');
+	var jtHint = document.getElementById('jobtype-hint');
+	function jobTypeMatches(t, q) {
+		return !q || ((t.type_name || t.name) + ' ' + (t.description || '')).toLowerCase().indexOf(q) >= 0;
+	}
+	// The list narrows to what is typed, but a type already ticked stays on
+	// screen whatever the search says. This is a multi-select: a selection the
+	// advisor cannot see is one they will save without meaning to. The heading
+	// keeps the count for the same reason.
 	function renderJobTypeList() {
-		jtList.innerHTML = JOBCARD_TYPES.map(function (t) {
+		var q = (jtSearch.value || '').trim().toLowerCase();
+		var shown = JOBCARD_TYPES.filter(function (t) {
+			return jobTypeMatches(t, q) || selected.indexOf(t.name) >= 0;
+		});
+		jtList.innerHTML = shown.map(function (t) {
 			var on = selected.indexOf(t.name) >= 0;
-			return '<div class="jobtype-box' + (on ? ' is-active' : '') + '" data-jobtype="' + t.name + '">' +
-				'<i class="fa-solid ' + (t.icon || 'fa-wrench') + '"></i>' +
-				'<div><div class="t">' + (t.type_name || t.name) + '</div><div class="s">' + (t.description || '') + '</div></div>' +
+			return '<div class="jobtype-box' + (on ? ' is-active' : '') + '" data-jobtype="' + escAttr(t.name) + '">' +
+				'<i class="fa-solid ' + escAttr(t.icon || 'fa-wrench') + '"></i>' +
+				'<div><div class="t">' + esc(t.type_name || t.name) + '</div><div class="s">' + esc(t.description || '') + '</div></div>' +
 				'<i class="fa-solid fa-check tick"></i></div>';
-		}).join('') || '<div class="empty">No job card types configured.</div>';
+		}).join('') || (JOBCARD_TYPES.length
+			? '<div class="empty">No job types match \u201c' + esc(jtSearch.value.trim()) + '\u201d.</div>'
+			: '<div class="empty">No job card types configured.</div>');
+		jtHint.textContent = selected.length ? selected.length + ' selected' : 'Select one or more';
+	}
+	function toggleJobType(name) {
+		var i = selected.indexOf(name);
+		if (i >= 0) selected.splice(i, 1); else selected.push(name);
+		// Repainted rather than toggling the one box: a type that was only on
+		// screen because it was ticked has to go once it is unticked.
+		renderJobTypeList();
+		refreshRowJobTypes();
 	}
 	jtList.addEventListener('click', function (e) {
 		var box = e.target.closest('.jobtype-box'); if (!box) return;
-		var name = box.dataset.jobtype, i = selected.indexOf(name);
-		if (i >= 0) selected.splice(i, 1); else selected.push(name);
-		box.classList.toggle('is-active');
-		refreshRowJobTypes();
+		toggleJobType(box.dataset.jobtype);
+	});
+	// Only the list is repainted on a keystroke, so the box keeps its focus.
+	jtSearch.addEventListener('input', renderJobTypeList);
+	// Type, Enter: ticks the first match and clears the box for the next one --
+	// the counter works this list from the keyboard.
+	jtSearch.addEventListener('keydown', function (e) {
+		if (e.key === 'Escape') { jtSearch.value = ''; renderJobTypeList(); return; }
+		if (e.key !== 'Enter') return;
+		e.preventDefault();
+		var q = jtSearch.value.trim().toLowerCase(); if (!q) return;
+		var hit = JOBCARD_TYPES.filter(function (t) { return jobTypeMatches(t, q); })[0];
+		if (!hit) return;
+		if (selected.indexOf(hit.name) < 0) toggleJobType(hit.name);
+		jtSearch.value = ''; renderJobTypeList();
 	});
 
 	function jobTypeOptions(val) {
@@ -1157,13 +1360,80 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 			return KIT_ITEMS.filter(function (it) {
 				return !q || (it.item || '').toLowerCase().indexOf(q) >= 0 || (it.item_name || '').toLowerCase().indexOf(q) >= 0;
 			}).slice(0, 10).map(function (it) {
-				return { label: it.item, sub: (it.item_name && it.item_name !== it.item) ? it.item_name : '', value: it.item, rate: it.rate };
+				return { label: it.item, sub: (it.item_name && it.item_name !== it.item) ? it.item_name : '',
+					value: it.item, rate: it.rate, uom: it.uom };
 			});
 		}, function (it) {
 			input.value = it.value;
-			var tr = input.closest('tr'), rateEl = tr && tr.querySelector('.ke-rate');
+			var tr = input.closest('tr');
+			var rateEl = tr && tr.querySelector('.ke-rate');
 			if (rateEl && it.rate && !parseFloat(rateEl.value)) rateEl.value = it.rate;
+			// The unit belongs to the item, so it is taken from it rather than
+			// typed — an empty or wrong UOM is dropped when the card is written.
+			var uomEl = tr && tr.querySelector('.ke-uom');
+			if (uomEl && it.uom && !uomEl.value.trim()) uomEl.value = it.uom;
 		});
+	}
+	// The item's own name, looked up rather than stored: the labour kit row has
+	// no item_name field (unlike the parts row), and the name belongs to the Item
+	// anyway — renaming it should not leave a stale copy on every job card.
+	function itemNameOf(code) {
+		if (!code) return '';
+		var hit = KIT_ITEMS.filter(function (it) { return it.item === code; })[0];
+		return hit ? (hit.item_name || '') : '';
+	}
+	// The labour Item: what a Sales Order raised from this job bills the line
+	// against. Without one the line is unbillable unless a Default Labour Item is
+	// set in Workshop Settings — so the cell offers the service (non-stock) Items.
+	function attachLabourItemAutocomplete(input) {
+		if (!input || input.dataset.acset) return;
+		input.dataset.acset = '1';
+		function syncName() {
+			var tr = input.closest('tr'), name = tr && tr.querySelector('.ke-opname');
+			if (name) name.textContent = itemNameOf(input.value.trim());
+		}
+		attachAutocomplete(input, function (q) {
+			q = (q || '').toLowerCase();
+			return KIT_ITEMS.filter(function (it) {
+				if (it.is_stock || it.is_item === 0) return false;
+				return !q || (it.item || '').toLowerCase().indexOf(q) >= 0 ||
+					(it.item_name || '').toLowerCase().indexOf(q) >= 0;
+			}).slice(0, 10).map(function (it) {
+				return { label: it.item, sub: (it.item_name && it.item_name !== it.item) ? it.item_name : '',
+					value: it.item, rate: it.rate };
+			});
+		}, function (it) {
+			input.value = it.value;
+			var tr = input.closest('tr'), rate = tr && tr.querySelector('.ke-rate');
+			if (rate && it.rate && !parseFloat(rate.value)) rate.value = it.rate;
+			syncName();
+		});
+		// Typing over a picked code must not leave the previous item's name beside it.
+		input.addEventListener('input', syncName);
+	}
+	// The UOM cell: a type-ahead over the real UOM list, because it is a Link
+	// field on the kit row — anything typed that is not a UOM record is silently
+	// dropped on save, leaving a part with no unit.
+	function attachUomAutocomplete(input) {
+		if (!input || input.dataset.acset) return;
+		input.dataset.acset = '1';
+		attachAutocomplete(input, function (q) {
+			return matchUoms(UOMS, q).map(function (u) { return { label: esc(u), value: u }; });
+		}, function (it) { input.value = it.value; });
+	}
+	// "Li" has to offer Litre before Calibre: a unit whose name STARTS with what
+	// was typed comes first, anything merely containing it after. The list
+	// arrives with the units this workshop's items actually use at the front,
+	// and that order is kept within each group.
+	function matchUoms(list, q) {
+		q = (q || '').trim().toLowerCase();
+		if (!q) return (list || []).slice(0, 12);
+		var starts = [], contains = [];
+		(list || []).forEach(function (u) {
+			var i = u.toLowerCase().indexOf(q);
+			if (i === 0) starts.push(u); else if (i > 0) contains.push(u);
+		});
+		return starts.concat(contains).slice(0, 12);
 	}
 
 	// Open the kit popup for a service row. Works with or without a Labor Time Standard:
@@ -1202,7 +1472,9 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 	function kitEditRow(group, r) {
 		r = r || {};
 		if (group === 'labor') return '<tr>' +
-			'<td><input class="ke-desc" value="' + escAttr(r.description || r.operation || '') + '" placeholder="Description"></td>' +
+			'<td><input class="ke-op" value="' + escAttr(r.operation || '') + '" placeholder="Labour item" autocomplete="off"></td>' +
+			'<td><span class="ke-opname muted">' + esc(itemNameOf(r.operation)) + '</span></td>' +
+			'<td><input class="ke-desc" value="' + escAttr(r.description || '') + '" placeholder="Description"></td>' +
 			'<td><input class="ke-hours" type="number" min="0" step="0.1" value="' + (r.hours != null ? r.hours : 0) + '"></td>' +
 			'<td><input class="ke-rate" type="number" min="0" step="0.01" value="' + (r.rate != null ? r.rate : 0) + '"></td>' +
 			'<td><input class="ke-skill" value="' + escAttr(r.skill_level || '') + '" placeholder="Skill"></td>' +
@@ -1230,10 +1502,12 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 	function renderKitModalBody() {
 		document.getElementById('kit-modal-body').innerHTML =
 			'<div class="kit-none" style="margin-bottom:10px">Kit items for this service are listed below — edit quantities/rates, add rows if needed, then “Add to Job”.</div>' +
-			kitEditSection('labor', 'Kit Labor', ['Description', 'Hours', 'Rate', 'Skill']) +
+			kitEditSection('labor', 'Kit Labor', ['Item', 'Item Name', 'Description', 'Hours', 'Rate', 'Skill']) +
 			kitEditSection('parts', 'Kit Parts', ['Item', 'Qty', 'UOM', 'Rate']) +
 			kitEditSection('sublet', 'Kit Sublet', ['Service', 'Vendor', 'Cost', 'Markup %']);
 		document.querySelectorAll('#kit-modal-body .ke-item').forEach(attachKitItemAutocomplete);
+		document.querySelectorAll('#kit-modal-body .ke-uom').forEach(attachUomAutocomplete);
+		document.querySelectorAll('#kit-modal-body .ke-op').forEach(attachLabourItemAutocomplete);
 	}
 	// Add-row / remove-row inside the popup.
 	document.getElementById('kit-modal-body').addEventListener('click', function (e) {
@@ -1241,7 +1515,12 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 		if (add) {
 			var tb = document.getElementById('kmod-' + add.dataset.kadd + '-body');
 			tb.insertAdjacentHTML('beforeend', kitEditRow(add.dataset.kadd, {}));
-			if (add.dataset.kadd === 'parts') attachKitItemAutocomplete(tb.lastElementChild.querySelector('.ke-item'));
+			if (add.dataset.kadd === 'parts') {
+				attachKitItemAutocomplete(tb.lastElementChild.querySelector('.ke-item'));
+				attachUomAutocomplete(tb.lastElementChild.querySelector('.ke-uom'));
+			} else if (add.dataset.kadd === 'labor') {
+				attachLabourItemAutocomplete(tb.lastElementChild.querySelector('.ke-op'));
+			}
 			return;
 		}
 		var del = e.target.closest('[data-kdel]');
@@ -1251,7 +1530,7 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 		var tb = document.getElementById('kmod-' + group + '-body');
 		if (!tb) return [];
 		return Array.prototype.map.call(tb.children, function (tr) {
-			if (group === 'labor') return { description: tr.querySelector('.ke-desc').value, hours: tr.querySelector('.ke-hours').value, rate: tr.querySelector('.ke-rate').value, skill_level: tr.querySelector('.ke-skill').value };
+			if (group === 'labor') return { description: tr.querySelector('.ke-desc').value, operation: tr.querySelector('.ke-op').value.trim(), hours: tr.querySelector('.ke-hours').value, rate: tr.querySelector('.ke-rate').value, skill_level: tr.querySelector('.ke-skill').value };
 			if (group === 'parts') return { item_code: tr.querySelector('.ke-item').value, qty: tr.querySelector('.ke-qty').value, uom: tr.querySelector('.ke-uom').value, rate: tr.querySelector('.ke-rate').value };
 			return { service_description: tr.querySelector('.ke-desc').value, vendor: tr.querySelector('.ke-vendor').value, cost: tr.querySelector('.ke-cost').value, markup_pct: tr.querySelector('.ke-markup').value };
 		});
@@ -1306,7 +1585,17 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 	// --- three tables under Job Details ---
 	var KIT_TABLES = {
 		labor: { body: 'kit-labor-body', empty: 'kit-labor-empty', count: 'kit-labor-count', arr: function () { return kitLabor; },
-			cells: function (r) { return '<td>' + esc(r.description || r.operation || '') + '</td><td>' + fmtNum(r.hours) + '</td><td>' + fmtMoney(r.rate) + '</td><td>' + esc(r.skill_level || '') + '</td>'; } },
+			// A labour line with no Item cannot be billed unless Workshop Settings
+			// names a default, so the gap is shown here rather than surfacing at
+			// Create Sales Order.
+			cells: function (r) {
+				var op = r.operation
+					? esc(r.operation)
+					: '<span class="muted" title="No labour Item — this line needs one to bill, or a Default Labour Item in Workshop Settings">— none —</span>';
+				return '<td>' + op + '</td><td class="muted">' + esc(itemNameOf(r.operation)) + '</td><td>' +
+					esc(r.description || '') + '</td><td>' + fmtNum(r.hours) +
+					'</td><td>' + fmtMoney(r.rate) + '</td><td>' + esc(r.skill_level || '') + '</td>';
+			} },
 		parts: { body: 'kit-parts-body', empty: 'kit-parts-empty', count: 'kit-parts-count', arr: function () { return kitParts; },
 			cells: function (r) {
 				var tk = r.task ? '<a href="/app/task/' + encodeURIComponent(r.task) + '" target="_blank">' + esc(r.task) + '</a>' : '<span class="muted">—</span>';
@@ -1358,6 +1647,22 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 			'<td><button type="button" class="icon-del"><i class="fa-solid fa-trash"></i></button></td>';
 		tr.querySelector('.icon-del').addEventListener('click', function () { tr.remove(); renumber(cBody); toggleEmpty(cBody, cEmpty); });
 		cBody.appendChild(tr); toggleEmpty(cBody, cEmpty);
+		attachReporterPicker(tr.querySelector('.rby'));
+	}
+	// Reported By suggests from everybody it is likely to be -- staff and drivers
+	// together (front_office.search_reporters) -- as it is typed. It only
+	// suggests: the field stores a name, and a reporter who is neither (the
+	// customer, a gate inspection) is still typed in by hand.
+	function attachReporterPicker(input) {
+		attachAutocomplete(input, function (q) {
+			return callMethod("garagedesk.api.front_office.search_reporters", { search: q, limit: 12 }).then(function (rows) {
+				return (rows || []).map(function (r) {
+					// The list is drawn as HTML, so what it shows is escaped; the
+					// name itself rides along untouched for the input to take.
+					return { label: esc(r.name), sub: esc([r.roles, r.detail].filter(Boolean).join(" \u00b7 ")), value: r.name };
+				});
+			});
+		}, function (it) { input.value = it.value; });
 	}
 	document.getElementById('add-complaint').addEventListener('click', function () { addComplaintRow(); });
 	function gatherComplaints() {
@@ -1411,7 +1716,7 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 	canvas.addEventListener('mousedown', start); canvas.addEventListener('mousemove', move); window.addEventListener('mouseup', end);
 	canvas.addEventListener('touchstart', start, { passive: false }); canvas.addEventListener('touchmove', move, { passive: false }); canvas.addEventListener('touchend', end);
 	document.getElementById('car-clear').addEventListener('click', function () { ctx.clearRect(0, 0, canvas.width, canvas.height); canvasDrawn = true; });
-	window.addEventListener('resize', function () { if (cur === 4) sizeCanvas(); });
+	window.addEventListener('resize', function () { if (cur === READINGS_STEP) sizeCanvas(); });
 
 	// ---- Vehicle photos: upload via Frappe, collect URLs for save ----
 	var photoInput = document.getElementById('photo-input');
@@ -1602,14 +1907,48 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 	function addBillLabor(r) {
 		r = r || {};
 		var tr = document.createElement('tr');
-		tr.dataset.src = r.source_task || ''; tr.dataset.op = r.operation || ''; tr.dataset.dar = r.description_ar || '';
+		tr.dataset.src = r.source_task || ''; tr.dataset.dar = r.description_ar || '';
 		tr.innerHTML =
+			'<td><input class="bl-item" value="' + escAttr(r.operation || '') + '" placeholder="Labour item" autocomplete="off"></td>' +
+			'<td><span class="bl-itemname muted">' + esc(billItemNameOf(r.operation)) + '</span></td>' +
 			'<td><input class="bl-desc" value="' + escAttr(r.description || '') + '" placeholder="Description"></td>' +
 			'<td><input class="bl-hours" type="number" min="0" step="0.1" value="' + (r.hours != null ? r.hours : 0) + '"></td>' +
 			'<td><input class="bl-rate" type="number" min="0" step="0.01" value="' + (r.rate != null ? r.rate : 0) + '"></td>' +
 			'<td><input class="bl-skill" value="' + escAttr(r.skill_level || '') + '" placeholder="Skill"></td>' +
 			'<td><button type="button" class="icon-del" data-brm><i class="fa-solid fa-trash"></i></button></td>';
 		billLaborBody.appendChild(tr);
+		function syncName() {
+			var n = tr.querySelector('.bl-itemname');
+			if (n) n.textContent = billItemNameOf(tr.querySelector('.bl-item').value.trim());
+		}
+		// Labour bills against a service (non-stock) Item — the LAB-* ones —
+		// so the picker offers those rather than the whole catalogue.
+		attachAutocomplete(tr.querySelector('.bl-item'), function (q) {
+			q = (q || '').toLowerCase();
+			return BILL_ITEMS.filter(function (it) {
+				// Real Items only, and only service ones: a stock part is not
+				// labour, and a row that is really a Job Type Service is not an
+				// Item at all and would fail on the Sales Order.
+				if (it.is_stock || it.is_item === 0) return false;
+				return !q || (it.item || '').toLowerCase().indexOf(q) >= 0 ||
+					(it.item_name || '').toLowerCase().indexOf(q) >= 0;
+			}).slice(0, 10).map(function (it) {
+				return { label: it.item, sub: (it.item_name && it.item_name !== it.item) ? it.item_name : '',
+					value: it.item, rate: it.rate };
+			});
+		}, function (it) {
+			tr.querySelector('.bl-item').value = it.value;
+			var rate = tr.querySelector('.bl-rate');
+			if (rate && it.rate && !parseFloat(rate.value)) { rate.value = it.rate; renderBillTotal(); }
+			syncName();
+		});
+		tr.querySelector('.bl-item').addEventListener('input', syncName);
+	}
+	// Same lookup as the kit tables, but over the Billing tab's own catalogue.
+	function billItemNameOf(code) {
+		if (!code) return '';
+		var hit = BILL_ITEMS.filter(function (it) { return it.item === code; })[0];
+		return hit ? (hit.item_name || '') : '';
 	}
 	function addBillPart(r) {
 		r = r || {};
@@ -1665,7 +2004,8 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 			return {
 				description: tr.querySelector('.bl-desc').value, hours: tr.querySelector('.bl-hours').value,
 				rate: tr.querySelector('.bl-rate').value, skill_level: tr.querySelector('.bl-skill').value,
-				operation: tr.dataset.op || '', description_ar: tr.dataset.dar || '', source_task: tr.dataset.src || ''
+				operation: tr.querySelector('.bl-item').value.trim(),
+				description_ar: tr.dataset.dar || '', source_task: tr.dataset.src || ''
 			};
 		}).filter(function (r) { return (r.description || '').trim() || parseFloat(r.hours) || parseFloat(r.rate); });
 	}

@@ -12,6 +12,11 @@
 		<i class="fa-solid fa-magnifying-glass"></i>
 		<input id="vh-search" value="{{ search or '' }}" placeholder="Search vehicles..." autocomplete="off" aria-label="Search vehicles">
 	</div>
+	<div class="filter-bar__group" data-filter-key="kind" role="group" aria-label="Filter by what the record is">
+		<button type="button" class="chip" data-val="all">All</button>
+		<button type="button" class="chip" data-val="vehicle"><i class="fa-solid fa-truck"></i> Vehicles</button>
+		<button type="button" class="chip" data-val="attachment"><i class="fa-solid fa-trailer"></i> Attachments</button>
+	</div>
 	<div class="filter-bar__group" data-filter-key="fleet" role="group" aria-label="Filter by owner type">
 		<button type="button" class="chip" data-val="all">All</button>
 		<button type="button" class="chip" data-val="fleet"><i class="fa-solid fa-truck"></i> Own Fleet</button>
@@ -24,6 +29,10 @@
 	<div class="filter-bar__group">
 		<select class="chip-select" data-filter-key="customer" aria-label="Filter by customer"></select>
 		<select class="chip-select" data-filter-key="fuel" aria-label="Filter by fuel type"></select>
+		{#- Trailer / Curtain Side / Bed. Filled from the rows like the two beside
+		    it, and hidden outright on a fleet that has registered no attachments —
+		    a dropdown with nothing in it is just a thing to click twice. -#}
+		<select class="chip-select" data-filter-key="atype" aria-label="Filter by attachment type"></select>
 	</div>
 	<span class="filter-count" data-filter-count></span>
 	<span class="filter-count">· {{ "{:,}".format(total_vehicles) }} in total</span>
@@ -36,9 +45,11 @@
 	     data-f-workshop="{{ 'in' if v.in_workshop else 'out' }}"
 	     data-f-customer="{{ v.customer_id }}" data-l-customer="{{ v.customer }}"
 	     data-f-fuel="{{ v.fuel_slug }}" data-l-fuel="{{ v.fuel }}"
-	     data-search="{{ (v.model ~ ' ' ~ v.plate ~ ' ' ~ v.chassis ~ ' ' ~ v.customer ~ ' ' ~ v.driver ~ ' ' ~ v.name) | lower }}">
+	     data-f-kind="{{ v.kind }}"
+	     {%- if v.is_attachment %} data-f-atype="{{ v.attachment_type }}" data-l-atype="{{ v.attachment_type }}"{% endif %}
+	     data-search="{{ (v.model ~ ' ' ~ v.plate ~ ' ' ~ v.chassis ~ ' ' ~ v.customer ~ ' ' ~ v.driver ~ ' ' ~ v.name ~ ' ' ~ v.attachment_type ~ (' attachment trailer' if v.is_attachment else ' vehicle')) | lower }}">
 		<div class="list-row__party">
-			<div class="list-row__avatar" style="background:var(--navy)"><i class="fa-solid fa-car"></i></div>
+			<div class="list-row__avatar" style="background:var(--navy)"><i class="fa-solid fa-{{ 'trailer' if v.is_attachment else 'car' }}"></i></div>
 			<div>
 				<div class="list-row__title">{{ v.model }}</div>
 				<div class="list-row__meta">Plate: {{ v.plate }}<br>Chassis: {{ v.chassis }}</div>
@@ -57,7 +68,13 @@
 		<div class="list-row__col">
 			<div class="k">Odometer</div>
 			<div style="font-weight:600">{{ v.odometer }}</div>
-			<div class="muted">{{ v.fuel }}</div>
+		</div>
+		{#- One column, labelled by what the row is: an attachment is described by
+		    its type, a motor vehicle by what it burns. Neither belongs on a second
+		    line under the odometer, where it read as part of the reading. -#}
+		<div class="list-row__col">
+			<div class="k">{{ "Type" if v.is_attachment else "Fuel" }}</div>
+			<div style="font-weight:600">{{ (v.attachment_type or "Attachment") if v.is_attachment else v.fuel }}</div>
 		</div>
 		<button type="button" class="btn btn--primary btn--sm" data-view="{{ v.name }}">View Details</button>
 	</div>
@@ -80,6 +97,13 @@
 		var f = new WorkshopFilter({ root: "#vh-rows", bar: "#vh-bar", search: "#vh-search", searchParam: "q" });
 		f.populate("customer", "All customers");
 		f.populate("fuel", "All fuel types");
+		f.populate("atype", "All attachment types");
+
+		// Only a fleet that actually runs attachments is offered the filter for
+		// them; populate() leaves the placeholder alone when no row carries one.
+		var atype = document.querySelector('[data-filter-key="atype"]');
+		if (atype && atype.options.length < 2) { atype.style.display = "none"; }
+
 		f.apply();  // re-run: populate() restores the saved dropdown values.
 	})();
 </script>

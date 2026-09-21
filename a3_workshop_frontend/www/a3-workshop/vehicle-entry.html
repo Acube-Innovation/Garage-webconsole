@@ -3,28 +3,60 @@
 
 {% block page_content %}
 <div class="card">
-	<div class="card__head"><h3>Vehicle Details</h3></div>
+	<div class="card__head"><h3 id="ve-heading">Vehicle Details</h3></div>
 	<div class="card__body"><form class="form-grid" id="vehicle-form">
 		<input type="hidden" name="customer_id">
+		{#- What is being registered decides the rest of the form. A trailer, a bed
+		    or a box is handed over and inspected like a vehicle and belongs in the
+		    same list; it simply has no engine, so those fields are replaced rather
+		    than left on screen to be wondered about. -#}
+		<div class="field field--full">
+			<label class="check"><input type="checkbox" name="is_attachment" id="ve-attach">
+				This is an attachment — trailer, bed or box, not a motor vehicle</label>
+		</div>
+		<div class="field" data-kind="attachment" style="display:none">
+			<label>Attachment Type <span class="req">*</span></label>
+			<select name="attachment_type"><option value="">Select</option>
+			{%- for a in attachment_types %}<option>{{ a }}</option>{% endfor %}
+			</select>
+		</div>
 		{{ field("Plate Number","plate",required=True) }}
 		{#- Make and Model are separate Link masters (Vehicle Make / Vehicle Model).
 		    Each input is a search box over the existing records with a "Create …"
 		    row when nothing matches; the hidden sibling carries the chosen value. -#}
-		<div class="field">
+		<div class="field" data-kind="vehicle">
 			<label>Make <span class="req">*</span></label>
 			<input name="make_label" placeholder="Search make, e.g. Toyota" autocomplete="off">
 			<input type="hidden" name="make">
 		</div>
-		<div class="field">
+		<div class="field" data-kind="vehicle">
 			<label>Model <span class="req">*</span></label>
 			<input name="model_label" placeholder="Pick a make first" autocomplete="off">
 			<input type="hidden" name="model">
 		</div>
-		{{ field("Chassis Number","chassis") }}
-		{{ field("Engine Number","engine") }}
-		{{ field("Odometer Reading","odo",type="number",placeholder="0") }}
-		{{ field("Fuel Type","fuel",type="select",options=["Petrol","Diesel","Electric","Hybrid"]) }}
-		{{ field("Transmission","trans",type="select",options=["Automatic","Manual"]) }}
+		{{ field("Chassis / Serial Number","chassis") }}
+		<div data-kind="vehicle" style="display:contents">
+			{{ field("Engine Number","engine") }}
+			{{ field("Odometer Reading","odo",type="number",placeholder="0") }}
+			{{ field("Fuel Type","fuel",type="select",options=["Petrol","Diesel","Electric","Hybrid"]) }}
+			{{ field("Transmission","trans",type="select",options=["Automatic","Manual"]) }}
+		</div>
+		<div class="field" data-kind="attachment" style="display:none">
+			<label>Make / Model</label>
+			<input name="attachment_model" placeholder="e.g. CIMC 3-axle">
+		</div>
+		<div class="field" data-kind="attachment" style="display:none">
+			<label>Axles</label><input name="axles" type="number" min="0" placeholder="0"></div>
+		<div class="field" data-kind="attachment" style="display:none">
+			<label>Tyres</label><input name="tyres" type="number" min="0" placeholder="0"></div>
+		<div class="field" data-kind="attachment" style="display:none">
+			<label>Payload Capacity (kg)</label><input name="payload" type="number" min="0" placeholder="0"></div>
+		<div class="field" data-kind="attachment" style="display:none">
+			<label>Coupling</label>
+			<select name="coupling"><option value="">Select</option>
+				<option>Fifth Wheel</option><option>Pintle Hook</option><option>Ball</option>
+				<option>Gooseneck</option><option>Other</option></select>
+		</div>
 		{{ field("Customer","customer",placeholder="Search customer by name / mobile") }}
 	</form></div>
 </div>
@@ -166,6 +198,15 @@
 	}, function (it) { setVal("customer_id", it.value); },
 	   { onInput: function () { setVal("customer_id", ""); } });
 
+	// Arriving from a customer's Vehicles section in Front Office (its + button):
+	// the vehicle is being added for that customer, so the owner is already known.
+	(function () {
+		var p = new URLSearchParams(window.location.search);
+		if (!p.get("customer")) return;
+		setVal("customer_id", p.get("customer"));
+		setVal("customer", p.get("customer_name") || p.get("customer"));
+	})();
+
 	// ---- Make / Model ----------------------------------------------------------
 	// Both read the Vehicle Make / Vehicle Model masters. Matching is
 	// case-insensitive server-side (the DB collation is utf8mb4_unicode_ci), and
@@ -285,13 +326,42 @@
 		var el = document.querySelector('[name="' + name + '"]');
 		if (el) el.style.borderColor = on ? "var(--red)" : "";
 	}
+	// Ticking "this is an attachment" swaps the halves of the form: the engine
+	// fields go, the towing ones arrive. A field that does not apply is taken off
+	// the screen rather than disabled on it.
+	var attachBox = document.getElementById("ve-attach");
+	function paintKind() {
+		var attachment = attachBox.checked;
+		document.querySelectorAll("#vehicle-form [data-kind]").forEach(function (f) {
+			var show = (f.getAttribute("data-kind") === "attachment") === attachment;
+			// The wrapper around the engine fields is display:contents, so it has to
+			// go back to that rather than to block, or the grid loses a column.
+			f.style.display = show ? (f.classList.contains("field") ? "" : "contents") : "none";
+		});
+		document.getElementById("ve-heading").textContent =
+			attachment ? "Attachment Details" : "Vehicle Details";
+	}
+	attachBox.addEventListener("change", paintKind);
+	paintKind();
+
 	saveBtn.addEventListener("click", function () {
 		markInvalid("plate", false); markInvalid("make_label", false); markInvalid("model_label", false);
+		var attachment = attachBox.checked;
 		var plate = val("plate"), make = val("make"), model = val("model");
+
+		if (!plate) {
+			markInvalid("plate", true);
+			alert("Plate Number is required.");
+			return;
+		}
+		if (attachment && !val("attachment_type")) {
+			markInvalid("attachment_type", true);
+			alert("Please choose an Attachment Type — trailer, bed, box and so on.");
+			return;
+		}
 		// The hidden values are only set by picking (or creating) from the list, so
 		// half-typed text that was never chosen correctly counts as missing.
-		if (!plate || !make || !model) {
-			if (!plate) markInvalid("plate", true);
+		if (!attachment && (!make || !model)) {
 			if (!make) markInvalid("make_label", true);
 			if (!model) markInvalid("model_label", true);
 			alert("Please fill the required fields: Plate Number, Make and Model.\n\n" +
@@ -304,13 +374,19 @@
 
 		callMethod("garagedesk.api.vehicle.create_vehicle", {
 			plate: plate,
-			make: make,
-			model: model,
+			make: attachment ? "" : make,
+			model: attachment ? val("attachment_model") : model,
 			chassis: val("chassis"),
-			engine: val("engine"),
-			odometer: val("odo"),
-			fuel_type: val("fuel"),
-			transmission: val("trans"),
+			engine: attachment ? "" : val("engine"),
+			odometer: attachment ? "" : val("odo"),
+			fuel_type: attachment ? "" : val("fuel"),
+			transmission: attachment ? "" : val("trans"),
+			is_attachment: attachment ? 1 : 0,
+			attachment_type: attachment ? val("attachment_type") : "",
+			axles: attachment ? val("axles") : "",
+			tyres: attachment ? val("tyres") : "",
+			payload_capacity: attachment ? val("payload") : "",
+			coupling_type: attachment ? val("coupling") : "",
 			customer: val("customer_id")
 		}).then(function (res) {
 			var name = res.name;

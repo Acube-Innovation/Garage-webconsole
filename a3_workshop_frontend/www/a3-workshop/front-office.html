@@ -135,7 +135,6 @@
 	<div class="card fo-enquiries">
 		<div class="card__head">
 			<h3>Enquiries <span class="count-badge" id="opp-count">0</span></h3>
-			<button type="button" class="btn btn--primary btn--sm" id="create-opportunity"><i class="fa-solid fa-plus"></i> Create Opportunity</button>
 		</div>
 		<div class="card__body">
 			<div class="field" style="margin-bottom:12px"><input id="opp-search" placeholder="Search enquiries…"></div>
@@ -371,7 +370,38 @@
 		dirSections.querySelectorAll(".sec-btn").forEach(function (b) { b.classList.toggle("is-active", b.dataset.key === key); });
 		setMiddle("view", current.name.split(" ").slice(0, 2).join(" ") + " — " + s.label);
 		var rows = rowsFor(key);
-		if (!rows.length) { viewer.innerHTML = '<div class="empty">No ' + s.label.toLowerCase() + ' for this customer.</div>'; return; }
+
+		// Where the + in this section goes: a new record of that kind, for this
+		// customer. The job card wizard and the vehicle register both read the
+		// customer off the query string -- the same hand-off Save & Job Card
+		// already makes from this page.
+		var addActions = {
+			jobcard: { title: "New job card", href: function () {
+				var p = new URLSearchParams();
+				p.set("customer", current.id); p.set("customer_name", current.name);
+				if (current.phone) p.set("mobile", current.phone);
+				return "/a3-workshop/job-card/new?" + p.toString();
+			} },
+			vehicles: { title: "New vehicle", href: function () {
+				var p = new URLSearchParams();
+				p.set("customer", current.id); p.set("customer_name", current.name);
+				return "/a3-workshop/vehicle-entry?" + p.toString();
+			} }
+		};
+		var add = addActions[key];
+		var addHtml = add
+			? '<a class="btn btn--primary btn--icon" id="sec-add" href="' + esc(add.href()) + '" title="' +
+			  esc(add.title) + '" aria-label="' + esc(add.title) + '"><i class="fa-solid fa-plus"></i></a>'
+			: "";
+
+		if (!rows.length) {
+			// A customer with none yet is exactly who needs the +, so an empty
+			// section still offers it rather than only saying there is nothing.
+			viewer.innerHTML =
+				(add ? '<div style="display:flex;justify-content:flex-end;margin-bottom:12px">' + addHtml + "</div>" : "") +
+				'<div class="empty">No ' + s.label.toLowerCase() + ' for this customer.</div>';
+			return;
+		}
 		var statusCols = ["Status", "Severity"];
 		// Sections whose first cell is a printable document name get a trailing
 		// print-icon column (opens the workshop-print view in a new tab).
@@ -396,10 +426,16 @@
 			"</tr>";
 		}
 
-		// A fleet customer's vehicle list is the one section long enough to need
-		// finding a row rather than reading down it, so it gets a search box.
-		// Only the tbody is repainted on each keystroke, so the field keeps focus.
-		var searchable = (key === "vehicles");
+		// The sections long enough to need finding a row rather than reading down
+		// it -- a fleet's vehicles, its job cards, and the complaints raised on
+		// them -- get a search box. Only the tbody is repainted on each keystroke,
+		// so the field keeps focus.
+		var SEARCH_HINTS = {
+			vehicles: s.cols.slice(0, 3).join(", ").toLowerCase(),
+			jobcard: "job card, vehicle, status",
+			complaints: "complaint, severity, status"
+		};
+		var searchable = SEARCH_HINTS.hasOwnProperty(key);
 		// The Handover cell holds the Vehicle's docname rather than anything on
 		// screen; matching it would return rows that look nothing like the query.
 		function rowText(r) {
@@ -413,13 +449,21 @@
 		var total = totalFor(key);
 		var truncated = !!(sections360[key] && sections360[key].truncated);
 
+		// Vehicles arrive whole; job cards and complaints arrive a page at a time
+		// (the server's _360_LIMIT). Filtering a page would answer "no match" for
+		// a record that exists further back, so once the page is not the whole
+		// history the search is asked of the server instead (the sections
+		// front_office.search_customer_section knows how to search).
+		var remote = truncated && (key === "jobcard" || key === "complaints");
+		var searchHint = SEARCH_HINTS[key];
+
 		viewer.innerHTML =
 			(searchable
 				? '<div class="field--inline" style="margin-bottom:12px">' +
 				  '<div class="field"><input id="sec-search" placeholder="Search ' +
-				  esc(s.cols.slice(0, 3).join(", ").toLowerCase()) + '…" autocomplete="off"></div>' +
+				  esc(searchHint) + '…" autocomplete="off"></div>' +
 				  '<button type="button" class="btn btn--primary btn--icon" id="sec-search-go" title="Search">' +
-				  '<i class="fa-solid fa-magnifying-glass"></i></button></div>'
+				  '<i class="fa-solid fa-magnifying-glass"></i></button>' + addHtml + '</div>'
 				: "") +
 			'<div class="sec-count muted" id="sec-count"></div>' +
 			(truncated
@@ -431,9 +475,7 @@
 		var body = document.getElementById("sec-rows");
 		var countEl = document.getElementById("sec-count");
 		var span = s.cols.length + (pmode ? 1 : 0);
-		function paint(q) {
-			q = (q || "").trim().toLowerCase();
-			var list = q ? rows.filter(function (r) { return rowText(r).indexOf(q) >= 0; }) : rows;
+		function paintRows(list, q) {
 			// "12 of 64 vehicles" while searching, "64 vehicles" otherwise.
 			countEl.innerHTML = '<b>' + (q ? list.length + " of " + total : total) + "</b> " +
 				esc(s.label.toLowerCase());
@@ -441,6 +483,29 @@
 				? list.map(rowHtml).join("")
 				: '<tr><td colspan="' + span + '" class="muted" style="text-align:center;padding:18px">No ' +
 				  esc(s.label.toLowerCase()) + " match \u201c" + esc(q) + "\u201d.</td></tr>";
+		}
+		var searchTimer = null, searchToken = 0;
+		function paint(q) {
+			q = (q || "").trim().toLowerCase();
+			clearTimeout(searchTimer);
+			if (!(remote && q)) {
+				searchToken += 1; // a server answer still in flight is for an older query
+				paintRows(q ? rows.filter(function (r) { return rowText(r).indexOf(q) >= 0; }) : rows, q);
+				return;
+			}
+			// Debounced, and answered only by the latest query: a slow response for
+			// "JC-20" must not repaint over the result for "JC-2026-00019".
+			var token = ++searchToken, customer = current.id;
+			searchTimer = setTimeout(function () {
+				callMethod("garagedesk.api.front_office.search_customer_section", { customer: customer, section: key, search: q })
+					.then(function (d) {
+						if (token !== searchToken || !current || current.id !== customer) return;
+						paintRows((d && d.rows) || [], q);
+					}).catch(function () {
+						if (token !== searchToken) return;
+						paintRows(rows.filter(function (r) { return rowText(r).indexOf(q) >= 0; }), q);
+					});
+			}, 250);
 		}
 		paint("");
 		if (searchable) {
@@ -539,30 +604,11 @@
 	function val(name) { var el = document.querySelector('[name=' + name + ']'); return el ? el.value.trim() : ""; }
 	function setVal(name, value) { var el = document.querySelector('[name=' + name + ']'); if (el) el.value = value || ""; }
 
-	// ---- Trigger the two inline forms in the middle panel ----------
-	document.getElementById("create-opportunity").addEventListener("click", function () {
-		setMiddle("opportunity", "New Opportunity / Enquiry");
-		resetOppVehicle();
-		// Prefill customer details + show their vehicles as cards, if a customer is selected.
-		if (current) {
-			// Instant fill from the list row (no flash) …
-			setVal("e_name", current.name);
-			setVal("e_mobile", current.phone);
-			setVal("e_email", current.email);
-			setVal("e_address", "");
-			// … then complete with the authoritative record (incl. address + vehicles).
-			callMethod("garagedesk.api.front_office.get_customer_prefill", { customer: current.id })
-				.then(function (d) {
-					if (!d) return;
-					setVal("e_name", d.customer_name || current.name);
-					setVal("e_mobile", d.mobile_no || current.phone);
-					setVal("e_email", d.email_id || current.email);
-					setVal("e_address", d.address);
-					oppCustomerVehicles = d.vehicles || [];
-					if (!oAddVehChk.checked) renderOppVehicleCards(oppCustomerVehicles);
-				}).catch(function () {});
-		}
-	});
+	// ---- Trigger the inline customer form in the middle panel -------
+	// The enquiry form no longer has a button of its own here -- what the front
+	// desk starts from a customer is a job card or a vehicle, each from a + in
+	// its own section (see showSection). The form is still reached from
+	// Telecalling's Appointment button, through openOpportunityFromUrl below.
 	document.getElementById("create-customer").addEventListener("click", function () {
 		setMiddle("customer", "New Customer");
 	});
