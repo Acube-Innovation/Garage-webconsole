@@ -40,8 +40,8 @@
 <div class="card">
 	<div class="card__body row-between" style="align-items:flex-start;gap:16px">
 		<div style="min-width:0">
-			<div class="muted">Job Card</div>
-			<h2>{{ card.name }}</h2>
+			<div class="muted">{{ "New Job Card" if draft else "Job Card" }}</div>
+			<h2>{{ card.name or "Not created yet" }}</h2>
 			<div class="muted" style="margin-top:4px">
 				{{ card.customer_name or "No customer on this card" }}
 				{%- if card.vehicle_label %} · {{ card.vehicle_label }}{% endif %}
@@ -51,19 +51,40 @@
 		<div class="stack" style="align-items:flex-end;gap:8px;flex-shrink:0">
 			{{ badge(card.status, card.status_variant) }}
 			<div class="row" style="gap:8px">
+				{%- if draft %}
+				{#- Draft: nothing exists to print or link to yet. Edit turns the
+				    sections below into inputs in place; Create writes the card. -#}
+				<a class="btn btn--outline btn--sm" href="/a3-workshop/vehicle-history-detail?vehicle={{ card.vehicle | urlencode }}#handovers"><i class="fa-solid fa-arrow-left"></i> Back</a>
+				<button type="button" class="btn btn--outline btn--sm" id="jc-edit"><i class="fa-solid fa-pen"></i> Edit Job Card</button>
+				<button type="button" class="btn btn--outline btn--sm" id="jc-cancel" style="display:none"><i class="fa-solid fa-xmark"></i> Cancel</button>
+				<button type="button" class="btn btn--primary btn--sm" id="jc-create"><i class="fa-solid fa-plus"></i> Create Job Card</button>
+				{%- else %}
 				<a class="btn btn--outline btn--sm" href="/a3-workshop/workshop-print?jobcard={{ card.name }}" target="_blank" rel="noopener"><i class="fa-solid fa-print"></i> Print</a>
 				<a class="btn btn--primary btn--sm" href="/a3-workshop/job-card/new?id={{ card.name }}"><i class="fa-solid fa-pen"></i> Edit Job Card</a>
+				{%- endif %}
 			</div>
 		</div>
 	</div>
+	{%- if draft %}
+	<div class="card__body" id="jc-draft-note" style="border-top:1px solid var(--border);padding-top:14px">
+		<i class="fa-solid fa-circle-info" style="color:var(--navy)"></i>
+		This is the job card handover <b>{{ card.handover }}</b>
+		{%- if card.handover_date %} ({{ card.handover_date }}){% endif %} would raise, built from the
+		damages and service jobs saved against it. <b>Nothing has been created yet.</b>
+		Press <b>Edit Job Card</b> to change anything, then <b>Create Job Card</b>.
+		{%- if card.discrepancy_found %} Creating it marks that handover <b>Rectified</b>.{% endif %}
+	</div>
+	{%- endif %}
 </div>
 
 <div class="card" style="margin-top:18px">
 	<div class="card__head"><h3>Vehicle Readings &amp; Body Condition</h3><span class="muted">Inspection</span></div>
 	<div class="card__body">
 		{%- set r = card.readings %}
-		{%- if r.has_any %}
-		<div class="readings-grid">
+		{#- A draft always shows the grid, empty or not: it is the thing Edit turns
+		    into inputs, and an empty state cannot be edited. -#}
+		{%- if r.has_any or draft %}
+		<div class="readings-grid" id="jc-readings">
 			<div class="kv-row"><span class="k">Odometer</span><b>{% if r.odometer %}{{ r.odometer }} km{% else %}—{% endif %}</b></div>
 			<div class="kv-row"><span class="k">Next Service</span><b>{% if r.next_km %}{{ r.next_km }} km{% else %}—{% endif %}</b></div>
 			<div class="kv-row"><span class="k">Fuel Level</span><b>{% if r.fuel is not none %}{{ r.fuel }}%{% else %}—{% endif %}</b></div>
@@ -112,11 +133,16 @@
 <div class="page-grid-2" style="margin-top:18px">
 	<div class="stack">
 		<div class="card">
-			<div class="card__head"><h3>Service Jobs</h3><span class="muted">{{ card.services|length }} on this card</span></div>
+			<div class="card__head"><h3>Service Jobs</h3>
+				<span class="muted" id="jc-svc-count">{{ card.services|length }} on this card</span>
+				{%- if draft %}<button type="button" class="btn btn--outline btn--sm jc-add" data-add="service" style="display:none"><i class="fa-solid fa-plus"></i> Add</button>{% endif %}</div>
 			<div class="card__body" style="padding:0">
-				<table class="table">
-					<thead><tr><th>Job</th><th>Technician</th><th>Hours</th><th>Task Status</th></tr></thead>
-					<tbody>
+				<table class="table" id="jc-svc-table">
+					{#- No task exists before the card does, so a draft drops that
+					    column and keeps the last one for the row's remove button. -#}
+					<thead><tr><th>Job</th><th>Technician</th><th>Hours</th>
+						<th{% if draft %} style="width:40px"{% endif %}>{{ "" if draft else "Task Status" }}</th></tr></thead>
+					<tbody id="jc-svc-body">
 						{%- for s in card.services %}
 						<tr>
 							<td>
@@ -127,13 +153,16 @@
 							<td>{{ s.technician or "—" }}</td>
 							<td>{% if s.hours_display %}{{ s.hours_display }} h{% else %}—{% endif %}</td>
 							<td>
-								{%- if s.task_status %}{{ badge(s.task_status, s.task_variant) }}
+								{%- if draft %}
+								{%- elif s.task_status %}{{ badge(s.task_status, s.task_variant) }}
 								{%- elif s.task %}<span class="muted">{{ s.task }}</span>
 								{%- else %}<span class="muted">No task created</span>{% endif %}
 							</td>
 						</tr>
 						{%- else %}
-						<tr><td colspan="4" class="empty">No service jobs on this card yet. Add them in the job card's <b>Service Jobs</b> tab.</td></tr>
+						<tr><td colspan="4" class="empty">
+							{%- if draft %}Nothing planned to repair this handover yet — press <b>Edit Job Card</b> to add a service job.
+							{%- else %}No service jobs on this card yet. Add them in the job card's <b>Service Jobs</b> tab.{% endif %}</td></tr>
 						{%- endfor %}
 					</tbody>
 				</table>
@@ -141,11 +170,13 @@
 		</div>
 
 		<div class="card">
-			<div class="card__head"><h3>Complaints / Check-Up</h3></div>
+			<div class="card__head"><h3>Complaints / Check-Up</h3>
+				{%- if draft %}<button type="button" class="btn btn--outline btn--sm jc-add" data-add="complaint" style="display:none"><i class="fa-solid fa-plus"></i> Add</button>{% endif %}</div>
 			<div class="card__body" style="padding:0">
-				<table class="table">
-					<thead><tr><th>Complaint</th><th>Reported By</th><th>Technician</th><th>Severity</th></tr></thead>
-					<tbody>
+				<table class="table" id="jc-cmp-table">
+					<thead><tr><th>Complaint</th><th>Reported By</th><th>Technician</th><th>Severity</th>
+						{%- if draft %}<th style="width:40px"></th>{% endif %}</tr></thead>
+					<tbody id="jc-cmp-body">
 						{%- for c in card.complaints %}
 						<tr>
 							<td>
@@ -155,15 +186,19 @@
 							<td>{{ c.reported_by or "—" }}</td>
 							<td>{{ c.technician or "—" }}</td>
 							<td>{% if c.severity %}{{ badge(c.severity, c.severity_variant) }}{% else %}<span class="muted">—</span>{% endif %}</td>
+							{%- if draft %}<td></td>{% endif %}
 						</tr>
 						{%- else %}
-						<tr><td colspan="4" class="empty">No complaints recorded on this job card.</td></tr>
+						<tr><td colspan="{{ 5 if draft else 4 }}" class="empty">No complaints recorded on this job card.</td></tr>
 						{%- endfor %}
 					</tbody>
 				</table>
 			</div>
 		</div>
 
+		{#- Nothing has run yet on a draft, so the ledger of completed work has
+		    nothing to say and is left off until the card exists. -#}
+		{%- if not draft %}
 		<div class="card">
 			<div class="card__head"><h3>Completed Tasks</h3><span class="muted">Billing ledger</span></div>
 			<div class="card__body" style="padding:0">
@@ -184,12 +219,13 @@
 				</table>
 			</div>
 		</div>
+		{%- endif %}
 	</div>
 
 	<div class="stack">
 		<div class="card">
 			<div class="card__head"><h3>Technician Assignment</h3></div>
-			<div class="card__body stack">
+			<div class="card__body stack" id="jc-tech-body">
 				{%- for t in card.technicians %}
 				<div class="row-between">
 					<span>{{ t.technician }}</span>
@@ -201,6 +237,25 @@
 			</div>
 		</div>
 
+		{#- On a draft the kit is the job's own kit_* tables, not the billing ones
+		    the Cost Summary reads — those are filled on the Billing tab once the
+		    card exists. Showing it under "Cost Summary" would name the wrong
+		    table, so the draft gets its own card. -#}
+		{%- if draft %}
+		<div class="card">
+			<div class="card__head"><h3>Kit Components</h3><span class="muted">From the planned service jobs</span></div>
+			<div class="card__body stack" id="jc-kit-body">
+				{%- if card.billing.has_costs %}
+				<div class="row-between"><span class="muted">Labour ({{ card.billing.labour_lines }} line{{ "" if card.billing.labour_lines == 1 else "s" }})</span><span>{{ card.billing.labour_total }}</span></div>
+				<div class="row-between"><span class="muted">Parts ({{ card.billing.parts_lines }} line{{ "" if card.billing.parts_lines == 1 else "s" }})</span><span>{{ card.billing.parts_total }}</span></div>
+				<div class="row-between"><span class="muted">Sublet ({{ card.billing.sublet_lines }} line{{ "" if card.billing.sublet_lines == 1 else "s" }})</span><span>{{ card.billing.sublet_total }}</span></div>
+				<div class="row-between" style="font-weight:800"><span>Total</span><span style="color:var(--red)">{{ card.billing.total }}</span></div>
+				{%- else %}
+				<div class="empty" style="padding:16px">No kit components on this plan. Add them from the handover's <b>Damages</b> popup, where the labor standards are.</div>
+				{%- endif %}
+			</div>
+		</div>
+		{%- else %}
 		<div class="card">
 			<div class="card__head"><h3>Cost Summary</h3><span class="muted">Kit for billing</span></div>
 			<div class="card__body stack">
@@ -223,7 +278,11 @@
 				{%- endif %}
 			</div>
 		</div>
+		{%- endif %}
 
+		{#- QC, the DVI gate and approvals are all states a card moves through
+		    after it exists; a draft has none of them. -#}
+		{%- if not draft %}
 		<div class="card">
 			<div class="card__head"><h3>Quality &amp; Approvals</h3></div>
 			<div class="card__body stack">
@@ -245,19 +304,613 @@
 				{%- endif %}
 			</div>
 		</div>
+		{%- endif %}
 
 		<div class="card">
 			<div class="card__head"><h3>Booking &amp; Delivery</h3></div>
-			<div class="card__body stack">
-				<div class="row-between"><span class="muted">Booked</span><b>{{ card.booking_date or "—" }}</b></div>
+			<div class="card__body stack" id="jc-booking-body">
+				<div class="row-between"><span class="muted">Booked</span><b>{{ card.booking_date or ("Today" if draft else "—") }}</b></div>
 				<div class="row-between"><span class="muted">Promised Delivery</span><b>{{ card.promised_delivery or "Not set" }}</b></div>
-				{%- if card.booking_channel %}<div class="row-between"><span class="muted">Channel</span><b>{{ card.booking_channel }}</b></div>{% endif %}
 				<div class="row-between"><span class="muted">Service Advisor</span><b>{{ card.service_advisor or "—" }}</b></div>
 				{%- if card.branch %}<div class="row-between"><span class="muted">Branch</span><b>{{ card.branch }}</b></div>{% endif %}
-				{%- if card.project_booking %}<div class="row-between"><span class="muted">Project Booking</span>{{ badge("Yes", "badge--navy") }}</div>{% endif %}
 			</div>
 		</div>
 	</div>
 </div>
+
+{%- if draft %}
+<style>
+	/* The draft's editable controls. The page is a read-only summary everywhere
+	   else, so these only ever exist inside the sections Edit rebuilds. */
+	#jc-svc-body input, #jc-svc-body select,
+	#jc-cmp-body input, #jc-cmp-body select,
+	#jc-readings input, #jc-readings select,
+	#jc-booking-body input, #jc-booking-body select {
+		width:100%; padding:6px 8px; font:inherit; font-size:13px; color:var(--text);
+		background:var(--surface); border:1px solid var(--border); border-radius:7px; }
+	#jc-svc-body input:focus, #jc-svc-body select:focus,
+	#jc-cmp-body input:focus, #jc-cmp-body select:focus,
+	#jc-readings input:focus, #jc-readings select:focus,
+	#jc-booking-body input:focus, #jc-booking-body select:focus {
+		outline:none; border-color:var(--red); box-shadow:0 0 0 2px var(--red-soft); }
+	#jc-readings .kv-row.is-edit { display:block; }
+	#jc-readings .kv-row.is-edit .k { display:block; margin-bottom:4px; }
+	#jc-booking-body .row-between.is-edit { display:block; }
+	#jc-booking-body .row-between.is-edit .muted { display:block; margin-bottom:4px; }
+	.jc-rm { background:none; border:none; color:var(--muted); cursor:pointer; font-size:14px; }
+	.jc-rm:hover { color:var(--red); }
+	.jc-editing #jc-draft-note { background:var(--red-soft); }
+	/* Kit editor — three compact tables inside the Kit Components card. */
+	#jc-kit-body .jc-kit-grp { margin-bottom:6px; }
+	#jc-kit-body .jc-kit-head { display:flex; align-items:center; justify-content:space-between;
+		gap:8px; font-size:12px; font-weight:800; letter-spacing:.03em; text-transform:uppercase;
+		color:var(--muted); margin:0 0 6px; }
+	#jc-kit-body table { width:100%; }
+	#jc-kit-body th { font-size:10px; padding:0 6px 5px; }
+	#jc-kit-body td { padding:3px 6px; }
+	#jc-kit-body input { width:100%; padding:5px 7px; font:inherit; font-size:12.5px; color:var(--text);
+		background:var(--surface); border:1px solid var(--border); border-radius:6px; }
+	#jc-kit-body input:focus { outline:none; border-color:var(--red); box-shadow:0 0 0 2px var(--red-soft); }
+</style>
+<script>
+	window.csrf_token = "{{ frappe.session.csrf_token }}";
+	window.JC_HANDOVER = {{ handover | tojson }};
+	window.JC_VEHICLE = {{ card.vehicle | tojson }};
+	window.JC_EDIT = {{ card.edit | tojson }};
+</script>
+{% raw %}
+<script>
+(function () {
+	// The draft job card, edited in place. The page above is the same read-only
+	// summary a real card gets; Edit swaps the sections that hold data for inputs
+	// built from window.JC_EDIT, and Create sends what they hold. Nothing here
+	// saves as it goes — the card does not exist until Create.
+	var D = window.JC_EDIT || {};
+	var OPT = D.options || {};
+	var editing = false;
+
+	// The kit as it stands, edited alongside the services it came from. Each line
+	// keeps the Labor Time Standard it was pulled from (`source_standard`), which
+	// is what lets a line leave when its service does.
+	var kitLabor = (D.kit_labor || []).slice();
+	var kitParts = (D.kit_parts || []).slice();
+	var kitSublet = (D.kit_sublet || []).slice();
+
+	var LTS_BY_SERVICE = {}, LTS_LABEL = {};
+	(OPT.labor_standards || []).forEach(function (s) {
+		if (s.operation_name && !LTS_BY_SERVICE[s.operation_name]) LTS_BY_SERVICE[s.operation_name] = s.name;
+		LTS_LABEL[s.name] = s.standard_code || s.name;
+	});
+
+	function callMethod(method, args) {
+		return fetch("/api/method/" + method, {
+			method: "POST",
+			headers: { "Content-Type": "application/json",
+				"X-Frappe-CSRF-Token": window.csrf_token || "", "Accept": "application/json" },
+			body: JSON.stringify(args || {})
+		}).then(function (r) {
+			return r.json().then(function (data) {
+				if (!r.ok) throw new Error(cleanError((data && data._server_messages) || (data && data.exc) || r.statusText));
+				return data.message;
+			});
+		});
+	}
+	function cleanError(msg) {
+		try {
+			var arr = JSON.parse(msg);
+			if (Array.isArray(arr) && arr.length) {
+				return arr.map(function (m) { try { return JSON.parse(m).message; } catch (e) { return m; } }).join(" ");
+			}
+		} catch (e) {}
+		return String(msg).replace(/<[^>]+>/g, "");
+	}
+	function esc(s) {
+		return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+			return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+		});
+	}
+	function options(list, sel, valueKey, labelKey, blank) {
+		var out = blank === undefined ? "" : '<option value="">' + esc(blank) + "</option>";
+		return out + (list || []).map(function (o) {
+			var v = valueKey ? o[valueKey] : o, l = labelKey ? (o[labelKey] || o[valueKey]) : o;
+			return '<option value="' + esc(v) + '"' + (String(v) === String(sel || "") ? " selected" : "") + ">" +
+				esc(l) + "</option>";
+		}).join("");
+	}
+	function el(id) { return document.getElementById(id); }
+	// The labour Item's name, looked up rather than stored — the kit labour row
+	// has no item_name field, and the name belongs to the Item.
+	function labourItemName(code) {
+		if (!code) return "";
+		var hit = (OPT.labour_items || []).filter(function (it) { return it.item === code; })[0];
+		return hit ? (hit.item_name || "") : "";
+	}
+
+	// A small type-ahead over a fixed list, for the cells that hold a Link value.
+	// Same markup as the one on the other workshop pages, so it inherits .jc-ac
+	// from the shared stylesheet.
+	function attachAutocomplete(input, source, onSelect) {
+		if (!input) return;
+		var wrap = input.parentNode;
+		wrap.style.position = "relative";
+		var list = document.createElement("div");
+		list.className = "jc-ac"; list.style.display = "none";
+		wrap.appendChild(list);
+		var items = [], active = -1, timer = null;
+		function hide() { list.style.display = "none"; active = -1; }
+		function pick(it) { if (!it) return; input.value = it.label; hide(); if (onSelect) onSelect(it); }
+		function render(rows) {
+			items = rows || [];
+			if (!items.length) { list.innerHTML = '<div class="jc-ac-empty">No matches</div>'; list.style.display = "block"; return; }
+			list.innerHTML = items.map(function (it, i) {
+				return '<div class="jc-ac-item" data-i="' + i + '"><div class="jc-ac-label">' + it.label + "</div></div>";
+			}).join("");
+			active = -1; list.style.display = "block";
+		}
+		function run() { Promise.resolve(source(input.value.trim())).then(render).catch(hide); }
+		input.addEventListener("input", function () { clearTimeout(timer); timer = setTimeout(run, 140); });
+		input.addEventListener("focus", run);
+		input.addEventListener("blur", function () { setTimeout(hide, 150); });
+		list.addEventListener("mousedown", function (e) {
+			var row = e.target.closest("[data-i]"); if (!row) return;
+			e.preventDefault(); pick(items[+row.dataset.i]);
+		});
+		input.addEventListener("keydown", function (e) {
+			if (list.style.display === "none" || !items.length) return;
+			if (e.key === "ArrowDown") active = Math.min(items.length - 1, active + 1);
+			else if (e.key === "ArrowUp") active = Math.max(0, active - 1);
+			else if (e.key === "Enter" && active >= 0) { e.preventDefault(); pick(items[active]); return; }
+			else if (e.key === "Escape") { hide(); return; }
+			else return;
+			e.preventDefault();
+			Array.prototype.forEach.call(list.children, function (c, i) { c.classList.toggle("is-active", i === active); });
+		});
+	}
+
+	// ---- service rows -------------------------------------------------
+	function serviceOptions(jobtype, sel) {
+		var rows = (OPT.services || []).filter(function (s) { return s.jobcard_type === jobtype; });
+		return '<option value="">— select —</option>' + rows.map(function (s) {
+			return '<option value="' + esc(s.name) + '"' + (s.name === sel ? " selected" : "") + ">" +
+				esc(s.service_name || s.name) + "</option>";
+		}).join("");
+	}
+	function serviceRow(s) {
+		s = s || {};
+		var tr = document.createElement("tr");
+		tr.innerHTML =
+			'<td><select class="jc-jt">' + options(OPT.jobcard_types, s.jobtype, "name", "type_name", "— job type —") + "</select>" +
+				'<select class="jc-svc" style="margin-top:5px">' + serviceOptions(s.jobtype, s.service) + "</select>" +
+				'<input class="jc-desc" style="margin-top:5px" placeholder="Description" value="' + esc(s.description || "") + '">' +
+				'<input type="hidden" class="jc-std" value="' + esc(s.labour_service_code || "") + '"></td>' +
+			'<td><select class="jc-tech">' + options(OPT.employees, s.technician, "name", "employee_name", "— technician —") + "</select></td>" +
+			'<td><input class="jc-hrs" type="number" min="0" step="0.5" value="' + (s.hours != null && s.hours !== "" ? s.hours : 1) + '"></td>' +
+			'<td style="width:40px"><button type="button" class="jc-rm" title="Remove"><i class="fa-solid fa-xmark"></i></button></td>';
+		// Job type drives which services the row may name, so changing it resets
+		// the service rather than leaving one that belongs to another type — and
+		// the kit that service brought goes with it.
+		tr.querySelector(".jc-jt").addEventListener("change", function () {
+			tr.querySelector(".jc-svc").innerHTML = serviceOptions(this.value, "");
+			setRowStandard(tr, "");
+		});
+		// Changing the service changes what the job needs: the new service's kit
+		// is pulled in and the old service's is dropped, the same way the Damages
+		// popup does it.
+		tr.querySelector(".jc-svc").addEventListener("change", function () {
+			applyServiceKit(tr, this.value);
+		});
+		tr.querySelector(".jc-rm").addEventListener("click", function () {
+			var std = tr.dataset.std || "";
+			tr.remove();
+			cleanupKit(std);
+			syncCounts();
+		});
+		tr.dataset.std = s.labour_service_code || "";
+		return tr;
+	}
+
+	// ---- kit follows the services --------------------------------------
+	function kitKey(group, r) {
+		if (group === "labor") return "labor|" + (r.operation || "") + "|" + (r.description || "") + "|" + (r.hours || "");
+		if (group === "parts") return "parts|" + (r.item_code || "");
+		return "sublet|" + (r.vendor || "") + "|" + (r.service_description || "");
+	}
+	function setRowStandard(tr, std) {
+		var prev = tr.dataset.std || "";
+		tr.dataset.std = std || "";
+		tr.querySelector(".jc-std").value = std || "";
+		if (prev && prev !== std) cleanupKit(prev);
+	}
+	// Is a standard still named by any row? Its kit stays if so — two services can
+	// share one standard, and the first one leaving must not strip the second.
+	function standardStillUsed(std) {
+		if (!std) return true;
+		return Array.prototype.some.call(el("jc-svc-body").children, function (tr) {
+			return (tr.dataset.std || "") === std;
+		});
+	}
+	function cleanupKit(std) {
+		if (!std || standardStillUsed(std)) return;
+		// Take what is on screen first: the tables are about to be rebuilt, and
+		// anything typed into them since the last render would be lost otherwise.
+		harvestKit();
+		var keep = function (arr) { return arr.filter(function (r) { return (r.source_standard || "") !== std; }); };
+		kitLabor = keep(kitLabor); kitParts = keep(kitParts); kitSublet = keep(kitSublet);
+		renderKitEdit();
+	}
+	function applyServiceKit(tr, service) {
+		var std = service ? (LTS_BY_SERVICE[service] || "") : "";
+		setRowStandard(tr, std);
+		if (!std) { renderKitEdit(); return; }
+		callMethod("garagedesk.workshop.doctype.workshop_job_card.workshop_job_card.kit_components_for_standard",
+			{ standard: std })
+			.then(function (data) {
+				data = data || {};
+				harvestKit();
+				var have = {};
+				[["labor", kitLabor], ["parts", kitParts], ["sublet", kitSublet]].forEach(function (p) {
+					p[1].forEach(function (r) { have[kitKey(p[0], r)] = 1; });
+				});
+				[["labor", kitLabor], ["parts", kitParts], ["sublet", kitSublet]].forEach(function (p) {
+					(data[p[0]] || []).forEach(function (src) {
+						var row = Object.assign({}, src, { source_standard: std });
+						var k = kitKey(p[0], row);
+						if (have[k]) return;   // never carry the same line twice
+						have[k] = 1; p[1].push(row);
+					});
+				});
+				renderKitEdit();
+			})
+			.catch(function (err) {
+				console.warn("Could not load kit for " + std + ":", err);
+			});
+	}
+	function complaintRow(c) {
+		c = c || {};
+		var tr = document.createElement("tr");
+		tr.innerHTML =
+			'<td><input class="jc-cmp" placeholder="Complaint" value="' + esc(c.complaint || "") + '">' +
+				'<input class="jc-notes" style="margin-top:5px" placeholder="Notes" value="' + esc(c.notes || "") + '"></td>' +
+			'<td><input class="jc-rby" placeholder="Reported by" value="' + esc(c.reported_by || "") + '"></td>' +
+			'<td><select class="jc-ctech">' + options(OPT.employees, c.technician, "name", "employee_name", "— technician —") + "</select></td>" +
+			'<td><select class="jc-sev">' + options(OPT.severities, c.severity) + "</select></td>" +
+			'<td style="width:40px"><button type="button" class="jc-rm" title="Remove"><i class="fa-solid fa-xmark"></i></button></td>';
+		tr.querySelector(".jc-rm").addEventListener("click", function () { tr.remove(); });
+		return tr;
+	}
+	function syncCounts() {
+		var n = el("jc-svc-body").querySelectorAll("tr").length;
+		el("jc-svc-count").textContent = n + " on this card";
+	}
+
+	// ---- the kit editor -------------------------------------------------
+	// Three small tables in the Kit Components card: what a service brought with
+	// it, plus anything added by hand. A part is named by its item code — the
+	// picker that searches items lives in the Damages popup, against the
+	// standards, so a code typed here is checked when the card is written.
+	var KIT_SPEC = {
+		labor: { title: "Labour", arr: function () { return kitLabor; },
+			// Item first, then what the line says. The Item is what a Sales Order
+			// bills against; the column is narrow, so the item's name sits under
+			// the code rather than in a column of its own.
+			cols: ["Item", "Description", "Hrs", "Rate"],
+			cells: function (r) {
+				return '<td style="width:96px"><input class="k-op" value="' + esc(r.operation || "") + '" placeholder="Item" autocomplete="off">' +
+						'<div class="k-opname muted" style="font-size:11px;margin-top:2px">' + esc(labourItemName(r.operation)) + "</div></td>" +
+					'<td><input class="k-desc" value="' + esc(r.description || "") + '" placeholder="Description"></td>' +
+					'<td style="width:56px"><input class="k-hours" type="number" min="0" step="0.1" value="' + (r.hours != null ? r.hours : 0) + '"></td>' +
+					'<td style="width:80px"><input class="k-rate" type="number" min="0" step="0.01" value="' + (r.rate != null ? r.rate : 0) + '"></td>';
+			},
+			// `amount` is recomputed rather than carried: it was the standard's
+			// figure for the standard's hours, and the hours may have just changed.
+			read: function (tr) {
+				var hours = tr.querySelector(".k-hours").value, rate = tr.querySelector(".k-rate").value;
+				return { description: tr.querySelector(".k-desc").value,
+					operation: tr.querySelector(".k-op").value.trim(), hours: hours, rate: rate,
+					amount: (parseFloat(hours) || 0) * (parseFloat(rate) || 0) };
+			},
+			amount: function (r) { return (parseFloat(r.hours) || 0) * (parseFloat(r.rate) || 0); } },
+		parts: { title: "Parts", arr: function () { return kitParts; },
+			cols: ["Item", "Qty", "UOM", "Rate"],
+			cells: function (r) {
+				return '<td><input class="k-item" value="' + esc(r.item_code || "") + '" placeholder="Item code"></td>' +
+					'<td style="width:56px"><input class="k-qty" type="number" min="0" step="1" value="' + (r.qty != null ? r.qty : 1) + '"></td>' +
+					'<td style="width:74px"><input class="k-uom" value="' + esc(r.uom || "") + '" placeholder="UOM" autocomplete="off"></td>' +
+					'<td style="width:86px"><input class="k-rate" type="number" min="0" step="0.01" value="' + (r.rate != null ? r.rate : 0) + '"></td>';
+			},
+			read: function (tr) {
+				var qty = tr.querySelector(".k-qty").value, rate = tr.querySelector(".k-rate").value;
+				return { item_code: tr.querySelector(".k-item").value, qty: qty, rate: rate,
+					uom: tr.querySelector(".k-uom").value,
+					amount: (parseFloat(qty) || 0) * (parseFloat(rate) || 0) };
+			},
+			amount: function (r) { return (parseFloat(r.qty) || 0) * (parseFloat(r.rate) || 0); } },
+		sublet: { title: "Sublet", arr: function () { return kitSublet; },
+			cols: ["Service", "Vendor", "Cost"],
+			cells: function (r) {
+				return '<td><input class="k-sdesc" value="' + esc(r.service_description || "") + '" placeholder="Service"></td>' +
+					'<td><input class="k-vendor" value="' + esc(r.vendor || "") + '" placeholder="Vendor"></td>' +
+					'<td style="width:86px"><input class="k-cost" type="number" min="0" step="0.01" value="' + (r.cost != null ? r.cost : 0) + '"></td>';
+			},
+			read: function (tr) {
+				var cost = tr.querySelector(".k-cost").value;
+				var markup = parseFloat((tr._kitRow || {}).markup_pct) || 0;
+				return { service_description: tr.querySelector(".k-sdesc").value,
+					vendor: tr.querySelector(".k-vendor").value, cost: cost,
+					sell_amount: (parseFloat(cost) || 0) * (1 + markup / 100) };
+			},
+			amount: function (r) {
+				return (parseFloat(r.cost) || 0) * (1 + (parseFloat(r.markup_pct) || 0) / 100);
+			} },
+	};
+	var KIT_GROUPS = ["labor", "parts", "sublet"];
+
+	function renderKitEdit() {
+		var host = el("jc-kit-body");
+		if (!host || !editing) return;
+		host.innerHTML = KIT_GROUPS.map(function (g) {
+			var m = KIT_SPEC[g], rows = m.arr();
+			return '<div class="jc-kit-grp"><div class="jc-kit-head">' + esc(m.title) +
+				'<button type="button" class="btn btn--outline btn--sm" data-kadd="' + g + '">' +
+				'<i class="fa-solid fa-plus"></i> Add</button></div>' +
+				'<table class="table"><thead><tr>' +
+				m.cols.map(function (c) { return "<th>" + esc(c) + "</th>"; }).join("") +
+				'<th style="width:34px"></th></tr></thead><tbody id="jc-k-' + g + '">' +
+				rows.map(function (r) {
+					return '<tr data-std="' + esc(r.source_standard || "") + '">' + m.cells(r) +
+						'<td><button type="button" class="jc-rm" data-krm><i class="fa-solid fa-xmark"></i></button></td></tr>';
+				}).join("") + "</tbody></table>" +
+				(rows.length ? "" : '<div class="muted" style="font-size:12px;padding:4px 2px">No ' +
+					esc(m.title.toLowerCase()) + " lines.</div>") + "</div>";
+		}).join("") + '<div class="row-between" style="font-weight:800;border-top:1px solid var(--border);padding-top:10px">' +
+			"<span>Total</span><span style='color:var(--red)' id='jc-kit-total'>—</span></div>";
+		// Each <tr> keeps the whole line it was drawn from. The three inputs on a
+		// row are not the whole line — a labour line also carries its operation
+		// item, a part its UOM — and those have to survive a round trip through
+		// the table, or the same line pulled twice would no longer look the same
+		// and would be carried in again as a duplicate.
+		KIT_GROUPS.forEach(function (g) {
+			var tb = el("jc-k-" + g), rows = KIT_SPEC[g].arr();
+			if (tb) Array.prototype.forEach.call(tb.children, function (tr, i) { tr._kitRow = rows[i]; });
+		});
+		// The labour Item, same closed list as the kit popup's.
+		document.querySelectorAll("#jc-kit-body .k-op").forEach(function (input) {
+			if (input.dataset.acset) return;
+			input.dataset.acset = "1";
+			function syncName() {
+				var n = input.closest("td").querySelector(".k-opname");
+				if (n) n.textContent = labourItemName(input.value.trim());
+			}
+			attachAutocomplete(input, function (q) {
+				q = (q || "").toLowerCase();
+				return (OPT.labour_items || []).filter(function (it) {
+					return !q || (it.item || "").toLowerCase().indexOf(q) >= 0 ||
+						(it.item_name || "").toLowerCase().indexOf(q) >= 0;
+				}).slice(0, 10).map(function (it) { return { label: esc(it.item), value: it.item, rate: it.rate }; });
+			}, function (it) {
+				input.value = it.value;
+				var rate = input.closest("tr").querySelector(".k-rate");
+				if (rate && it.rate && !parseFloat(rate.value)) { rate.value = it.rate; syncKitTotal(); }
+				syncName();
+			});
+			input.addEventListener("input", syncName);
+		});
+		// UOM is a Link on the kit row, so the cell offers the real list: free
+		// text that is not a UOM record is dropped when the card is written.
+		document.querySelectorAll("#jc-kit-body .k-uom").forEach(function (input) {
+			if (input.dataset.acset) return;
+			input.dataset.acset = "1";
+			attachAutocomplete(input, function (q) {
+				// "Li" has to offer Litre before Calibre: names that START with
+				// what was typed come first. The list arrives with the units this
+				// workshop's items actually use at the front.
+				q = (q || "").trim().toLowerCase();
+				var list = OPT.uoms || [];
+				if (!q) return list.slice(0, 12).map(function (u) { return { label: esc(u), value: u }; });
+				var starts = [], contains = [];
+				list.forEach(function (u) {
+					var i = u.toLowerCase().indexOf(q);
+					if (i === 0) starts.push(u); else if (i > 0) contains.push(u);
+				});
+				return starts.concat(contains).slice(0, 12).map(function (u) { return { label: esc(u), value: u }; });
+			}, function (it) { input.value = it.value; });
+		});
+		syncKitTotal();
+	}
+	// Read the tables back into the arrays, so a re-render (a service changing)
+	// never throws away what was typed.
+	function harvestKit() {
+		if (!editing || !el("jc-k-labor")) return;
+		KIT_GROUPS.forEach(function (g) {
+			var tb = el("jc-k-" + g), m = KIT_SPEC[g];
+			if (!tb) return;
+			var out = Array.prototype.map.call(tb.children, function (tr) {
+				// What was typed, over the line it was drawn from — so the fields
+				// the table has no column for are kept rather than dropped.
+				var row = Object.assign({}, tr._kitRow || {}, m.read(tr));
+				row.source_standard = tr.dataset.std || "";
+				return row;
+			});
+			if (g === "labor") kitLabor = out; else if (g === "parts") kitParts = out; else kitSublet = out;
+		});
+	}
+	function syncKitTotal() {
+		var out = el("jc-kit-total");
+		if (!out) return;
+		var t = 0;
+		KIT_GROUPS.forEach(function (g) {
+			var tb = el("jc-k-" + g), m = KIT_SPEC[g];
+			if (!tb) return;
+			Array.prototype.forEach.call(tb.children, function (tr) { t += m.amount(m.read(tr)); });
+		});
+		out.textContent = t.toFixed(2);
+	}
+
+	// ---- switch the page into edit mode --------------------------------
+	function renderEdit() {
+		var sb = el("jc-svc-body");
+		sb.innerHTML = "";
+		(D.services || []).forEach(function (s) { sb.appendChild(serviceRow(s)); });
+		if (!sb.children.length) sb.appendChild(serviceRow());
+
+		var cb = el("jc-cmp-body");
+		cb.innerHTML = "";
+		(D.complaints || []).forEach(function (c) { cb.appendChild(complaintRow(c)); });
+
+		var r = D.readings || {};
+		el("jc-readings").innerHTML =
+			field("Odometer (km)", '<input id="jc-r-odo" type="number" min="0" value="' + esc(r.odometer || "") + '">') +
+			field("Next Service (km)", '<input id="jc-r-next" type="number" min="0" value="' + esc(r.next_km || "") + '">') +
+			field("Fuel Level (%)", '<input id="jc-r-fuel" type="number" min="0" max="100" value="' + esc(r.fuel_level || 0) + '">') +
+			field("Oil Level (%)", '<input id="jc-r-oil" type="number" min="0" max="100" value="' + esc(r.oil_level || 0) + '">') +
+			field("Coolant", '<select id="jc-r-coolant">' + options(OPT.coolant, r.coolant, null, null, "—") + "</select>") +
+			field("Battery (V)", '<input id="jc-r-batt" type="number" step="0.1" value="' + esc(r.battery || "") + '">') +
+			field("Tyre Condition", '<select id="jc-r-tyre">' + options(OPT.tyre, r.tyre, null, null, "—") + "</select>") +
+			field("Spare Tyre", '<label class="check"><input id="jc-r-spare" type="checkbox" style="width:16px"' +
+				(r.spare ? " checked" : "") + "> Present</label>");
+
+		el("jc-booking-body").innerHTML =
+			brow("Booked", '<input id="jc-booking" type="date" value="' + esc(D.booking_date || todayStr()) + '">') +
+			brow("Promised Delivery", '<input id="jc-delivery" type="date" value="' + esc(D.promised_delivery || "") + '">') +
+			brow("Service Advisor", '<select id="jc-advisor">' +
+				options(OPT.employees, D.service_advisor, "name", "employee_name", "— advisor —") + "</select>");
+
+		renderKitEdit();
+		syncCounts();
+	}
+	function field(label, control) {
+		return '<div class="kv-row is-edit"><span class="k">' + esc(label) + "</span>" + control + "</div>";
+	}
+	function brow(label, control) {
+		return '<div class="row-between is-edit"><span class="muted">' + esc(label) + "</span>" + control + "</div>";
+	}
+	function todayStr() {
+		var d = new Date(), p = function (n) { return (n < 10 ? "0" : "") + n; };
+		return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate());
+	}
+
+	function setEditing(on) {
+		editing = on;
+		document.body.classList.toggle("jc-editing", on);
+		el("jc-edit").style.display = on ? "none" : "";
+		el("jc-cancel").style.display = on ? "" : "none";
+		document.querySelectorAll(".jc-add").forEach(function (b) { b.style.display = on ? "" : "none"; });
+		if (on) renderEdit(); else window.location.reload();
+	}
+	el("jc-edit").addEventListener("click", function () { setEditing(true); });
+	el("jc-cancel").addEventListener("click", function () { setEditing(false); });
+	document.querySelectorAll(".jc-add").forEach(function (b) {
+		b.addEventListener("click", function () {
+			if (b.dataset.add === "service") { el("jc-svc-body").appendChild(serviceRow()); syncCounts(); }
+			else el("jc-cmp-body").appendChild(complaintRow());
+		});
+	});
+
+	// Kit rows: add, remove, and keep the total honest as the numbers change.
+	el("jc-kit-body").addEventListener("click", function (e) {
+		var add = e.target.closest("[data-kadd]");
+		if (add) {
+			harvestKit();
+			var g = add.dataset.kadd;
+			(g === "labor" ? kitLabor : g === "parts" ? kitParts : kitSublet).push({ source_standard: "" });
+			renderKitEdit();
+			return;
+		}
+		var rm = e.target.closest("[data-krm]");
+		if (rm) { rm.closest("tr").remove(); harvestKit(); syncKitTotal(); }
+	});
+	el("jc-kit-body").addEventListener("input", function (e) {
+		if (e.target.matches("input")) syncKitTotal();
+	});
+
+	// ---- gather + create ------------------------------------------------
+	// Untouched, the draft is created from what the handover planned; edited, from
+	// what is on screen. Reading the DOM only while editing keeps the two honest —
+	// there are no inputs to read otherwise.
+	// Lines with nothing in them are a half-typed row, not a kit line.
+	function cleanKit() {
+		harvestKit();
+		return {
+			labor: kitLabor.filter(function (r) { return (r.description || "").trim(); }),
+			parts: kitParts.filter(function (r) { return (r.item_code || "").trim(); }),
+			sublet: kitSublet.filter(function (r) { return (r.service_description || "").trim(); }),
+		};
+	}
+	function payload() {
+		if (!editing) {
+			return {
+				booking_date: D.booking_date || "", promised_delivery: D.promised_delivery || "",
+				service_advisor: D.service_advisor || "",
+				readings: D.readings || {}, services: D.services || [], complaints: D.complaints || [],
+				kit: cleanKit(),
+			};
+		}
+		var services = [];
+		el("jc-svc-body").querySelectorAll("tr").forEach(function (tr) {
+			services.push({
+				jobtype: tr.querySelector(".jc-jt").value,
+				service: tr.querySelector(".jc-svc").value,
+				labour_service_code: tr.querySelector(".jc-std").value,
+				description: tr.querySelector(".jc-desc").value,
+				technician: tr.querySelector(".jc-tech").value,
+				hours: tr.querySelector(".jc-hrs").value,
+			});
+		});
+		var complaints = [];
+		el("jc-cmp-body").querySelectorAll("tr").forEach(function (tr) {
+			complaints.push({
+				complaint: tr.querySelector(".jc-cmp").value,
+				notes: tr.querySelector(".jc-notes").value,
+				reported_by: tr.querySelector(".jc-rby").value,
+				technician: tr.querySelector(".jc-ctech").value,
+				severity: tr.querySelector(".jc-sev").value,
+			});
+		});
+		var v = function (id) { var e = el(id); return e ? e.value : ""; };
+		return {
+			booking_date: v("jc-booking"), promised_delivery: v("jc-delivery"),
+			service_advisor: v("jc-advisor"),
+			readings: {
+				odometer: v("jc-r-odo"), next_km: v("jc-r-next"),
+				fuel_level: v("jc-r-fuel"), oil_level: v("jc-r-oil"),
+				coolant: v("jc-r-coolant"), battery: v("jc-r-batt"), tyre: v("jc-r-tyre"),
+				spare: el("jc-r-spare") && el("jc-r-spare").checked ? 1 : 0,
+			},
+			services: services, complaints: complaints, kit: cleanKit(),
+		};
+	}
+
+	el("jc-create").addEventListener("click", function () {
+		var btn = this, original = btn.innerHTML;
+		var p = payload();
+		if (!p.services.filter(function (s) { return s.jobtype || s.service; }).length) {
+			alert("Add at least one service job before creating the job card.");
+			return;
+		}
+		btn.disabled = true;
+		btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Creating…';
+		callMethod("garagedesk.api.handover_comparison.create_job_card_from_handover", {
+			handover: window.JC_HANDOVER,
+			booking_date: p.booking_date,
+			promised_delivery: p.promised_delivery,
+			service_advisor: p.service_advisor,
+			readings: JSON.stringify(p.readings),
+			services: JSON.stringify(p.services),
+			complaints: JSON.stringify(p.complaints),
+			kit_labor: JSON.stringify(p.kit.labor),
+			kit_parts: JSON.stringify(p.kit.parts),
+			kit_sublet: JSON.stringify(p.kit.sublet),
+		}).then(function (r) {
+			window.location.href = "/a3-workshop/job-card/detail?id=" + encodeURIComponent(r.job_card);
+		}).catch(function (err) {
+			alert("Could not create the job card: " + (err && err.message ? err.message : err));
+			btn.disabled = false;
+			btn.innerHTML = original;
+		});
+	});
+})();
+</script>
+{% endraw %}
+{%- endif %}
 {%- endif %}
 {% endblock %}

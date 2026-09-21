@@ -33,10 +33,45 @@ def get_context(context):
 		if card:
 			break
 
+	# ?handover= — the card a handover is about to raise, shown before it exists.
+	# The Handovers tab's "Create Job Card" lands here: same layout as a real card,
+	# filled in from what the Damages popup planned, editable in place, and created
+	# by the button at the top. A handover that already has a card shows that card
+	# instead, so the page can never offer to raise a second one.
+	handover = "" if card else (frappe.form_dict.get("handover") or "").strip()
+	if handover:
+		from garagedesk.api.handover_comparison import get_job_card_preview
+
+		existing = frappe.get_all(
+			"Workshop Job Card",
+			filters={"handover": handover, "status": ["!=", "Cancelled"]},
+			pluck="name", order_by="creation asc", limit_page_length=1,
+		)
+		if not existing:
+			existing = [
+				n for n in [frappe.db.get_value(
+					"Driver Vehicle Handover", handover, "rectification_job_card")] if n
+			]
+		if existing:
+			card = get_job_card_detail(existing[0]) or None
+			requested = requested or existing[0]
+			handover = ""
+		else:
+			card = get_job_card_preview(handover) or None
+			if not card:
+				handover = ""
+
 	context.job_card_id = requested
 	context.card = card
+	context.handover = handover
+	context.draft = 1 if (card and card.get("draft")) else 0
 
-	if card:
+	if context.draft:
+		context.title = "New Job Card"
+		context.subtitle = " · ".join(
+			[x for x in (card["customer_name"], card["vehicle_label"]) if x]
+		)
+	elif card:
 		context.title = "Job Card " + card["name"]
 		context.subtitle = " · ".join(
 			[x for x in (card["customer_name"], card["vehicle_label"]) if x]

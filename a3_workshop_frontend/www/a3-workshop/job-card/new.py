@@ -46,10 +46,17 @@ def _estimate_tax(company):
 	if not company:
 		return None
 
+	# Only the template the company actually marks as default. There used to be a
+	# fallback to the most recently modified one, which is not a default -- it is
+	# whichever template someone last touched. On a company carrying the usual UAE
+	# set (VAT 5%, VAT Zero, Exempted, Excise 50%, Excise 100%) that picked
+	# "Excise 100%" and quietly doubled every estimate on screen.
+	#
+	# With no default set the estimate shows no tax row, which is the same answer
+	# this gives when a company has no template at all, and is the honest one: a
+	# rate nobody chose is worse on a customer-facing quote than no rate.
 	name = frappe.db.get_value(
 		"Sales Taxes and Charges Template", {"company": company, "is_default": 1, "disabled": 0}, "name"
-	) or frappe.db.get_value(
-		"Sales Taxes and Charges Template", {"company": company, "disabled": 0}, "name", order_by="modified desc"
 	)
 	if not name:
 		return None
