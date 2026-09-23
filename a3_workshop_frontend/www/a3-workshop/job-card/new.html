@@ -555,6 +555,11 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 	// Arrived from a handover's Damages popup (?handover=) — preset the picker.
 	function prefillFromHandover() {
 		if (!handoverRef) return;
+		// Seeding is for a card being raised, not one being re-opened: a saved
+		// card already holds the complaints, services and readings that handover
+		// produced, and loadJobCard has just filled the Handover box from the
+		// card itself. Asking again would only re-arm the rectification link.
+		if (isEditing) return;
 		setVal("handover", handoverRef);
 		setVal("handover_label", handoverRef);
 		loadHandoverComplaints();
@@ -925,6 +930,18 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 			setVal("customer_id", jc.customer); setVal("customer", jc.customer_name);
 			setVal("vehicle_id", jc.vehicle); setVal("vehicle", jc.vehicle_label);
 			setVal("mobile", jc.mobile_no);
+			// A card raised from a handover keeps a pointer to it. Show it, so
+			// re-opening the card says which inspection it repairs rather than
+			// offering an empty search box.
+			//
+			// Only the box is filled: the card already holds the complaints and
+			// service jobs that handover produced, and loadHandoverComplaints is
+			// never called here, so nothing is re-seeded on top of them.
+			if (jc.handover) {
+				handoverRef = jc.handover;
+				setVal("handover", jc.handover);
+				setVal("handover_label", jc.handover);
+			}
 			setVal("booking_date", jc.booking_date); setVal("delivery", jc.promised_delivery);
 			var adv = document.querySelector('select[name="advisor"]'); if (adv) adv.value = jc.service_advisor || "";
 			if (jc.customer) loadCustomerVehicles(jc.customer);
