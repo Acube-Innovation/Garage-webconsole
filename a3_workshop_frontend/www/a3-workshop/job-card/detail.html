@@ -322,6 +322,8 @@
 <style>
 	/* The draft's editable controls. The page is a read-only summary everywhere
 	   else, so these only ever exist inside the sections Edit rebuilds. */
+	/* A vendor cell holding text that is no Supplier: it would be dropped. */
+	#jc-kit-body input.is-unmatched { border-color:var(--red); }
 	#jc-svc-body input, #jc-svc-body select,
 	#jc-cmp-body input, #jc-cmp-body select,
 	#jc-readings input, #jc-readings select,
@@ -418,6 +420,35 @@
 		}).join("");
 	}
 	function el(id) { return document.getElementById(id); }
+	// The sublet vendor is a Link to Supplier, so the cell picks from the
+	// suppliers, shown by name with the id on the input, and says so when what is
+	// typed is not one: the card writer would drop it.
+	function supplierName(id) {
+		var hit = (OPT.suppliers || []).filter(function (x) { return x.name === id; })[0];
+		return hit ? (hit.supplier_name || hit.name) : (id || "");
+	}
+	function vendorCellHtml(id) {
+		var label = supplierName(id);
+		return '<input class="k-vendor" value="' + esc(label) + '" data-code="' + esc(id || "") +
+			'" data-label="' + esc(label) + '" placeholder="Vendor" autocomplete="off">';
+	}
+	function vendorCodeOf(input) {
+		var v = input ? input.value.trim() : "";
+		if (!v) return "";
+		if (input.dataset.code && v === input.dataset.label) return input.dataset.code;
+		var low = v.toLowerCase();
+		var hit = (OPT.suppliers || []).filter(function (x) {
+			return (x.supplier_name || "").toLowerCase() === low || (x.name || "").toLowerCase() === low;
+		})[0];
+		return hit ? hit.name : v;
+	}
+	function markVendor(input) {
+		var list = OPT.suppliers || [], v = input.value.trim(), code = vendorCodeOf(input);
+		var ok = !v || !list.length || list.some(function (x) { return x.name === code; });
+		input.classList.toggle("is-unmatched", !ok);
+		input.title = ok ? "" : "Not a supplier — pick one from the list, or it is dropped when the card is created.";
+	}
+
 	// The labour Item's name, looked up rather than stored — the kit labour row
 	// has no item_name field, and the name belongs to the Item.
 	function labourItemName(code) {
@@ -629,14 +660,14 @@
 			cols: ["Service", "Vendor", "Cost"],
 			cells: function (r) {
 				return '<td><input class="k-sdesc" value="' + esc(r.service_description || "") + '" placeholder="Service"></td>' +
-					'<td><input class="k-vendor" value="' + esc(r.vendor || "") + '" placeholder="Vendor"></td>' +
+					"<td>" + vendorCellHtml(r.vendor) + "</td>" +
 					'<td style="width:86px"><input class="k-cost" type="number" min="0" step="0.01" value="' + (r.cost != null ? r.cost : 0) + '"></td>';
 			},
 			read: function (tr) {
 				var cost = tr.querySelector(".k-cost").value;
 				var markup = parseFloat((tr._kitRow || {}).markup_pct) || 0;
 				return { service_description: tr.querySelector(".k-sdesc").value,
-					vendor: tr.querySelector(".k-vendor").value, cost: cost,
+					vendor: vendorCodeOf(tr.querySelector(".k-vendor")), cost: cost,
 					sell_amount: (parseFloat(cost) || 0) * (1 + markup / 100) };
 			},
 			amount: function (r) {
@@ -694,6 +725,26 @@
 				syncName();
 			});
 			input.addEventListener("input", syncName);
+		});
+		document.querySelectorAll("#jc-kit-body .k-vendor").forEach(function (input) {
+			if (input.dataset.acset) return;
+			input.dataset.acset = "1";
+			attachAutocomplete(input, function (q) {
+				q = (q || "").toLowerCase();
+				return (OPT.suppliers || []).filter(function (x) {
+					return !q || (x.supplier_name || "").toLowerCase().indexOf(q) >= 0 ||
+						(x.name || "").toLowerCase().indexOf(q) >= 0;
+				}).slice(0, 10).map(function (x) {
+					return { label: esc(x.supplier_name || x.name), value: x.name, name: x.supplier_name || x.name };
+				});
+			}, function (it) {
+				input.value = it.name;
+				input.dataset.code = it.value;
+				input.dataset.label = it.name;
+				markVendor(input);
+			});
+			input.addEventListener("blur", function () { setTimeout(function () { markVendor(input); }, 200); });
+			markVendor(input);
 		});
 		// UOM is a Link on the kit row, so the cell offers the real list: free
 		// text that is not a UOM record is dropped when the card is written.

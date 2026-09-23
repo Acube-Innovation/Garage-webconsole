@@ -262,6 +262,18 @@
 	var viewerTitle = document.getElementById("viewer-title");
 	var current = null;
 
+	// Sections whose rows open a page of their own, by the row's first cell.
+	var ROW_LINKS = {
+		jobcard: function (r) { return "/a3-workshop/job-card/detail?id=" + encodeURIComponent(r[0]); }
+	};
+	// Anywhere on such a row opens it -- except its own links and buttons (the
+	// print icon, a Handover button), which keep doing what they do.
+	viewer.addEventListener("click", function (e) {
+		var tr = e.target.closest("tr[data-href]");
+		if (!tr || e.target.closest("a, button, input, select")) return;
+		window.location.href = tr.getAttribute("data-href");
+	});
+
 	// ---------------------------------------------------------------
 	// Middle-panel state machine.
 	// States: "view" (customer 360 / enquiry detail — uses #viewer),
@@ -409,7 +421,14 @@
 		var pmode = printModes[key];
 		var thead = "<thead><tr>" + s.cols.map(function (c) { return "<th>" + esc(c) + "</th>"; }).join("") + (pmode ? "<th></th>" : "") + "</tr></thead>";
 		function rowHtml(r) {
-			return "<tr>" + r.map(function (cell, i) {
+			var href = ROW_LINKS[key] ? ROW_LINKS[key](r) : "";
+			return "<tr" + (href ? ' data-href="' + esc(href) + '" style="cursor:pointer" title="Open"' : "") + ">" +
+				r.map(function (cell, i) {
+				// The row's own name, as a real link: it opens from anywhere on the
+				// row, and this keeps middle-click / open-in-new-tab working.
+				if (i === 0 && href) {
+					return '<td><a href="' + esc(href) + '" style="color:var(--navy);font-weight:700">' + esc(cell) + "</a></td>";
+				}
 				if (statusCols.indexOf(s.cols[i]) >= 0) return '<td><span class="badge ' + variant(cell) + '">' + esc(cell) + "</span></td>";
 				// The Handover cell carries the Vehicle's docname, not display text:
 				// it becomes a button through to the handover checklist. The server
