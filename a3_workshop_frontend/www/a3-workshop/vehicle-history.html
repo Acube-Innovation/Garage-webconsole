@@ -190,6 +190,7 @@
 {% endif %}
 
 <style>
+	.vh-jc-count { color:var(--navy); font-weight:700; text-decoration:underline; }
 	/* The fleet's filter bar sits inside the card, above the rows it filters —
 	   the same control every other list page in the portal uses. */
 	#vh-veh-bar { margin-bottom: 16px; }
@@ -250,6 +251,21 @@
 			}
 		} catch (e) {}
 		return String(msg).replace(/<[^>]+>/g, "");
+	}
+	// The repair side of a fleet vehicle: how many job cards its handovers' damage
+	// raised (linking to its Handovers tab), and where that damage stands, rolled
+	// up from every handover -- Pending while any is, In Progress while any is
+	// part-repaired, Rectified once all are.
+	function repairCols(v) {
+		var cls = { Pending: "badge--pending", "In Progress": "badge--progress", Rectified: "badge--success" }[v.rectification];
+		var cards = v.job_cards
+			? '<a class="vh-jc-count" href="/a3-workshop/vehicle-history-detail?vehicle=' + encodeURIComponent(v.name) +
+			  '#handovers">' + v.job_cards + "</a>"
+			: '<span class="muted">0</span>';
+		return '<div class="list-row__col"><div class="k">Job Cards</div><div style="font-weight:600">' + cards + "</div></div>" +
+			'<div class="list-row__col"><div class="k">Rectification</div><div>' +
+			(cls ? '<span class="badge ' + cls + '">' + esc(v.rectification) + "</span>" : '<span class="muted">—</span>') +
+			"</div></div>";
 	}
 	function esc(s) {
 		return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
@@ -401,7 +417,8 @@
 				// Everything the row shows, lowercased once, so the filter never has
 				// to walk the DOM to work out what a row is about.
 				var hay = [v.model, v.plate, v.chassis, driver, v.name,
-					v.attachment_type, v.is_attachment ? "attachment trailer" : "vehicle"]
+					v.attachment_type, v.is_attachment ? "attachment trailer" : "vehicle",
+					v.rectification]
 					.join(" ").toLowerCase();
 				// One data-f-<key> per dimension the bar above filters on. The driver
 				// is left blank when nobody holds the vehicle, so picking a name
@@ -411,10 +428,12 @@
 					' data-f-driver="' + esc(held ? v.current_driver : "") + '"' +
 					' data-f-held="' + (held ? "assigned" : "unassigned") + '"' +
 					' data-f-kind="' + (v.is_attachment ? "attachment" : "vehicle") + '"' +
-					// Vehicle · Odometer · Fuel-or-Type · Driver · action. Its own grid
-					// rather than .list-row--vehicle: the Vehicles page carries a
-					// customer column this one does not.
-					' style="grid-template-columns:2fr .9fr .9fr 1.4fr auto">' +
+					// Vehicle · Odometer · Fuel-or-Type · Driver · [Job Cards ·
+					// Rectification] · action. Its own grid rather than
+					// .list-row--vehicle: the Vehicles page carries a customer column
+					// this one does not, and only own-fleet vehicles have handovers.
+					' style="grid-template-columns:' +
+					(d.is_own_fleet ? "2fr .8fr .8fr 1.3fr .6fr .9fr auto" : "2fr .9fr .9fr 1.4fr auto") + '">' +
 					'<div class="list-row__party">' +
 					'<div class="list-row__avatar" style="background:var(--navy)"><i class="fa-solid fa-' +
 					(v.is_attachment ? "trailer" : "car") + '"></i></div>' +
@@ -429,6 +448,7 @@
 					esc(v.is_attachment ? (v.attachment_type || "Attachment") : v.fuel) + "</div></div>" +
 					'<div class="list-row__col"><div class="k">' + (d.is_own_fleet ? "Current Driver" : "Owner") + "</div>" +
 					'<div style="font-weight:600">' + esc(driver) + "</div></div>" +
+					(d.is_own_fleet ? repairCols(v) : "") +
 					'<a class="btn btn--primary btn--sm" href="/a3-workshop/vehicle-history-detail?vehicle=' + encodeURIComponent(v.name) + '">View History</a>' +
 					"</div>";
 			}).join("");
@@ -506,12 +526,27 @@
 		}).join("");
 	}
 
-	callMethod("garagedesk.api.fleet.get_customer_dashboard", { customer: window.vh_customer })
-		.then(renderDashboard)
-		.catch(function (err) {
-			statsEl.innerHTML = "";
-			vehiclesEl.innerHTML = '<div class="empty">Could not load dashboard.<br><span class="muted">' + esc(err.message || err) + "</span></div>";
-		});
+	// Read again whenever this page is come back to -- the browser's Back, or its
+	// tab switched to -- because a job card raised on a vehicle meanwhile changes
+	// that vehicle's Job Cards and Rectification, and the open-issue count above.
+	// renderDashboard keeps whatever search and filters are set.
+	var dashLoaded = false, dashAt = 0;
+	function loadDashboard() {
+		dashAt = Date.now();
+		return callMethod("garagedesk.api.fleet.get_customer_dashboard", { customer: window.vh_customer })
+			.then(function (d) { renderDashboard(d); dashLoaded = true; })
+			.catch(function (err) {
+				// A failed refresh leaves the fleet already on screen alone.
+				if (dashLoaded) { console.warn("Could not refresh the dashboard:", err); return; }
+				statsEl.innerHTML = "";
+				vehiclesEl.innerHTML = '<div class="empty">Could not load dashboard.<br><span class="muted">' + esc(err.message || err) + "</span></div>";
+			});
+	}
+	loadDashboard();
+	window.addEventListener("pageshow", function (e) { if (e.persisted) loadDashboard(); });
+	document.addEventListener("visibilitychange", function () {
+		if (document.visibilityState === "visible" && Date.now() - dashAt > 2000) loadDashboard();
+	});
 
 	// ---------------------------------------------------------------- modals
 	function wireModal(overlay) {

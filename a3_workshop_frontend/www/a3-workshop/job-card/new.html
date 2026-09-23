@@ -97,14 +97,14 @@
 			<div class="kit-block">
 				<h4 class="kit-title">Kit Labor <span class="muted" id="kit-labor-count"></span></h4>
 				<table class="table editable"><thead><tr>
-					<th style="width:112px">Item</th><th style="width:150px">Item Name</th><th>Description</th><th style="width:70px">Hours</th><th style="width:100px">Rate</th><th style="width:86px">Skill</th><th style="width:40px"></th>
+					<th style="width:220px">Item</th><th>Description</th><th style="width:70px">Hours</th><th style="width:100px">Rate</th><th style="width:86px">Skill</th><th style="width:40px"></th>
 				</tr></thead><tbody id="kit-labor-body"></tbody></table>
 				<div class="empty kit-empty" id="kit-labor-empty">No kit labor lines.</div>
 			</div>
 			<div class="kit-block">
 				<h4 class="kit-title">Kit Parts <span class="muted" id="kit-parts-count"></span></h4>
 				<table class="table editable"><thead><tr>
-					<th style="width:13%">Item</th><th style="width:13%">Item Name</th><th style="width:118px">Task</th><th style="width:132px">Material Request</th><th style="width:78px">Status</th><th style="width:48px">Qty</th><th style="width:54px">UOM</th><th style="width:80px">Rate</th><th style="width:34px"></th>
+					<th style="width:22%">Item</th><th style="width:118px">Task</th><th style="width:132px">Material Request</th><th style="width:78px">Status</th><th style="width:48px">Qty</th><th style="width:54px">UOM</th><th style="width:80px">Rate</th><th style="width:34px"></th>
 				</tr></thead><tbody id="kit-parts-body"></tbody></table>
 				<div class="empty kit-empty" id="kit-parts-empty">No kit parts lines.</div>
 			</div>
@@ -175,6 +175,32 @@
 	</div>
 </div>
 
+<!-- New Item popup — opened from the "Create …" row of a kit Item type-ahead (labour or part).
+     After the kit popup in the document so it stacks above it. -->
+<div class="modal-overlay" id="item-modal" role="dialog" aria-modal="true" aria-labelledby="item-modal-title">
+	<div class="modal" style="max-width:460px">
+		<div class="modal__head">
+			<div><h3 id="item-modal-title">New Item</h3><div class="sub" id="item-modal-sub">—</div></div>
+			<button type="button" class="modal__close" data-item-close aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+		</div>
+		<div class="modal__body stack">
+			<div class="field"><label>Item Name <span class="req">*</span></label>
+				<input id="item-modal-name" type="text" autocomplete="off"></div>
+			<div class="field" data-part-only><label>Item Group <span class="req">*</span></label>
+				<select id="item-modal-group"></select></div>
+			<div class="field" data-part-only><label>Unit</label>
+				<div><input id="item-modal-uom" type="text" placeholder="Nos" autocomplete="off"></div></div>
+			<div class="field"><label>Rate</label>
+				<input id="item-modal-rate" type="number" min="0" step="0.01" placeholder="0.00"></div>
+			<div class="svc-modal-err" id="item-modal-err" hidden></div>
+		</div>
+		<div class="modal__foot">
+			<button type="button" class="btn btn--outline btn--sm" data-item-close>Cancel</button>
+			<button type="button" class="btn btn--primary btn--sm" id="item-create-btn"><i class="fa-solid fa-plus"></i> Create Item</button>
+		</div>
+	</div>
+</div>
+
 <style>
 	.tech-cell { display:flex; align-items:center; gap:6px; }
 	.tech-cell .tech { flex:1 1 auto; min-width:0; }
@@ -207,6 +233,8 @@
 	/* Kit tables under Job Details — compact so the extra columns don't feel cramped */
 	#kit-card .table.editable th, #kit-card .table.editable td { padding:5px 8px; font-size:12.5px; vertical-align:middle; }
 	#kit-card .table.editable td a { white-space:nowrap; }
+	/* A vendor cell holding text that is no Supplier: it would be dropped on save. */
+	.table input.is-unmatched { border-color:var(--red,#ec2e5d); }
 	#kit-card .kit-block { overflow-x:auto; }
 </style>
 
@@ -539,6 +567,9 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 			JOB_SERVICES = o.job_type_services || [];
 			EMPLOYEES = o.service_advisors || [];
 			UOMS = o.uoms || [];
+			PART_GROUPS = o.part_groups || [];
+			SUPPLIERS = o.suppliers || [];
+			SKILLS = o.skill_levels || [];
 			LABOR_STANDARDS = o.labor_standards || [];
 			LTS_BY_SERVICE = {}; LTS_LABEL = {};
 			LABOR_STANDARDS.forEach(function (s) {
@@ -933,7 +964,8 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 	function toggleEmpty(body, el) { el.style.display = body.children.length ? 'none' : 'block'; }
 
 	// ---- Service Jobs: LHS = Jobcard Type, RHS = service rows -----------
-	var JOBCARD_TYPES = [], JOB_SERVICES = [], EMPLOYEES = [], UOMS = [];
+	var JOBCARD_TYPES = [], JOB_SERVICES = [], EMPLOYEES = [], UOMS = [], PART_GROUPS = [];
+	var SUPPLIERS = [], SKILLS = [];
 	var LABOR_STANDARDS = [], LTS_BY_SERVICE = {}, LTS_LABEL = {}; // service -> Labor Time Standard
 	var kitLabor = [], kitParts = [], kitSublet = []; // kit lines picked from the popup
 	var selected = []; // selected Jobcard Type names
@@ -1345,26 +1377,131 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 		techModalClose();
 	});
 
-	// Item catalog for the popup's Parts "Item" autocomplete (loaded once, reused).
-	var KIT_ITEMS = [];
+	// Item catalog for the popup's Item autocompletes (loaded once, reused). It is
+	// also where an Item's name comes from, so once it lands every kit cell drawn
+	// before it -- still showing a code -- is given its name.
+	var KIT_ITEMS = [], kitItemsAsked = false;
 	function ensureKitItems() {
-		if (KIT_ITEMS.length) return;
+		if (KIT_ITEMS.length || kitItemsAsked) return;
+		kitItemsAsked = true;
 		callMethod("garagedesk.api.front_office.get_estimate_items", { services: gatherServices().map(function (r) { return r.service; }).filter(Boolean) })
-			.then(function (o) { o = o || {}; KIT_ITEMS = (o.mapped || []).concat(o.others || []); }).catch(function () { });
+			.then(function (o) {
+				o = o || {}; KIT_ITEMS = (o.mapped || []).concat(o.others || []);
+				relabelItemCells();
+				renderKitTables();
+			}).catch(function () { kitItemsAsked = false; });
 	}
-	function attachKitItemAutocomplete(input) {
+	// A kit Item cell shows the item's name only -- the code is numbered by the
+	// Item series and means nothing to whoever fills the kit in -- and carries the
+	// code it stands for on the input.
+	function itemCellHtml(cls, code, name, placeholder) {
+		var label = name || itemNameOf(code) || code || '';
+		return '<input class="' + cls + '" value="' + escAttr(label) + '" data-code="' + escAttr(code || '') +
+			'" data-label="' + escAttr(label) + '" placeholder="' + placeholder + '" autocomplete="off">';
+	}
+	function setItemCell(input, code, name) {
+		name = name || itemNameOf(code) || code || '';
+		input.value = name;
+		input.dataset.code = code || '';
+		input.dataset.label = name;
+	}
+	// The code behind a cell: the picked one while the name still reads as
+	// picked, else an item whose name (or code) is exactly what was typed.
+	function itemCodeOf(input, labour) {
+		var v = input ? input.value.trim() : '';
+		if (!v) return '';
+		if (input.dataset.code && v === input.dataset.label) return input.dataset.code;
+		var low = v.toLowerCase();
+		var hit = KIT_ITEMS.filter(function (it) {
+			if (it.is_item === 0 || (labour && it.is_stock)) return false;
+			return (it.item_name || '').toLowerCase() === low || (it.item || '').toLowerCase() === low;
+		})[0];
+		return hit ? hit.item : v;
+	}
+	// The labour line's skill is a Select on the kit row: offered as its options,
+	// plus a value a row already holds that the list has since dropped.
+	function skillOptions(sel) {
+		var list = SKILLS.slice();
+		if (sel && list.indexOf(sel) < 0) list.push(sel);
+		return '<option value="">—</option>' + list.map(function (k) {
+			return '<option' + (k === sel ? ' selected' : '') + '>' + esc(k) + '</option>';
+		}).join('');
+	}
+	// The sublet vendor is a Link to Supplier, so the cell picks from the
+	// suppliers -- shown by name, the id on the input as with the Item cells --
+	// and says so when what is typed is not one: that would be dropped on save.
+	function supplierName(id) {
+		var hit = SUPPLIERS.filter(function (x) { return x.name === id; })[0];
+		return hit ? (hit.supplier_name || hit.name) : (id || '');
+	}
+	function vendorCellHtml(cls, id) {
+		var label = supplierName(id);
+		return '<input class="' + cls + '" value="' + escAttr(label) + '" data-code="' + escAttr(id || '') +
+			'" data-label="' + escAttr(label) + '" placeholder="Vendor" autocomplete="off">';
+	}
+	function vendorCodeOf(input) {
+		var v = input ? input.value.trim() : '';
+		if (!v) return '';
+		if (input.dataset.code && v === input.dataset.label) return input.dataset.code;
+		var low = v.toLowerCase();
+		var hit = SUPPLIERS.filter(function (x) {
+			return (x.supplier_name || '').toLowerCase() === low || (x.name || '').toLowerCase() === low;
+		})[0];
+		return hit ? hit.name : v;
+	}
+	function markVendor(input) {
+		var v = input.value.trim(), code = vendorCodeOf(input);
+		// Nothing is flagged before the supplier list has arrived.
+		var ok = !v || !SUPPLIERS.length || SUPPLIERS.some(function (x) { return x.name === code; });
+		input.classList.toggle('is-unmatched', !ok);
+		input.title = ok ? '' : 'Not a supplier — pick one from the list, or it is dropped on save.';
+	}
+	function attachVendorAutocomplete(input) {
 		if (!input || input.dataset.acset) return;
 		input.dataset.acset = '1';
 		attachAutocomplete(input, function (q) {
 			q = (q || '').toLowerCase();
-			return KIT_ITEMS.filter(function (it) {
-				return !q || (it.item || '').toLowerCase().indexOf(q) >= 0 || (it.item_name || '').toLowerCase().indexOf(q) >= 0;
-			}).slice(0, 10).map(function (it) {
-				return { label: it.item, sub: (it.item_name && it.item_name !== it.item) ? it.item_name : '',
-					value: it.item, rate: it.rate, uom: it.uom };
+			return SUPPLIERS.filter(function (x) {
+				return !q || (x.supplier_name || '').toLowerCase().indexOf(q) >= 0 ||
+					(x.name || '').toLowerCase().indexOf(q) >= 0;
+			}).slice(0, 10).map(function (x) {
+				return { label: esc(x.supplier_name || x.name), value: x.name, name: x.supplier_name || x.name };
 			});
 		}, function (it) {
-			input.value = it.value;
+			input.value = it.name;
+			input.dataset.code = it.value;
+			input.dataset.label = it.name;
+			markVendor(input);
+		});
+		// Checked once the cell is left, not on every keystroke of a name
+		// still being typed; after the list's own blur, so a pick counts.
+		input.addEventListener('blur', function () { setTimeout(function () { markVendor(input); }, 200); });
+		markVendor(input);
+	}
+	function relabelItemCells() {
+		document.querySelectorAll('#kit-modal-body .ke-op, #kit-modal-body .ke-item').forEach(function (input) {
+			var code = input.dataset.code, name = itemNameOf(code);
+			if (code && name && input.value === code && input.dataset.label === code) setItemCell(input, code, name);
+		});
+	}
+	function attachKitItemAutocomplete(input) {
+		if (!input || input.dataset.acset) return;
+		input.dataset.acset = '1';
+		attachAutocomplete(input, function (typed) {
+			var q = (typed || '').toLowerCase();
+			var rows = KIT_ITEMS.filter(function (it) {
+				// A service with no Item behind it cannot be a part.
+				if (it.is_item === 0) return false;
+				return !q || (it.item || '').toLowerCase().indexOf(q) >= 0 || (it.item_name || '').toLowerCase().indexOf(q) >= 0;
+			}).slice(0, 10).map(function (it) {
+				return { label: esc(it.item_name || it.item), value: it.item, name: it.item_name || it.item,
+					rate: it.rate, uom: it.uom };
+			});
+			var create = itemCreateRow(typed, 'part');
+			return create ? rows.concat([create]) : rows;
+		}, function (it) {
+			if (it.action === 'create') { openItemDialog('part', it.typed, input); return; }
+			setItemCell(input, it.value, it.name);
 			var tr = input.closest('tr');
 			var rateEl = tr && tr.querySelector('.ke-rate');
 			if (rateEl && it.rate && !parseFloat(rateEl.value)) rateEl.value = it.rate;
@@ -1388,29 +1525,113 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 	function attachLabourItemAutocomplete(input) {
 		if (!input || input.dataset.acset) return;
 		input.dataset.acset = '1';
-		function syncName() {
-			var tr = input.closest('tr'), name = tr && tr.querySelector('.ke-opname');
-			if (name) name.textContent = itemNameOf(input.value.trim());
-		}
-		attachAutocomplete(input, function (q) {
-			q = (q || '').toLowerCase();
-			return KIT_ITEMS.filter(function (it) {
+		attachAutocomplete(input, function (typed) {
+			var q = (typed || '').toLowerCase();
+			var rows = KIT_ITEMS.filter(function (it) {
 				if (it.is_stock || it.is_item === 0) return false;
 				return !q || (it.item || '').toLowerCase().indexOf(q) >= 0 ||
 					(it.item_name || '').toLowerCase().indexOf(q) >= 0;
 			}).slice(0, 10).map(function (it) {
-				return { label: it.item, sub: (it.item_name && it.item_name !== it.item) ? it.item_name : '',
-					value: it.item, rate: it.rate };
+				return { label: esc(it.item_name || it.item), value: it.item, name: it.item_name || it.item, rate: it.rate };
 			});
+			var create = itemCreateRow(typed, 'labour');
+			return create ? rows.concat([create]) : rows;
 		}, function (it) {
-			input.value = it.value;
+			if (it.action === 'create') { openItemDialog('labour', it.typed, input); return; }
+			setItemCell(input, it.value, it.name);
 			var tr = input.closest('tr'), rate = tr && tr.querySelector('.ke-rate');
 			if (rate && it.rate && !parseFloat(rate.value)) rate.value = it.rate;
-			syncName();
 		});
-		// Typing over a picked code must not leave the previous item's name beside it.
-		input.addEventListener('input', syncName);
 	}
+	// ---- New Item popup: the kit Item cells' "Create …" row ----------------
+	// As the Service / Task cell can create a service, the kit Item cells can
+	// create the item: a labour item is a service Item billed per hour; a part is
+	// a stock Item, so it needs a group and a unit too. The code is numbered from
+	// the Item series.
+	var itemModal = document.getElementById('item-modal');
+	var itemCreateBtn = document.getElementById('item-create-btn');
+	var itemInput = null, itemKind = '';
+
+	// The "Create …" row for what was typed, unless it already names an item the
+	// cell offers: labour offers service Items only, parts offer any Item.
+	function itemCreateRow(typed, kind) {
+		typed = (typed || '').trim();
+		if (!typed) return null;
+		var low = typed.toLowerCase();
+		var taken = KIT_ITEMS.some(function (it) {
+			if (kind === 'labour' && (it.is_stock || it.is_item === 0)) return false;
+			return (it.item || '').toLowerCase() === low || (it.item_name || '').toLowerCase() === low;
+		});
+		if (taken) return null;
+		return { action: 'create', typed: typed,
+			label: '<i class="fa-solid fa-plus"></i> Create “' + esc(typed) + '”',
+			sub: kind === 'labour' ? 'New labour item' : 'New part' };
+	}
+	function itemError(msg) {
+		var box = document.getElementById('item-modal-err');
+		box.textContent = msg || ''; box.hidden = !msg;
+	}
+	function closeItemDialog() {
+		itemModal.classList.remove('is-open');
+		itemInput = null;
+		itemError('');
+	}
+	function openItemDialog(kind, typed, input) {
+		itemInput = input; itemKind = kind;
+		var part = kind === 'part';
+		document.getElementById('item-modal-title').textContent = part ? 'New Part' : 'New Labour Item';
+		document.getElementById('item-modal-sub').textContent = part
+			? 'A stock item. Its code is numbered automatically.'
+			: 'A service item billed per hour, filed under Services. Its code is numbered automatically.';
+		itemModal.querySelectorAll('[data-part-only]').forEach(function (f) { f.style.display = part ? '' : 'none'; });
+		document.getElementById('item-modal-group').innerHTML = '<option value="">— pick a group —</option>' +
+			PART_GROUPS.map(function (g) { return '<option value="' + escAttr(g) + '">' + esc(g) + '</option>'; }).join('');
+		var tr = input && input.closest('tr');
+		var rowRate = tr && tr.querySelector('.ke-rate'), rowUom = tr && tr.querySelector('.ke-uom');
+		document.getElementById('item-modal-uom').value = rowUom ? rowUom.value.trim() : '';
+		document.getElementById('item-modal-rate').value = rowRate && parseFloat(rowRate.value) ? rowRate.value : '';
+		document.getElementById('item-modal-name').value = typed || '';
+		itemError('');
+		itemModal.classList.add('is-open');
+		var nameEl = document.getElementById('item-modal-name');
+		nameEl.focus(); nameEl.select();
+	}
+	itemModal.addEventListener('click', function (e) {
+		if (e.target.closest('[data-item-close]') || e.target === itemModal) closeItemDialog();
+	});
+	document.getElementById('item-modal-name').addEventListener('keydown', function (e) {
+		if (e.key === 'Enter') { e.preventDefault(); itemCreateBtn.click(); }
+	});
+	itemCreateBtn.addEventListener('click', function () {
+		var input = itemInput, kind = itemKind;
+		var name = document.getElementById('item-modal-name').value.trim();
+		var group = document.getElementById('item-modal-group').value;
+		if (!name) { itemError('Enter the item name.'); return; }
+		if (kind === 'part' && !group) { itemError('Pick the group this part belongs in.'); return; }
+		itemCreateBtn.disabled = true;
+		callMethod('garagedesk.api.front_office.create_kit_item', {
+			item_name: name, kind: kind, item_group: group,
+			uom: document.getElementById('item-modal-uom').value.trim(),
+			rate: document.getElementById('item-modal-rate').value || 0
+		}).then(function (res) {
+			if (!res || !res.item) throw new Error('No item returned.');
+			// Into the catalog, so every other kit row can pick it too.
+			if (!KIT_ITEMS.some(function (it) { return it.item === res.item; })) KIT_ITEMS.push(res);
+			closeItemDialog();
+			if (!input || !input.isConnected) return;
+			setItemCell(input, res.item, res.item_name);
+			var tr = input.closest('tr');
+			var rate = tr.querySelector('.ke-rate'), uom = tr.querySelector('.ke-uom');
+			if (rate && res.rate && !parseFloat(rate.value)) rate.value = res.rate;
+			if (uom && res.uom && !uom.value.trim()) uom.value = res.uom;
+		}).catch(function (err) {
+			itemError('Could not create the item: ' + ((err && err.message) || err));
+		}).then(function () {
+			itemCreateBtn.disabled = false;
+		});
+	});
+	attachUomAutocomplete(document.getElementById('item-modal-uom'));
+
 	// The UOM cell: a type-ahead over the real UOM list, because it is a Link
 	// field on the kit row — anything typed that is not a UOM record is silently
 	// dropped on save, leaving a part with no unit.
@@ -1472,22 +1693,21 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 	function kitEditRow(group, r) {
 		r = r || {};
 		if (group === 'labor') return '<tr>' +
-			'<td><input class="ke-op" value="' + escAttr(r.operation || '') + '" placeholder="Labour item" autocomplete="off"></td>' +
-			'<td><span class="ke-opname muted">' + esc(itemNameOf(r.operation)) + '</span></td>' +
+			'<td>' + itemCellHtml('ke-op', r.operation, '', 'Labour item') + '</td>' +
 			'<td><input class="ke-desc" value="' + escAttr(r.description || '') + '" placeholder="Description"></td>' +
 			'<td><input class="ke-hours" type="number" min="0" step="0.1" value="' + (r.hours != null ? r.hours : 0) + '"></td>' +
 			'<td><input class="ke-rate" type="number" min="0" step="0.01" value="' + (r.rate != null ? r.rate : 0) + '"></td>' +
-			'<td><input class="ke-skill" value="' + escAttr(r.skill_level || '') + '" placeholder="Skill"></td>' +
+			'<td><select class="ke-skill">' + skillOptions(r.skill_level || '') + '</select></td>' +
 			'<td><button type="button" class="icon-del" data-kdel><i class="fa-solid fa-trash"></i></button></td></tr>';
 		if (group === 'parts') return '<tr>' +
-			'<td><input class="ke-item" value="' + escAttr(r.item_code || '') + '" placeholder="Item code"></td>' +
+			'<td>' + itemCellHtml('ke-item', r.item_code, r.item_name, 'Item') + '</td>' +
 			'<td><input class="ke-qty" type="number" min="0" step="1" value="' + (r.qty != null ? r.qty : 1) + '"></td>' +
 			'<td><input class="ke-uom" value="' + escAttr(r.uom || '') + '" placeholder="UOM"></td>' +
 			'<td><input class="ke-rate" type="number" min="0" step="0.01" value="' + (r.rate != null ? r.rate : 0) + '"></td>' +
 			'<td><button type="button" class="icon-del" data-kdel><i class="fa-solid fa-trash"></i></button></td></tr>';
 		return '<tr>' +
 			'<td><input class="ke-desc" value="' + escAttr(r.service_description || '') + '" placeholder="Service"></td>' +
-			'<td><input class="ke-vendor" value="' + escAttr(r.vendor || '') + '" placeholder="Vendor"></td>' +
+			'<td>' + vendorCellHtml('ke-vendor', r.vendor) + '</td>' +
 			'<td><input class="ke-cost" type="number" min="0" step="0.01" value="' + (r.cost != null ? r.cost : 0) + '"></td>' +
 			'<td><input class="ke-markup" type="number" min="0" step="1" value="' + (r.markup_pct != null ? r.markup_pct : 0) + '"></td>' +
 			'<td><button type="button" class="icon-del" data-kdel><i class="fa-solid fa-trash"></i></button></td></tr>';
@@ -1502,12 +1722,13 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 	function renderKitModalBody() {
 		document.getElementById('kit-modal-body').innerHTML =
 			'<div class="kit-none" style="margin-bottom:10px">Kit items for this service are listed below — edit quantities/rates, add rows if needed, then “Add to Job”.</div>' +
-			kitEditSection('labor', 'Kit Labor', ['Item', 'Item Name', 'Description', 'Hours', 'Rate', 'Skill']) +
+			kitEditSection('labor', 'Kit Labor', ['Item', 'Description', 'Hours', 'Rate', 'Skill']) +
 			kitEditSection('parts', 'Kit Parts', ['Item', 'Qty', 'UOM', 'Rate']) +
 			kitEditSection('sublet', 'Kit Sublet', ['Service', 'Vendor', 'Cost', 'Markup %']);
 		document.querySelectorAll('#kit-modal-body .ke-item').forEach(attachKitItemAutocomplete);
 		document.querySelectorAll('#kit-modal-body .ke-uom').forEach(attachUomAutocomplete);
 		document.querySelectorAll('#kit-modal-body .ke-op').forEach(attachLabourItemAutocomplete);
+		document.querySelectorAll('#kit-modal-body .ke-vendor').forEach(attachVendorAutocomplete);
 	}
 	// Add-row / remove-row inside the popup.
 	document.getElementById('kit-modal-body').addEventListener('click', function (e) {
@@ -1520,6 +1741,8 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 				attachUomAutocomplete(tb.lastElementChild.querySelector('.ke-uom'));
 			} else if (add.dataset.kadd === 'labor') {
 				attachLabourItemAutocomplete(tb.lastElementChild.querySelector('.ke-op'));
+			} else {
+				attachVendorAutocomplete(tb.lastElementChild.querySelector('.ke-vendor'));
 			}
 			return;
 		}
@@ -1530,9 +1753,12 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 		var tb = document.getElementById('kmod-' + group + '-body');
 		if (!tb) return [];
 		return Array.prototype.map.call(tb.children, function (tr) {
-			if (group === 'labor') return { description: tr.querySelector('.ke-desc').value, operation: tr.querySelector('.ke-op').value.trim(), hours: tr.querySelector('.ke-hours').value, rate: tr.querySelector('.ke-rate').value, skill_level: tr.querySelector('.ke-skill').value };
-			if (group === 'parts') return { item_code: tr.querySelector('.ke-item').value, qty: tr.querySelector('.ke-qty').value, uom: tr.querySelector('.ke-uom').value, rate: tr.querySelector('.ke-rate').value };
-			return { service_description: tr.querySelector('.ke-desc').value, vendor: tr.querySelector('.ke-vendor').value, cost: tr.querySelector('.ke-cost').value, markup_pct: tr.querySelector('.ke-markup').value };
+			if (group === 'labor') return { description: tr.querySelector('.ke-desc').value, operation: itemCodeOf(tr.querySelector('.ke-op'), true), hours: tr.querySelector('.ke-hours').value, rate: tr.querySelector('.ke-rate').value, skill_level: tr.querySelector('.ke-skill').value };
+			if (group === 'parts') {
+				var code = itemCodeOf(tr.querySelector('.ke-item'));
+				return { item_code: code, item_name: itemNameOf(code) || tr.querySelector('.ke-item').value.trim(), qty: tr.querySelector('.ke-qty').value, uom: tr.querySelector('.ke-uom').value, rate: tr.querySelector('.ke-rate').value };
+			}
+			return { service_description: tr.querySelector('.ke-desc').value, vendor: vendorCodeOf(tr.querySelector('.ke-vendor')), cost: tr.querySelector('.ke-cost').value, markup_pct: tr.querySelector('.ke-markup').value };
 		});
 	}
 	// Push popup rows into the Job's kit tables (stamped with the standard, deduped).
@@ -1590,9 +1816,9 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 			// Create Sales Order.
 			cells: function (r) {
 				var op = r.operation
-					? esc(r.operation)
+					? esc(itemNameOf(r.operation) || r.operation)
 					: '<span class="muted" title="No labour Item — this line needs one to bill, or a Default Labour Item in Workshop Settings">— none —</span>';
-				return '<td>' + op + '</td><td class="muted">' + esc(itemNameOf(r.operation)) + '</td><td>' +
+				return '<td>' + op + '</td><td>' +
 					esc(r.description || '') + '</td><td>' + fmtNum(r.hours) +
 					'</td><td>' + fmtMoney(r.rate) + '</td><td>' + esc(r.skill_level || '') + '</td>';
 			} },
@@ -1601,12 +1827,13 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 				var tk = r.task ? '<a href="/app/task/' + encodeURIComponent(r.task) + '" target="_blank">' + esc(r.task) + '</a>' : '<span class="muted">—</span>';
 				var mr = r.material_request ? '<a href="/app/material-request/' + encodeURIComponent(r.material_request) + '" target="_blank">' + esc(r.material_request) + '</a>' : '<span class="muted">—</span>';
 				var st = r.material_request_status ? esc(r.material_request_status) : '<span class="muted">—</span>';
-				return '<td>' + esc(r.item_code || '') + '</td><td>' + esc(r.item_name || '') + '</td><td>' + tk + '</td><td>' + mr + '</td><td>' + st + '</td><td>' + fmtNum(r.qty) + '</td><td>' + esc(r.uom || '') + '</td><td>' + fmtMoney(r.rate) + '</td>';
+				return '<td>' + esc(r.item_name || itemNameOf(r.item_code) || r.item_code || '') + '</td><td>' + tk + '</td><td>' + mr + '</td><td>' + st + '</td><td>' + fmtNum(r.qty) + '</td><td>' + esc(r.uom || '') + '</td><td>' + fmtMoney(r.rate) + '</td>';
 			} },
 		sublet: { body: 'kit-sublet-body', empty: 'kit-sublet-empty', count: 'kit-sublet-count', arr: function () { return kitSublet; },
-			cells: function (r) { return '<td>' + esc(r.service_description || '') + '</td><td>' + esc(r.vendor || '') + '</td><td>' + fmtMoney(r.cost) + '</td><td>' + fmtNum(r.markup_pct) + '</td>'; } }
+			cells: function (r) { return '<td>' + esc(r.service_description || '') + '</td><td>' + esc(supplierName(r.vendor)) + '</td><td>' + fmtMoney(r.cost) + '</td><td>' + fmtNum(r.markup_pct) + '</td>'; } }
 	};
 	function renderKitTables() {
+		if (kitLabor.length || kitParts.length) ensureKitItems();
 		['labor', 'parts', 'sublet'].forEach(function (g) {
 			var m = KIT_TABLES[g], rows = m.arr();
 			document.getElementById(m.body).innerHTML = rows.map(function (r) {
@@ -1914,7 +2141,7 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 			'<td><input class="bl-desc" value="' + escAttr(r.description || '') + '" placeholder="Description"></td>' +
 			'<td><input class="bl-hours" type="number" min="0" step="0.1" value="' + (r.hours != null ? r.hours : 0) + '"></td>' +
 			'<td><input class="bl-rate" type="number" min="0" step="0.01" value="' + (r.rate != null ? r.rate : 0) + '"></td>' +
-			'<td><input class="bl-skill" value="' + escAttr(r.skill_level || '') + '" placeholder="Skill"></td>' +
+			'<td><select class="bl-skill">' + skillOptions(r.skill_level || '') + '</select></td>' +
 			'<td><button type="button" class="icon-del" data-brm><i class="fa-solid fa-trash"></i></button></td>';
 		billLaborBody.appendChild(tr);
 		function syncName() {
@@ -1980,11 +2207,12 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 		tr.dataset.src = r.source_task || '';
 		tr.innerHTML =
 			'<td><input class="bs-desc" value="' + escAttr(r.service_description || '') + '" placeholder="Service"></td>' +
-			'<td><input class="bs-vendor" value="' + escAttr(r.vendor || '') + '" placeholder="Vendor"></td>' +
+			'<td>' + vendorCellHtml('bs-vendor', r.vendor) + '</td>' +
 			'<td><input class="bs-cost" type="number" min="0" step="0.01" value="' + (r.cost != null ? r.cost : 0) + '"></td>' +
 			'<td><input class="bs-markup" type="number" min="0" step="1" value="' + (r.markup_pct != null ? r.markup_pct : 0) + '"></td>' +
 			'<td><button type="button" class="icon-del" data-brm><i class="fa-solid fa-trash"></i></button></td>';
 		billSubletBody.appendChild(tr);
+		attachVendorAutocomplete(tr.querySelector('.bs-vendor'));
 	}
 	function toggleBillEmpties() {
 		document.getElementById('bill-labor-empty').style.display = billLaborBody.children.length ? 'none' : 'block';
@@ -2020,7 +2248,7 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 	function gatherBillSublet() {
 		return Array.prototype.map.call(billSubletBody.children, function (tr) {
 			return {
-				service_description: tr.querySelector('.bs-desc').value, vendor: tr.querySelector('.bs-vendor').value,
+				service_description: tr.querySelector('.bs-desc').value, vendor: vendorCodeOf(tr.querySelector('.bs-vendor')),
 				cost: tr.querySelector('.bs-cost').value, markup_pct: tr.querySelector('.bs-markup').value, source_task: tr.dataset.src || ''
 			};
 		}).filter(function (r) { return (r.service_description || '').trim(); });

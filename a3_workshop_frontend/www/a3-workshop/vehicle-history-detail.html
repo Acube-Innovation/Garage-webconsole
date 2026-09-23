@@ -45,8 +45,9 @@
 
 <!-- Damage comparison: this handover's photographs beside the previous
      handover's, slot for slot, with the damages the inspector finds noted below
-     and the repair they plan for them. Save records both; the job card itself is
-     raised from the Handovers tab, which opens the wizard on what was saved. -->
+     and the repair they plan for them. Each damage names who is responsible for
+     it; picking one of them raises that party's job card from here, so a
+     handover can end up with one card per driver and one for the company. -->
 <div class="modal-overlay" id="vh-cmp-modal" role="dialog" aria-modal="true">
 	<div class="modal" style="max-width:1080px">
 		<div class="modal__head">
@@ -56,6 +57,7 @@
 		<div class="modal__body" id="vh-cmp-body"><div class="empty">Loading…</div></div>
 		<div class="modal__foot">
 			<span class="muted" id="vh-cmp-msg" style="margin-right:auto;font-size:12px"></span>
+			<button type="button" class="btn btn--navy btn--sm" id="vh-cmp-create" style="display:none"><i class="fa-solid fa-plus"></i> Create Job Card</button>
 			<button type="button" class="btn btn--primary btn--sm" id="vh-cmp-save"><i class="fa-solid fa-floppy-disk"></i> Save</button>
 		</div>
 	</div>
@@ -117,6 +119,48 @@
 	</div>
 </div>
 
+<!-- New Item — opened from the "Create …" row of a kit Item type-ahead (labour or part).
+     Last in the document so it stacks above the kit popup it is opened from. -->
+<div class="modal-overlay" id="vh-item-modal" role="dialog" aria-modal="true" aria-labelledby="vh-item-title">
+	<div class="modal" style="max-width:460px">
+		<div class="modal__head">
+			<div><h3 id="vh-item-title">New Item</h3><div class="sub" id="vh-item-sub">—</div></div>
+			<button type="button" class="modal__close" data-close aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+		</div>
+		<div class="modal__body stack">
+			<div class="field"><label>Item Name <span class="req">*</span></label>
+				<input id="vh-item-name" type="text" autocomplete="off"></div>
+			<div class="field" data-part-only><label>Item Group <span class="req">*</span></label>
+				<select id="vh-item-group"></select></div>
+			<div class="field" data-part-only><label>Unit</label>
+				<div class="vh-svc-combo"><input id="vh-item-uom" type="text" placeholder="Nos" autocomplete="off"></div></div>
+			<div class="field"><label>Rate</label>
+				<input id="vh-item-rate" type="number" min="0" step="0.01" placeholder="0.00"></div>
+			<div class="vh-svc-err" id="vh-item-err" hidden></div>
+		</div>
+		<div class="modal__foot">
+			<button type="button" class="btn btn--outline btn--sm" data-close>Cancel</button>
+			<button type="button" class="btn btn--primary btn--sm" id="vh-item-create"><i class="fa-solid fa-plus"></i> Create Item</button>
+		</div>
+	</div>
+</div>
+
+<!-- The page's own message / confirm dialog, in place of the browser's alert() and
+     confirm(). Placed after every other popup so it stacks above whichever opened it. -->
+<div class="modal-overlay" id="vh-dialog" role="alertdialog" aria-modal="true" aria-labelledby="vh-dialog-title">
+	<div class="modal" style="max-width:460px">
+		<div class="modal__head">
+			<div><h3 id="vh-dialog-title">—</h3></div>
+			<button type="button" class="modal__close" data-close aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+		</div>
+		<div class="modal__body vh-dialog-body" id="vh-dialog-body"></div>
+		<div class="modal__foot">
+			<button type="button" class="btn btn--outline btn--sm" data-close id="vh-dialog-cancel">Cancel</button>
+			<button type="button" class="btn btn--primary btn--sm" id="vh-dialog-ok">OK</button>
+		</div>
+	</div>
+</div>
+
 <style>
 	/* ---- damage comparison ---- */
 	.vh-cmp-sec { margin-bottom:18px; }
@@ -157,21 +201,29 @@
 		letter-spacing:normal; font-size:12.5px; color:var(--text); }
 	.vh-cmp-note { font-size:12px; color:var(--muted); margin:-4px 0 9px; }
 	.vh-cmp-note b { color:var(--text); }
-	/* Service jobs: job-type picker on the left, the rows it feeds on the right. */
-	.vh-jobs { display:grid; grid-template-columns:230px 1fr; gap:14px; align-items:start; }
-	@media (max-width:820px){ .vh-jobs { grid-template-columns:1fr; } }
-	.vh-jt-list { display:flex; flex-direction:column; gap:6px; max-height:260px; overflow-y:auto; }
-	.vh-jt { display:flex; align-items:center; gap:8px; padding:8px 10px; border:1px solid var(--border);
-		border-radius:8px; cursor:pointer; background:var(--surface); font-size:13px; }
-	.vh-jt:hover { border-color:var(--red); }
-	.vh-jt.is-active { border-color:var(--red); background:var(--red-soft); }
-	.vh-jt i:first-child { color:var(--red); width:16px; text-align:center; }
-	.vh-jt .tick { margin-left:auto; color:var(--red); display:none; }
-	.vh-jt.is-active .tick { display:inline; }
-	.vh-jt-search { width:100%; padding:7px 9px; font:inherit; font-size:12.5px; margin-bottom:8px;
-		border:1px solid var(--border); border-radius:7px; background:var(--surface); color:var(--text); }
+	/* Who the damage is held against: one chip per party, each raising its own
+	   job card. A party whose damage all has a card is ticked off. */
+	.vh-resp-chips { display:flex; flex-wrap:wrap; gap:6px; margin:0 0 10px; }
+	.vh-resp-chip { display:inline-flex; align-items:center; gap:6px; border:1px solid var(--border);
+		background:var(--surface); border-radius:999px; padding:5px 12px; font:inherit; font-size:12px;
+		font-weight:600; color:var(--text); cursor:pointer; }
+	.vh-resp-chip:hover { border-color:var(--red); }
+	.vh-resp-chip.is-active { background:var(--red); border-color:var(--red); color:#fff; }
+	.vh-resp-chip .n { font-weight:700; opacity:.65; }
+	.vh-resp-chip .open { font-size:10.5px; font-weight:700; color:var(--red); }
+	.vh-resp-chip .done { color:var(--green); }
+	.vh-resp-chip.is-active .open, .vh-resp-chip.is-active .done { color:#fff; }
+	/* A damage a job card repairs is part of that card and cannot be edited. */
+	.vh-cmp-tbl tr.is-locked td { background:var(--bg); }
+	.vh-cmp-tbl tr.is-locked select, .vh-cmp-tbl tr.is-locked input { background:transparent;
+		border-color:transparent; -webkit-appearance:none; appearance:none; color:var(--text); opacity:1; }
+	.vh-jc-item + .vh-jc-item { margin-top:3px; }
+	.vh-jc-for { font-size:11px; }
+	/* Service jobs: one table, each row naming the damage it repairs. */
+	.vh-svc-tbl .vh-issue { font-weight:600; }
 	.vh-svc-combo { position:relative; }
 	.vh-svc-combo .svc-input.is-unsaved { border-color:var(--red); }
+	.vh-svc-combo input.is-unmatched { border-color:var(--red); }
 	.vh-labor-code { display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600;
 		background:#eef4ff; color:#1b4fd6; border:1px solid #cfe0ff; border-radius:6px; padding:3px 8px;
 		cursor:pointer; white-space:nowrap; }
@@ -205,6 +257,9 @@
 	.vh-cmp { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
 	@media (max-width:640px){ .vh-cmp { grid-template-columns:1fr; } }
 	.vh-jc-link { font-weight:700; color:var(--navy); white-space:nowrap; }
+	.vh-dialog-body { font-size:14px; line-height:1.5; }
+	.vh-dialog-body p { margin:0 0 8px; }
+	.vh-dialog-body p:last-child { margin-bottom:0; }
 </style>
 
 <script>
@@ -281,8 +336,12 @@
 	})();
 
 	// -------------------------------------------------------------- load
+	// Called again whenever the popup raises a job card or saves, so every tab --
+	// the handover's rectification, the open-discrepancy count, the card in the
+	// repair history -- reads what was just written, not what the page opened on.
 	var D = null;
-	callMethod("garagedesk.api.fleet.get_vehicle_history", { vehicle: window.vh_vehicle })
+	function loadHistory() {
+		return callMethod("garagedesk.api.fleet.get_vehicle_history", { vehicle: window.vh_vehicle })
 		.then(function (d) {
 			D = d;
 			renderHead(d);
@@ -306,9 +365,24 @@
 			}
 		})
 		.catch(function (err) {
+			if (D) { console.warn("Could not refresh vehicle history:", err); return; }
 			document.getElementById("vh-head").innerHTML =
 				'<div class="empty">Could not load vehicle history.<br><span class="muted">' + esc(err.message || err) + "</span></div>";
 		});
+	}
+	loadHistory();
+	// The browser's Back can restore this page as it was, before whatever was just
+	// done elsewhere; read it again instead.
+	window.addEventListener("pageshow", function (e) { if (e.persisted) loadHistory(); });
+	// Likewise when its tab is switched back to: a card may have been raised on
+	// this vehicle from another tab.
+	var historyAt = Date.now();
+	document.addEventListener("visibilitychange", function () {
+		if (document.visibilityState === "visible" && Date.now() - historyAt > 2000) {
+			historyAt = Date.now();
+			loadHistory();
+		}
+	});
 
 	function renderHead(d) {
 		var v = d.vehicle;
@@ -412,16 +486,13 @@
 			"No monthly data yet.");
 	}
 
-	// New damage is closed out by raising a repair job card: until one exists the
-	// cell offers the button, afterwards it shows the card it was rectified under.
+	// The job cards raised for a handover's damage. They are raised from the
+	// Damages popup, one per responsible party, so this cell only lists them;
+	// mergeHandoverLinks fills in every card once it knows them all.
 	function jobCardCell(h) {
-		if (!h.discrepancy_found) return '<span class="muted">—</span>';
-		if (h.rectification_job_card) {
-			return '<a class="vh-jc-link" href="/a3-workshop/job-card/detail?id=' +
-				encodeURIComponent(h.rectification_job_card) + '">' + esc(h.rectification_job_card) + "</a>";
-		}
-		return '<button type="button" class="btn btn--navy btn--sm" data-newjc="' + esc(h.name) +
-			'"><i class="fa-solid fa-plus"></i> Create Job Card</button>';
+		if (!h.rectification_job_card) return '<span class="muted">—</span>';
+		return '<a class="vh-jc-link" href="/a3-workshop/job-card/detail?id=' +
+			encodeURIComponent(h.rectification_job_card) + '">' + esc(h.rectification_job_card) + "</a>";
 	}
 
 	function renderHandovers(d) {
@@ -436,7 +507,8 @@
 						? '<span class="badge badge--danger">' + h.new_damage_count + " new</span>"
 						: '<span class="badge badge--success">None</span>') + "</span>",
 					'<span data-jccell="' + esc(h.name) + '">' + jobCardCell(h) + "</span>",
-					h.discrepancy_found ? statusBadge(h.rectification_status || "Pending") : '<span class="muted">—</span>',
+					'<span data-rectcell="' + esc(h.name) + '">' + (h.discrepancy_found
+						? statusBadge(h.rectification_status || "Pending") : '<span class="muted">—</span>') + "</span>",
 					'<a class="btn btn--outline btn--sm" href="/a3-workshop/vehicle-history-handover?handover=' +
 						encodeURIComponent(h.name) + '">View</a> ' +
 					'<button type="button" class="btn btn--outline btn--sm" data-cmp="' + esc(h.name) + '"><i class="fa-solid fa-images"></i> Damages</button>'
@@ -472,18 +544,27 @@
 					}
 				}
 
+				// Every card raised for the handover, each with whose damage it
+				// repairs. There is no button here: cards are raised per
+				// responsible party from the Damages popup.
 				var jcc = document.querySelector('[data-jccell="' + cssEsc(n) + '"]');
-				if (!jcc) return;
-				if (cards.length) {
-					jcc.innerHTML = cards.map(function (c) {
-						return '<a class="vh-jc-link" href="/a3-workshop/job-card/detail?id=' +
-							encodeURIComponent(c.name) + '">' + esc(c.name) + "</a>";
-					}).join(" ");
-				} else if (info.noted) {
-					// Damage noted but nothing raised yet — offer the same button
-					// the auto-diff path offers.
-					jcc.innerHTML = '<button type="button" class="btn btn--navy btn--sm" data-newjc="' +
-						esc(n) + '"><i class="fa-solid fa-plus"></i> Create Job Card</button>';
+				if (jcc) {
+					jcc.innerHTML = cards.length ? cards.map(function (c) {
+						return '<div class="vh-jc-item"><a class="vh-jc-link" href="/a3-workshop/job-card/detail?id=' +
+							encodeURIComponent(c.name) + '">' + esc(c.name) + "</a>" +
+							(c.groups && c.groups.length
+								? ' <span class="muted vh-jc-for">· ' + esc(c.groups.join(", ")) + "</span>" : "") +
+							"</div>";
+					}).join("") : '<span class="muted">—</span>';
+				}
+
+				// The server's reading (handover_comparison._rectification), the same
+				// one the fleet dashboard rolls up: Rectified once every damage has a
+				// card, In Progress while some do.
+				var rc = document.querySelector('[data-rectcell="' + cssEsc(n) + '"]');
+				if (rc && info.status) {
+					rc.innerHTML = statusBadge(info.status) + (info.status === "In Progress" && info.damages
+						? ' <span class="muted vh-jc-for">' + info.repaired + " of " + info.damages + "</span>" : "");
 				}
 			});
 		}).catch(function (err) {
@@ -494,13 +575,6 @@
 	// Handover ids are safe today (HND-YYYY-#####) but the selector is built from
 	// data, so quote it rather than trusting that.
 	function cssEsc(v) { return String(v).replace(/["\\]/g, "\\$&"); }
-
-	// The card this handover would raise, shown before it exists: the Job Card
-	// page in draft mode, built from the damages and service jobs saved against
-	// the handover. It is edited and created there — this page raises nothing.
-	function newJobCardUrl(handover) {
-		return "/a3-workshop/job-card/detail?handover=" + encodeURIComponent(handover);
-	}
 
 	function renderActivities(d) {
 		document.getElementById("pane-activities").innerHTML = table(
@@ -524,23 +598,58 @@
 	// kit / technician / service ones on top of itself, and closing all of them
 	// would throw away the job card the user is part-way through describing.
 	var modalStack = [];
-	function wireModal(overlay) {
+	// One listener for the whole page, closing the topmost dialog only. One per
+	// dialog would each check "am I on top?" in turn, and the dialog underneath
+	// would find itself on top the moment the one above had closed.
+	document.addEventListener("keydown", function (e) {
+		if (e.key === "Escape" && modalStack.length) modalStack[modalStack.length - 1].vhClose();
+	});
+	function wireModal(overlay, onClose) {
 		function close() {
 			overlay.classList.remove("is-open");
 			modalStack = modalStack.filter(function (o) { return o !== overlay; });
+			if (onClose) onClose();
 		}
 		function open() {
 			overlay.classList.add("is-open");
 			modalStack = modalStack.filter(function (o) { return o !== overlay; });
 			modalStack.push(overlay);
 		}
+		overlay.vhClose = close;
 		overlay.querySelectorAll("[data-close]").forEach(function (b) { b.addEventListener("click", close); });
 		overlay.addEventListener("click", function (e) { if (e.target === overlay) close(); });
-		document.addEventListener("keydown", function (e) {
-			if (e.key === "Escape" && modalStack[modalStack.length - 1] === overlay) close();
-		});
 		return { open: open, close: close, el: overlay };
 	}
+	// ------------------------------------------------- message / confirm dialog
+	// The page's own, in place of the browser's alert() and confirm(): same look
+	// as every other popup here, and stacked above whichever one asked.
+	var dlgResolve = null;
+	var dlgModal = wireModal(document.getElementById("vh-dialog"), function () {
+		var r = dlgResolve; dlgResolve = null;
+		if (r) r(false);
+	});
+	function vhDialog(o) {
+		document.getElementById("vh-dialog-title").textContent = o.title || "";
+		document.getElementById("vh-dialog-body").innerHTML = o.html || "";
+		var ok = document.getElementById("vh-dialog-ok"), cancel = document.getElementById("vh-dialog-cancel");
+		ok.innerHTML = o.ok || "OK";
+		cancel.textContent = o.cancel || "Cancel";
+		cancel.style.display = o.cancel === false ? "none" : "";
+		return new Promise(function (resolve) {
+			if (dlgResolve) dlgResolve(false);
+			dlgResolve = resolve;
+			dlgModal.open();
+			ok.focus();
+		});
+	}
+	function vhAlert(title, html) { return vhDialog({ title: title, html: html, cancel: false }); }
+	function errText(err) { return esc(err && err.message ? err.message : err); }
+	document.getElementById("vh-dialog-ok").addEventListener("click", function () {
+		var r = dlgResolve; dlgResolve = null;
+		dlgModal.close();
+		if (r) r(true);
+	});
+
 	// ------------------------------------------------- damage comparison
 	// This handover's photographs beside the previous one's, slot for slot, with
 	// the damages found written down underneath. Kept apart from the auto-diff
@@ -548,7 +657,44 @@
 	// lines, this is a person comparing pictures.
 	var cmpModal = wireModal(document.getElementById("vh-cmp-modal"));
 	var cmpHandover = null, cmpOpts = { areas: [], damage_types: [], severities: [] };
-	var cmpJobCard = "";   // a card already raised for this handover, if any
+	var cmpDrivers = [];   // drivers a damage can be held against, {name, label}
+	var cmpFilter = null;  // the party shown: null = everyone, else a respKey()
+	var cmpNotice = "";    // the confirmation of the card just raised
+	var cmpNewRef = 0;     // numbers damage rows added in this popup
+
+	// A damage row's responsible party as one value: "Company", "Driver:<id>",
+	// or "" for nobody yet. It is what the filter chips group by, and each group
+	// gets a job card of its own.
+	function respKey(party, driver) {
+		if (party === "Driver" && driver) return "Driver:" + driver;
+		return party === "Company" ? "Company" : "";
+	}
+	function respSplit(key) {
+		if (key === "Company") return { party: "Company", driver: "" };
+		if (key && key.indexOf("Driver:") === 0) return { party: "Driver", driver: key.slice(7) };
+		return { party: "", driver: "" };
+	}
+	function respLabel(key) {
+		if (key && key.indexOf("Driver:") === 0) {
+			var id = key.slice(7);
+			var hit = cmpDrivers.filter(function (d) { return d.name === id; })[0];
+			return hit ? hit.label : id;
+		}
+		return key === "Company" ? "Company" : "Not assigned";
+	}
+	function respOptions(sel) {
+		return '<option value="">Not assigned</option>' +
+			'<option value="Company"' + (sel === "Company" ? " selected" : "") + ">Company</option>" +
+			cmpDrivers.map(function (d) {
+				var k = "Driver:" + d.name;
+				return '<option value="' + escAttr(k) + '"' + (k === sel ? " selected" : "") + ">" +
+					esc(d.label) + "</option>";
+			}).join("");
+	}
+	function jcLink(name) {
+		return '<a class="vh-jc-link" href="/a3-workshop/job-card/detail?id=' + encodeURIComponent(name) +
+			'" target="_blank" rel="noopener">' + esc(name) + "</a>";
+	}
 
 	function opts(list, sel) {
 		return '<option value=""></option>' + list.map(function (o) {
@@ -613,7 +759,8 @@
 	// time a comparison is opened. Everything the popup needs to build a card --
 	// job types, their services, the labor standard each service carries, and the
 	// technicians a row can be assigned to.
-	var JOBCARD_TYPES = [], JOB_SERVICES = [], EMPLOYEES = [], UOMS = [];
+	var JOBCARD_TYPES = [], JOB_SERVICES = [], EMPLOYEES = [], UOMS = [], PART_GROUPS = [];
+	var SUPPLIERS = [], SKILLS = [];
 	var LTS_BY_SERVICE = {}, LTS_LABEL = {};
 	var optionsLoaded = null;
 	function loadJobCardOptions() {
@@ -625,6 +772,9 @@
 				JOB_SERVICES = o.job_type_services || [];
 				EMPLOYEES = o.service_advisors || [];
 				UOMS = o.uoms || [];
+				PART_GROUPS = o.part_groups || [];
+				SUPPLIERS = o.suppliers || [];
+				SKILLS = o.skill_levels || [];
 				LTS_BY_SERVICE = {}; LTS_LABEL = {};
 				(o.labor_standards || []).forEach(function (s) {
 					if (s.operation_name && !LTS_BY_SERVICE[s.operation_name]) LTS_BY_SERVICE[s.operation_name] = s.name;
@@ -640,72 +790,196 @@
 		return optionsLoaded;
 	}
 
+	// `d.key` presets who is responsible (Add Damage under a party's filter);
+	// otherwise it comes from the row's own party and driver. A row a job card
+	// already repairs is shown locked, with its card.
 	function cmpAddRow(d) {
 		d = d || {};
 		var tb = document.getElementById("vh-cmp-dmg");
 		if (!tb) return;
+		var key = d.key != null ? d.key : respKey(d.responsible_party, d.responsible_driver);
+		if (key.indexOf("Driver:") === 0 && !cmpDrivers.some(function (x) { return "Driver:" + x.name === key; })) {
+			cmpDrivers.push({ name: key.slice(7), label: d.responsible || key.slice(7) });
+		}
+		var locked = !!d.job_card, dis = locked ? " disabled" : "";
 		var tr = document.createElement("tr");
+		// The row's id, which the service rows point at; a new row gets a
+		// temporary one the server swaps for a real id on save.
+		tr.dataset.ref = d.ref || "new:" + (++cmpNewRef);
+		tr.dataset.sourceKey = d.source_key || "";
+		tr.dataset.jobCard = d.job_card || "";
+		if (locked) tr.className = "is-locked";
 		tr.innerHTML =
-			'<td><select class="c-area">' + opts(cmpOpts.areas, d.area) + "</select></td>" +
-			'<td><select class="c-type">' + opts(cmpOpts.damage_types, d.damage_type) + "</select></td>" +
-			'<td><select class="c-sev">' + opts(cmpOpts.severities, d.severity) + "</select></td>" +
-			'<td><input class="c-desc" placeholder="What you can see" value="' + esc(d.description || "") + '"></td>' +
-			'<td style="width:32px"><button type="button" class="vh-cmp-rm" title="Remove"><i class="fa-solid fa-xmark"></i></button></td>';
-		tr.querySelector(".vh-cmp-rm").addEventListener("click", function () { tr.remove(); cmpSync(); });
+			'<td><select class="c-area"' + dis + ">" + opts(cmpOpts.areas, d.area) + "</select></td>" +
+			'<td><select class="c-type"' + dis + ">" + opts(cmpOpts.damage_types, d.damage_type) + "</select></td>" +
+			'<td><select class="c-sev"' + dis + ">" + opts(cmpOpts.severities, d.severity) + "</select></td>" +
+			'<td><input class="c-desc" placeholder="What you can see" value="' + esc(d.description || "") + '"' + dis + "></td>" +
+			'<td><select class="c-resp"' + dis + ">" + respOptions(key) + "</select></td>" +
+			"<td>" + (locked ? jcLink(d.job_card) : '<span class="muted">—</span>') + "</td>" +
+			'<td style="width:32px">' + (locked ? "" :
+				'<button type="button" class="vh-cmp-rm" title="Remove"><i class="fa-solid fa-xmark"></i></button>') + "</td>";
+		if (!locked) tr.querySelector(".vh-cmp-rm").addEventListener("click", function () { tr.remove(); cmpSync(); });
 		tb.appendChild(tr);
 		cmpSync();
+	}
+
+	function rowKey(tr) { return (tr.querySelector(".c-resp") || {}).value || ""; }
+	function rowFilled(tr) {
+		return !!((tr.querySelector(".c-area") || {}).value && (tr.querySelector(".c-type") || {}).value);
 	}
 
 	function cmpRows() {
 		var out = [];
 		document.querySelectorAll("#vh-cmp-dmg tr").forEach(function (tr) {
-			var area = (tr.querySelector(".c-area") || {}).value || "";
-			var type = (tr.querySelector(".c-type") || {}).value || "";
-			if (!area || !type) return;
+			if (!rowFilled(tr)) return;
+			var who = respSplit(rowKey(tr));
 			out.push({
-				area: area, damage_type: type,
+				area: tr.querySelector(".c-area").value,
+				damage_type: tr.querySelector(".c-type").value,
 				severity: (tr.querySelector(".c-sev") || {}).value || "Minor",
 				description: (tr.querySelector(".c-desc") || {}).value || "",
+				responsible_party: who.party,
+				responsible_driver: who.driver,
+				ref: tr.dataset.ref,
+				// Which diff line the row came from, and the card repairing it —
+				// the server keeps a carded row as stored whatever is sent here.
+				source_key: tr.dataset.sourceKey || "",
+				job_card: tr.dataset.jobCard || ""
 			});
 		});
 		return out;
 	}
 
+	// One entry per party the filled rows are held against, in the order they
+	// first appear with "Not assigned" last: how many rows, and how many still
+	// have no job card.
+	function cmpGroups() {
+		var groups = [], by = {};
+		document.querySelectorAll("#vh-cmp-dmg tr").forEach(function (tr) {
+			if (!rowFilled(tr)) return;
+			var key = rowKey(tr);
+			if (!by[key]) { by[key] = { key: key, total: 0, open: 0 }; groups.push(by[key]); }
+			by[key].total++;
+			if (!tr.dataset.jobCard) by[key].open++;
+		});
+		return groups.filter(function (g) { return g.key; }).concat(groups.filter(function (g) { return !g.key; }));
+	}
+
+	function renderRespChips(groups) {
+		var box = document.getElementById("vh-resp-chips");
+		if (!box) return;
+		if (!groups.length) { box.innerHTML = ""; return; }
+		var total = 0, open = 0;
+		groups.forEach(function (g) { total += g.total; open += g.open; });
+		function chip(key, label, n, left) {
+			var icon = key === "Company" ? "fa-building" : (key && key !== "*" ? "fa-user" : "");
+			return '<button type="button" class="vh-resp-chip' +
+				((key === "*" ? cmpFilter === null : key === cmpFilter) ? " is-active" : "") +
+				'" data-resp="' + escAttr(key) + '">' +
+				(icon ? '<i class="fa-solid ' + icon + '"></i>' : "") + esc(label) +
+				(left && key !== "*" ? ' <span class="open">' + left + " open</span>"
+					: ' <span class="n">' + n + "</span>" + (left ? "" :
+						' <i class="fa-solid fa-circle-check done" title="Every damage has a job card"></i>')) +
+				"</button>";
+		}
+		box.innerHTML = chip("*", "All", total, open) + groups.map(function (g) {
+			return chip(g.key, respLabel(g.key), g.total, g.open);
+		}).join("");
+	}
+
+	function applyRespFilter() {
+		document.querySelectorAll("#vh-cmp-dmg tr").forEach(function (tr) {
+			tr.style.display = cmpFilter === null || rowKey(tr) === cmpFilter ? "" : "none";
+		});
+	}
+
+	// The footer follows the filter: a party with damage still open gets its
+	// Create Job Card button, "All" gets one for every open damage on a single
+	// card, and once every damage has a card the handover is simply Rectified —
+	// nothing is left to raise.
+	function renderCreateState(groups) {
+		var btn = document.getElementById("vh-cmp-create");
+		var msg = document.getElementById("vh-cmp-msg");
+		var total = 0, open = 0;
+		groups.forEach(function (g) { total += g.total; open += g.open; });
+		var sel = cmpFilter === null ? null : groups.filter(function (g) { return g.key === cmpFilter; })[0];
+		// Damage held against nobody has no card of its own, and holds up the
+		// one for all of it until somebody is named.
+		var unassigned = groups.some(function (g) { return !g.key && g.open; });
+		var canAll = cmpFilter === null && open > 0 && !unassigned;
+		var canCreate = canAll || !!(sel && sel.key && sel.open);
+
+		btn.style.display = canCreate ? "" : "none";
+		if (canCreate) {
+			btn.innerHTML = '<i class="fa-solid fa-plus"></i> Create Job Card — ' +
+				(canAll ? "All (" + open + ")" : esc(respLabel(sel.key)) + " (" + sel.open + ")");
+		}
+		// Nothing left to plan once every damage has its card.
+		var sec = document.getElementById("vh-svc-sec");
+		if (sec) sec.style.display = total && !open ? "none" : "";
+		var note = document.getElementById("vh-svc-note");
+		if (note) {
+			note.innerHTML = canAll
+				? "One row per damage: pick its service type, then the service / task. They all go on one " +
+				  "job card — or pick whose damage above for a card of its own."
+				: canCreate
+				? "The repair for <b>" + esc(respLabel(sel.key)) + "</b>’s damage — these go on their job card."
+				: "One row per damage: pick its service type, then the service / task. " +
+				  "Pick whose damage above to raise their job card.";
+		}
+
+		var state = "";
+		if (total && !open) {
+			state = '<span class="badge badge--success">Rectified</span> Every damage on this handover has a job card.';
+		} else if (sel && !sel.key && sel.open) {
+			state = "Set who is responsible for these damages to raise their job card.";
+		} else if (sel && !sel.open) {
+			state = "Every damage held against " + esc(respLabel(sel.key)) + " has a job card.";
+		} else if (open && !sel && unassigned) {
+			state = "Set who is responsible for every damage to raise one job card for all of it — or pick a party.";
+		} else if (open && !sel) {
+			state = "One job card for all of it — or pick whose damage to raise a card of its own.";
+		}
+		msg.innerHTML = [cmpNotice, state].filter(Boolean).join(" ");
+	}
+
 	// ------------------------------------------------- service jobs
-	// The Service Jobs step of the job-card wizard, inside the popup: job types
-	// on the left, the service rows they allow on the right, each row able to
-	// pull its kit components. What is entered here is what the card is created
-	// with -- there is no second screen to finish it on.
-	var jtSelected = [];                            // ticked Jobcard Type names
+	// The repair, planned damage by damage: each row names the issue it fixes,
+	// then its service type and the service / task under that type, each able to
+	// pull its kit components. Every open damage gets a row of its own, and a
+	// party's job card takes the rows planned against that party's damage.
 	var kitLabor = [], kitParts = [], kitSublet = []; // committed kit lines
 
-	function jtBody() { return document.getElementById("vh-jt-list"); }
 	function svcBody() { return document.getElementById("vh-svc-body"); }
+	function svcRows() { return svcBody() ? Array.prototype.slice.call(svcBody().children) : []; }
+	function dmgRows() { return Array.prototype.slice.call(document.querySelectorAll("#vh-cmp-dmg tr")); }
+	function dmgRow(ref) {
+		return ref ? dmgRows().filter(function (tr) { return tr.dataset.ref === ref; })[0] : null;
+	}
+	function svcIssue(tr) { return (tr.querySelector(".vh-issue") || {}).value || ""; }
 
-	function renderJobTypes() {
-		var box = jtBody(); if (!box) return;
-		var q = ((document.getElementById("vh-jt-search") || {}).value || "").trim().toLowerCase();
-		// A ticked type stays visible whatever the search says — a selection the
-		// user cannot see is one they will create a card with unintentionally.
-		var shown = JOBCARD_TYPES.filter(function (t) {
-			return jtSelected.indexOf(t.name) >= 0 || !q ||
-				((t.type_name || t.name) + " " + (t.description || "")).toLowerCase().indexOf(q) >= 0;
-		});
-		box.innerHTML = shown.map(function (t) {
-			var on = jtSelected.indexOf(t.name) >= 0;
-			return '<div class="vh-jt' + (on ? " is-active" : "") + '" data-jt="' + escAttr(t.name) + '">' +
-				'<i class="fa-solid ' + escAttr(t.icon || "fa-wrench") + '"></i>' +
-				"<span>" + esc(t.type_name || t.name) + "</span>" +
-				'<i class="fa-solid fa-check tick"></i></div>';
-		}).join("") || '<div class="jc-ac-empty">' +
-			(JOBCARD_TYPES.length ? "No job types match." : "No job card types configured.") + "</div>";
-		var hint = document.getElementById("vh-jt-hint");
-		if (hint) hint.textContent = jtSelected.length ? jtSelected.length + " selected" : "Select one or more";
+	// "Bonnet — long scratch": where the damage is, then what was written about
+	// it (or its type when nothing was).
+	function issueLabel(tr) {
+		var area = (tr.querySelector(".c-area") || {}).value || "";
+		var what = ((tr.querySelector(".c-desc") || {}).value || "").trim() ||
+			(tr.querySelector(".c-type") || {}).value || "";
+		return [area, what].filter(Boolean).join(" — ") || "New damage";
+	}
+	// The damage a row can be planned against: any without a job card yet.
+	function issueOptions(sel) {
+		return '<option value="">— pick the damage —</option>' + dmgRows().filter(function (tr) {
+			return !tr.dataset.jobCard;
+		}).map(function (tr) {
+			return '<option value="' + escAttr(tr.dataset.ref) + '"' + (tr.dataset.ref === sel ? " selected" : "") +
+				">" + esc(issueLabel(tr)) + "</option>";
+		}).join("");
 	}
 
 	function jobTypeOptions(sel) {
-		return '<option value="">— select —</option>' + jtSelected.map(function (t) {
-			return "<option" + (t === sel ? " selected" : "") + ">" + esc(t) + "</option>";
+		return '<option value="">— select —</option>' + JOBCARD_TYPES.map(function (t) {
+			return '<option value="' + escAttr(t.name) + '"' + (t.name === sel ? " selected" : "") + ">" +
+				esc(t.type_name || t.name) + "</option>";
 		}).join("");
 	}
 	function technicianOptions(sel) {
@@ -727,13 +1001,15 @@
 		input.classList.toggle("is-unsaved", !!input.value.trim() && !hidden.value);
 	}
 
-	function addServiceRow(v) {
+	// `quiet` skips the redraw, for rows laid out by cmpSync itself.
+	function addServiceRow(v, quiet) {
 		v = v || {};
 		var tb = svcBody(); if (!tb) return;
 		var tr = document.createElement("tr");
 		tr.dataset.labour = v.labour_service_code || "";
 		tr.innerHTML =
-			'<td><select class="vh-jt-sel">' + jobTypeOptions(v.jobtype || jtSelected[0] || "") + "</select></td>" +
+			'<td><select class="vh-issue">' + issueOptions(v.damage || "") + "</select></td>" +
+			'<td><select class="vh-jt-sel">' + jobTypeOptions(v.jobtype || "") + "</select></td>" +
 			'<td><div class="vh-svc-combo">' +
 				'<input type="text" class="svc-input" placeholder="Type a service…" autocomplete="off" value="' +
 				escAttr(serviceLabel(v.service || "")) + '">' +
@@ -752,7 +1028,39 @@
 		tb.appendChild(tr);
 		renderLaborCode(tr);
 		attachServiceAutocomplete(tr);
-		cmpSync();
+		if (!quiet) cmpSync();
+	}
+
+	// Keep the service rows in step with the damage: rows for damage that has
+	// gone, or now has its card, leave; every open damage has at least one row;
+	// the issue lists follow edits to the damage; and a party's filter shows
+	// only the rows planned against that party's damage.
+	function syncServiceRows() {
+		if (!svcBody()) return;
+		svcRows().forEach(function (tr) {
+			var ref = svcIssue(tr), dmg = dmgRow(ref);
+			if (ref && (!dmg || dmg.dataset.jobCard)) {
+				var std = tr.dataset.labour || "";
+				tr.remove();
+				cleanupKitForStandard(std);
+			}
+		});
+		dmgRows().forEach(function (dmg) {
+			if (dmg.dataset.jobCard || !rowFilled(dmg)) return;
+			var planned = svcRows().some(function (tr) { return svcIssue(tr) === dmg.dataset.ref; });
+			if (!planned) addServiceRow({ damage: dmg.dataset.ref }, true);
+		});
+		svcRows().forEach(function (tr) {
+			var sel = tr.querySelector(".vh-issue"), v = sel.value;
+			sel.innerHTML = issueOptions(v);
+			sel.title = v ? sel.options[sel.selectedIndex].text : "";   // the cell cuts it short
+			var dmg = dmgRow(v);
+			tr.style.display = cmpFilter === null || (dmg && rowKey(dmg) === cmpFilter) ? "" : "none";
+		});
+	}
+	// The rows a Create Job Card would take: those showing under the filter.
+	function shownServiceRows() {
+		return svcRows().filter(function (tr) { return tr.style.display !== "none"; });
 	}
 
 	function serviceMatches(jobtype, q) {
@@ -792,12 +1100,16 @@
 			markSvcUnsaved(tr);
 		});
 	}
+	// A job card holds each service once, so a service may repeat across
+	// parties — their cards are separate — but not within one party's damage.
+	// Returns the row already holding it for the same party, if any.
 	function serviceAlreadyUsed(service, exceptTr) {
-		if (!service || !svcBody()) return false;
-		return Array.prototype.some.call(svcBody().children, function (tr) {
-			var sv = svcHidden(tr);
-			return tr !== exceptTr && sv && sv.value === service;
-		});
+		if (!service) return null;
+		var mine = dmgRow(svcIssue(exceptTr)), party = mine ? rowKey(mine) : null;
+		return svcRows().filter(function (tr) {
+			var sv = svcHidden(tr), dmg = dmgRow(svcIssue(tr));
+			return tr !== exceptTr && sv && sv.value === service && dmg && rowKey(dmg) === party;
+		})[0] || null;
 	}
 	function clearRowService(tr, keepText) {
 		var hidden = svcHidden(tr), input = svcInput(tr);
@@ -816,8 +1128,12 @@
 		var hidden = svcHidden(tr), input = svcInput(tr);
 		var prev = tr.dataset.labour || "";
 		label = label || serviceLabel(name);
-		if (name && serviceAlreadyUsed(name, tr)) {
-			alert("“" + label + "” is already added. Each service can only be added once.");
+		var twin = name && serviceAlreadyUsed(name, tr);
+		if (twin) {
+			var dmg = dmgRow(svcIssue(twin));
+			vhAlert("Service already planned", "<b>" + esc(label) + "</b> is already planned for <b>" +
+				esc(respLabel(rowKey(dmg))) + "</b>’s damage (" + esc(issueLabel(dmg)) + ").<br><br>" +
+				"A job card holds each service once — describe both damages on that row.");
 			if (input) input.value = "";
 			if (hidden) hidden.value = "";
 			setRowLaborCode(tr, "");
@@ -855,14 +1171,15 @@
 		kitLabor = keep(kitLabor); kitParts = keep(kitParts); kitSublet = keep(kitSublet);
 		renderKitSummary();
 	}
-	function cmpServiceRows() {
-		var out = [], tb = svcBody();
-		if (!tb) return out;
-		Array.prototype.forEach.call(tb.children, function (tr) {
+	// `rows` limits it to some service rows (a party's); all of them otherwise.
+	function cmpServiceRows(rows) {
+		var out = [];
+		(rows || svcRows()).forEach(function (tr) {
 			var jt = (tr.querySelector(".vh-jt-sel") || {}).value || "";
 			var sv = (svcHidden(tr) || {}).value || "";
 			if (!jt && !sv) return;
 			out.push({
+				damage: svcIssue(tr),
 				jobtype: jt, service: sv,
 				labour_service_code: tr.dataset.labour || "",
 				description: (tr.querySelector(".vh-desc") || {}).value || "",
@@ -872,27 +1189,56 @@
 		});
 		return out;
 	}
+	// Kit belongs to a service through its standard, as on the job card; kit
+	// typed for a service with no standard goes wherever such a service goes.
+	function kitFor(services) {
+		var std = {}, loose = false;
+		services.forEach(function (s) { if (s.labour_service_code) std[s.labour_service_code] = 1; else loose = true; });
+		function used(r) { return r.source_standard ? !!std[r.source_standard] : loose; }
+		return { labor: kitLabor.filter(used), parts: kitParts.filter(used), sublet: kitSublet.filter(used) };
+	}
+	// The tally follows the filter: under one party it is that party's card.
 	function renderKitSummary() {
 		var el = document.getElementById("vh-kit-sum"); if (!el) return;
-		var n = kitLabor.length + kitParts.length + kitSublet.length;
+		var k = cmpFilter === null ? { labor: kitLabor, parts: kitParts, sublet: kitSublet }
+			: kitFor(cmpServiceRows(shownServiceRows()));
+		var n = k.labor.length + k.parts.length + k.sublet.length;
 		el.innerHTML = n
-			? '<i class="fa-solid fa-box"></i> Kit components on this job: <b>' + kitLabor.length +
-			  "</b> labor · <b>" + kitParts.length + "</b> parts · <b>" + kitSublet.length + "</b> sublet"
+			? '<i class="fa-solid fa-box"></i> Kit components' + (cmpFilter === null ? "" : " on this job card") +
+			  ": <b>" + k.labor.length + "</b> labor · <b>" + k.parts.length + "</b> parts · <b>" +
+			  k.sublet.length + "</b> sublet"
 			: '<i class="fa-solid fa-box"></i> No kit components yet — pick a service, or click its <b>+ Kit</b> chip.';
 	}
 
-	// Everything in this popup is saved by one button, so there is nothing to
-	// enable or disable — only the kit tally under the table to keep current.
-	function cmpSync() { renderKitSummary(); }
+	// Redrawn after anything that changes which party a row belongs to, or
+	// whether it is filled in: the chips, which rows show, and the footer.
+	// While the rows are being laid out the party asked for may not have
+	// arrived yet, so the filter is only let go of once they all have.
+	var cmpLoading = false;
+	function cmpSync() {
+		if (cmpLoading || !document.getElementById("vh-cmp-dmg")) return;
+		var groups = cmpGroups();
+		if (cmpFilter !== null && !groups.some(function (g) { return g.key === cmpFilter; })) cmpFilter = null;
+		renderRespChips(groups);
+		applyRespFilter();
+		syncServiceRows();
+		renderKitSummary();
+		renderCreateState(groups);
+	}
 
-	function openComparison(handover) {
+	// `after` re-opens on the party that was showing, with a confirmation of the
+	// card just raised for it.
+	function openComparison(handover, after) {
+		after = after || {};
 		cmpHandover = handover;
-		cmpJobCard = "";
-		jtSelected = [];
+		cmpFilter = after.filter !== undefined ? after.filter : null;
+		cmpNotice = after.notice || "";
+		cmpDrivers = [];
 		kitLabor = []; kitParts = []; kitSublet = [];
 		var body = document.getElementById("vh-cmp-body");
 		body.innerHTML = '<div class="empty">Loading…</div>';
 		document.getElementById("vh-cmp-msg").textContent = "";
+		document.getElementById("vh-cmp-create").style.display = "none";
 		cmpModal.open();
 
 		// Masters alongside the comparison: the Service Jobs table cannot be
@@ -903,6 +1249,7 @@
 		]).then(function (r) { return r[0]; })
 			.then(function (c) {
 				cmpOpts = { areas: c.areas, damage_types: c.damage_types, severities: c.severities };
+				cmpDrivers = (c.drivers || []).slice();
 				document.getElementById("vh-cmp-sub").textContent = c.previous
 					? c.handover + " (" + c.date + ")  vs  " + c.previous + " (" + c.previous_date + ")"
 					: c.handover + " (" + c.date + ")  —  no earlier handover to compare against";
@@ -940,52 +1287,45 @@
 						? '<div class="vh-cmp-note"><i class="fa-solid fa-circle-info"></i> <b>' +
 						  c.carried_open + "</b> older damage" + (c.carried_open === 1 ? "" : "s") +
 						  " still open on this vehicle " + (c.carried_open === 1 ? "is" : "are") +
-						  " not listed here, but a job card raised now closes " +
-						  (c.carried_open === 1 ? "it" : "them") + " too.</div>"
+						  " not listed here — " + (c.carried_open === 1 ? "its" : "their") +
+						  " job card is raised from the Damages of the handover that first found " +
+						  (c.carried_open === 1 ? "it" : "them") + ".</div>"
 						: "") +
-					'<table class="vh-cmp-tbl"><thead><tr><th style="width:22%">Area</th>' +
-					'<th style="width:18%">Damage Type</th><th style="width:15%">Severity</th>' +
-					"<th>Description</th><th></th></tr></thead>" +
+					'<div class="vh-resp-chips" id="vh-resp-chips"></div>' +
+					'<table class="vh-cmp-tbl"><thead><tr><th style="width:17%">Area</th>' +
+					'<th style="width:13%">Damage Type</th><th style="width:11%">Severity</th>' +
+					'<th>Description</th><th style="width:17%">Responsible</th>' +
+					'<th style="width:12%">Job Card</th><th></th></tr></thead>' +
 					'<tbody id="vh-cmp-dmg"></tbody></table></div>';
 
-				// Service Jobs — what will be repaired, and by whom.
-				html += '<div class="vh-cmp-sec"><h4 class="has-btn">Service jobs' +
+				// Service Jobs — the repair for each damage, and by whom. A party's
+				// job card takes the rows planned against that party's damage.
+				html += '<div class="vh-cmp-sec" id="vh-svc-sec"><h4 class="has-btn">Service jobs' +
 					'<button type="button" class="btn btn--outline btn--sm vh-h4-btn" id="vh-svc-add">' +
 					'<i class="fa-solid fa-plus"></i> Add</button></h4>' +
-					'<div class="vh-jobs"><div>' +
-						'<input class="vh-jt-search" id="vh-jt-search" placeholder="Search job types…" autocomplete="off">' +
-						'<div class="jc-ac-sub" id="vh-jt-hint" style="margin-bottom:6px">Select one or more</div>' +
-						'<div class="vh-jt-list" id="vh-jt-list"></div>' +
-					"</div><div>" +
-						'<table class="vh-cmp-tbl"><thead><tr><th style="width:17%">Job Type</th>' +
-						'<th style="width:20%">Service / Task</th><th style="width:16%">Labor Code</th>' +
-						"<th>Description</th><th style=\"width:18%\">Technician</th>" +
-						'<th style="width:58px">Hrs</th><th></th></tr></thead>' +
-						'<tbody id="vh-svc-body"></tbody></table>' +
-						'<div class="vh-kit-sum" id="vh-kit-sum"></div>' +
-					"</div></div></div>";
+					'<div class="vh-cmp-note" id="vh-svc-note"></div>' +
+					'<table class="vh-cmp-tbl vh-svc-tbl"><thead><tr><th style="width:19%">Issue</th>' +
+					'<th style="width:14%">Service Type</th><th style="width:17%">Service / Task</th>' +
+					'<th style="width:11%">Labor Code</th><th>Description</th>' +
+					'<th style="width:15%">Technician</th><th style="width:58px">Hrs</th><th></th></tr></thead>' +
+					'<tbody id="vh-svc-body"></tbody></table>' +
+					'<div class="vh-kit-sum" id="vh-kit-sum"></div></div>';
 
 				body.innerHTML = html;
 
-				(c.damages || []).forEach(cmpAddRow);
+				cmpLoading = true;
+				try { (c.damages || []).forEach(cmpAddRow); } finally { cmpLoading = false; }
 
-				// The repair planned the last time this was saved. Every job type
-				// it names is ticked first, so each row's dropdown can offer it.
-				(c.services || []).forEach(function (s) {
-					if (s.jobtype && jtSelected.indexOf(s.jobtype) < 0) jtSelected.push(s.jobtype);
-				});
-				renderJobTypes();
-				(c.services || []).forEach(addServiceRow);
+				// The repair planned the last time this was saved, each row against
+				// the damage it was planned for. The damage without a row yet gets an
+				// empty one when cmpSync runs below.
+				cmpLoading = true;
+				try { (c.services || []).forEach(function (s) { addServiceRow(s, true); }); }
+				finally { cmpLoading = false; }
 				kitLabor = (c.kit_labor || []).map(function (r) { return buildKitRow("labor", r); });
 				kitParts = (c.kit_parts || []).map(function (r) { return buildKitRow("parts", r); });
 				kitSublet = (c.kit_sublet || []).map(function (r) { return buildKitRow("sublet", r); });
 				renderKitSummary();
-
-				cmpJobCard = c.job_card || "";
-				if (cmpJobCard) {
-					document.getElementById("vh-cmp-msg").innerHTML =
-						"Job card <b>" + esc(cmpJobCard) + "</b> has already been raised for this handover.";
-				}
 				cmpSync();
 			})
 			.catch(function (err) {
@@ -1005,21 +1345,21 @@
 	// The comparison body is redrawn on every open, so its controls are handled
 	// by delegation rather than bound to elements that will not survive.
 	document.getElementById("vh-cmp-body").addEventListener("click", function (e) {
-		if (e.target.closest("#vh-dmg-add")) { cmpAddRow(); return; }
-		if (e.target.closest("#vh-svc-add")) { addServiceRow(); return; }
-		var jt = e.target.closest("[data-jt]");
-		if (jt) {
-			var name = jt.getAttribute("data-jt"), i = jtSelected.indexOf(name);
-			if (i >= 0) jtSelected.splice(i, 1); else jtSelected.push(name);
-			renderJobTypes();
-			// A row whose job type was just un-ticked no longer has a valid
-			// service, so it is cleared the way the wizard clears it.
-			Array.prototype.forEach.call(svcBody() ? svcBody().children : [], function (tr) {
-				var sel = tr.querySelector(".vh-jt-sel"); if (!sel) return;
-				var v = sel.value; sel.innerHTML = jobTypeOptions(v);
-				if (v && jtSelected.indexOf(v) < 0) clearRowService(tr);
-			});
+		var chip = e.target.closest("[data-resp]");
+		if (chip) {
+			var k = chip.getAttribute("data-resp");
+			cmpFilter = k === "*" ? null : k;
 			cmpSync();
+			return;
+		}
+		// A damage added while one party is showing is that party's.
+		if (e.target.closest("#vh-dmg-add")) { cmpAddRow({ key: cmpFilter || "" }); return; }
+		// Another service for a damage: the first open one of the party showing.
+		if (e.target.closest("#vh-svc-add")) {
+			var first = dmgRows().filter(function (tr) {
+				return !tr.dataset.jobCard && rowFilled(tr) && (cmpFilter === null || rowKey(tr) === cmpFilter);
+			})[0];
+			addServiceRow({ damage: first ? first.dataset.ref : "" });
 			return;
 		}
 		var chip = e.target.closest("[data-labor-code]");
@@ -1032,12 +1372,13 @@
 		var tech = e.target.closest(".vh-tech-pick");
 		if (tech) { openTechBoard(tech.closest("tr")); }
 	});
-	document.getElementById("vh-cmp-body").addEventListener("input", function (e) {
-		if (e.target.id === "vh-jt-search") renderJobTypes();
-	});
 	// Changing a row's job type cascades: its service belonged to the old one.
+	// A damage row's area, type or party moves it between the party groups, and
+	// renames the issue its service rows show; a service row's issue moves it to
+	// that damage's party.
 	document.getElementById("vh-cmp-body").addEventListener("change", function (e) {
 		if (e.target.matches(".vh-jt-sel")) clearRowService(e.target.closest("tr"));
+		else if (e.target.matches(".c-area, .c-type, .c-desc, .c-resp, .vh-issue")) cmpSync();
 	});
 
 	// ------------------------------------------------- kit components dialog
@@ -1046,25 +1387,127 @@
 	var kitStandard = "", kitService = "", kitRow = null;
 	var KIT_ITEMS = [];
 
+	// The catalog is also where an Item's name comes from, so once it lands the
+	// kit cells drawn before it -- still showing a code -- are given their names.
 	function ensureKitItems() {
 		if (KIT_ITEMS.length) return;
 		callMethod("garagedesk.api.front_office.get_estimate_items", {
 			services: cmpServiceRows().map(function (r) { return r.service; }).filter(Boolean)
-		}).then(function (o) { o = o || {}; KIT_ITEMS = (o.mapped || []).concat(o.others || []); })
-			.catch(function () {});
+		}).then(function (o) {
+			o = o || {}; KIT_ITEMS = (o.mapped || []).concat(o.others || []);
+			relabelItemCells();
+		}).catch(function () {});
 	}
-	function attachKitItemAutocomplete(input) {
+	// A kit Item cell shows the item's name only -- the code is numbered by the
+	// Item series and means nothing to whoever fills the kit in -- and carries the
+	// code it stands for on the input.
+	function itemCellHtml(cls, code, name, placeholder) {
+		var label = name || itemNameOf(code) || code || "";
+		return '<div class="vh-svc-combo"><input class="' + cls + '" value="' + escAttr(label) +
+			'" data-code="' + escAttr(code || "") + '" data-label="' + escAttr(label) + '" placeholder="' +
+			placeholder + '" autocomplete="off"></div>';
+	}
+	function setItemCell(input, code, name) {
+		name = name || itemNameOf(code) || code || "";
+		input.value = name;
+		input.dataset.code = code || "";
+		input.dataset.label = name;
+	}
+	// The code behind a cell: the picked one while the name still reads as
+	// picked, else an item whose name (or code) is exactly what was typed.
+	function itemCodeOf(input, labour) {
+		var v = input ? input.value.trim() : "";
+		if (!v) return "";
+		if (input.dataset.code && v === input.dataset.label) return input.dataset.code;
+		var low = v.toLowerCase();
+		var hit = KIT_ITEMS.filter(function (it) {
+			if (it.is_item === 0 || (labour && it.is_stock)) return false;
+			return (it.item_name || "").toLowerCase() === low || (it.item || "").toLowerCase() === low;
+		})[0];
+		return hit ? hit.item : v;
+	}
+	// The labour line's skill is a Select on the kit row: offered as its options,
+	// plus a value a row already holds that the list has since dropped.
+	function skillOptions(sel) {
+		var list = SKILLS.slice();
+		if (sel && list.indexOf(sel) < 0) list.push(sel);
+		return '<option value="">—</option>' + list.map(function (k) {
+			return "<option" + (k === sel ? " selected" : "") + ">" + esc(k) + "</option>";
+		}).join("");
+	}
+	// The sublet vendor is a Link to Supplier, so the cell picks from the
+	// suppliers -- shown by name, the id on the input as with the Item cells --
+	// and says so when what is typed is not one: that would be dropped on save.
+	function supplierName(id) {
+		var hit = SUPPLIERS.filter(function (x) { return x.name === id; })[0];
+		return hit ? (hit.supplier_name || hit.name) : (id || "");
+	}
+	function vendorCellHtml(cls, id) {
+		var label = supplierName(id);
+		return '<div class="vh-svc-combo"><input class="' + cls + '" value="' + escAttr(label) +
+			'" data-code="' + escAttr(id || "") + '" data-label="' + escAttr(label) +
+			'" placeholder="Vendor" autocomplete="off"></div>';
+	}
+	function vendorCodeOf(input) {
+		var v = input ? input.value.trim() : "";
+		if (!v) return "";
+		if (input.dataset.code && v === input.dataset.label) return input.dataset.code;
+		var low = v.toLowerCase();
+		var hit = SUPPLIERS.filter(function (x) {
+			return (x.supplier_name || "").toLowerCase() === low || (x.name || "").toLowerCase() === low;
+		})[0];
+		return hit ? hit.name : v;
+	}
+	function markVendor(input) {
+		var v = input.value.trim(), code = vendorCodeOf(input);
+		// Nothing is flagged before the supplier list has arrived.
+		var ok = !v || !SUPPLIERS.length || SUPPLIERS.some(function (x) { return x.name === code; });
+		input.classList.toggle("is-unmatched", !ok);
+		input.title = ok ? "" : "Not a supplier — pick one from the list, or it is dropped on save.";
+	}
+	function attachVendorAutocomplete(input) {
 		attachAutocomplete(input, function (q) {
 			q = (q || "").toLowerCase();
-			return KIT_ITEMS.filter(function (it) {
+			return SUPPLIERS.filter(function (x) {
+				return !q || (x.supplier_name || "").toLowerCase().indexOf(q) >= 0 ||
+					(x.name || "").toLowerCase().indexOf(q) >= 0;
+			}).slice(0, 10).map(function (x) {
+				return { label: esc(x.supplier_name || x.name), value: x.name, name: x.supplier_name || x.name };
+			});
+		}, function (it) {
+			input.value = it.name;
+			input.dataset.code = it.value;
+			input.dataset.label = it.name;
+			markVendor(input);
+		});
+		// Checked once the cell is left, not on every keystroke of a name
+		// still being typed; after the list's own blur, so a pick counts.
+		input.addEventListener("blur", function () { setTimeout(function () { markVendor(input); }, 200); });
+		markVendor(input);
+	}
+	function relabelItemCells() {
+		document.querySelectorAll("#vh-kit-body .ke-op, #vh-kit-body .ke-item").forEach(function (input) {
+			var code = input.dataset.code, name = itemNameOf(code);
+			if (code && name && input.value === code && input.dataset.label === code) setItemCell(input, code, name);
+		});
+	}
+	function attachKitItemAutocomplete(input) {
+		attachAutocomplete(input, function (typed) {
+			var q = (typed || "").toLowerCase();
+			var rows = KIT_ITEMS.filter(function (it) {
+				// A service with no Item behind it cannot be a part.
+				if (it.is_item === 0) return false;
 				return !q || (it.item || "").toLowerCase().indexOf(q) >= 0 ||
 					(it.item_name || "").toLowerCase().indexOf(q) >= 0;
 			}).slice(0, 10).map(function (it) {
-				return { label: esc(it.item), sub: (it.item_name && it.item_name !== it.item) ? esc(it.item_name) : "",
-					value: it.item, rate: it.rate, uom: it.uom };
+				return { label: esc(it.item_name || it.item), value: it.item, name: it.item_name || it.item,
+					rate: it.rate, uom: it.uom };
 			});
+			var create = itemCreateRow(typed, "part");
+			return create ? rows.concat([create]) : rows;
 		}, function (it) {
-			input.value = it.value;
+			if (it.action === "create") { openItemDialog("part", it.typed, input); return; }
+			setItemCell(input, it.value, it.name);
 			var tr = input.closest("tr");
 			var rate = tr.querySelector(".ke-rate");
 			if (rate && it.rate && !parseFloat(rate.value)) rate.value = it.rate;
@@ -1084,27 +1527,23 @@
 	// against. A line without one is unbillable unless Workshop Settings names a
 	// Default Labour Item, so the cell offers the service (non-stock) Items.
 	function attachLabourItemAutocomplete(input) {
-		function syncName() {
-			var tr = input.closest("tr"), name = tr && tr.querySelector(".ke-opname");
-			if (name) name.textContent = itemNameOf(input.value.trim());
-		}
-		attachAutocomplete(input, function (q) {
-			q = (q || "").toLowerCase();
-			return KIT_ITEMS.filter(function (it) {
+		attachAutocomplete(input, function (typed) {
+			var q = (typed || "").toLowerCase();
+			var rows = KIT_ITEMS.filter(function (it) {
 				if (it.is_stock || it.is_item === 0) return false;
 				return !q || (it.item || "").toLowerCase().indexOf(q) >= 0 ||
 					(it.item_name || "").toLowerCase().indexOf(q) >= 0;
 			}).slice(0, 10).map(function (it) {
-				return { label: esc(it.item), sub: (it.item_name && it.item_name !== it.item) ? esc(it.item_name) : "",
-					value: it.item, rate: it.rate };
+				return { label: esc(it.item_name || it.item), value: it.item, name: it.item_name || it.item, rate: it.rate };
 			});
+			var create = itemCreateRow(typed, "labour");
+			return create ? rows.concat([create]) : rows;
 		}, function (it) {
-			input.value = it.value;
+			if (it.action === "create") { openItemDialog("labour", it.typed, input); return; }
+			setItemCell(input, it.value, it.name);
 			var rate = input.closest("tr").querySelector(".ke-rate");
 			if (rate && it.rate && !parseFloat(rate.value)) rate.value = it.rate;
-			syncName();
 		});
-		input.addEventListener("input", syncName);
 	}
 	// UOM is a Link on the kit row: anything that is not a real UOM is dropped
 	// on save, so the cell offers the list rather than taking free text.
@@ -1129,22 +1568,21 @@
 	function kitEditRow(group, r) {
 		r = r || {};
 		if (group === "labor") return "<tr>" +
-			'<td><div class="vh-svc-combo"><input class="ke-op" value="' + escAttr(r.operation || "") + '" placeholder="Labour item" autocomplete="off"></div></td>' +
-			'<td><span class="ke-opname muted">' + esc(itemNameOf(r.operation)) + "</span></td>" +
+			"<td>" + itemCellHtml("ke-op", r.operation, "", "Labour item") + "</td>" +
 			'<td><input class="ke-desc" value="' + escAttr(r.description || "") + '" placeholder="Description"></td>' +
 			'<td><input class="ke-hours" type="number" min="0" step="0.1" value="' + (r.hours != null ? r.hours : 0) + '"></td>' +
 			'<td><input class="ke-rate" type="number" min="0" step="0.01" value="' + (r.rate != null ? r.rate : 0) + '"></td>' +
-			'<td><input class="ke-skill" value="' + escAttr(r.skill_level || "") + '" placeholder="Skill"></td>' +
+			'<td><select class="ke-skill">' + skillOptions(r.skill_level || "") + "</select></td>" +
 			'<td style="width:32px"><button type="button" class="vh-cmp-rm" data-kdel><i class="fa-solid fa-xmark"></i></button></td></tr>';
 		if (group === "parts") return "<tr>" +
-			'<td><div class="vh-svc-combo"><input class="ke-item" value="' + escAttr(r.item_code || "") + '" placeholder="Item code" autocomplete="off"></div></td>' +
+			"<td>" + itemCellHtml("ke-item", r.item_code, r.item_name, "Item") + "</td>" +
 			'<td><input class="ke-qty" type="number" min="0" step="1" value="' + (r.qty != null ? r.qty : 1) + '"></td>' +
 			'<td><div class="vh-svc-combo"><input class="ke-uom" value="' + escAttr(r.uom || "") + '" placeholder="UOM" autocomplete="off"></div></td>' +
 			'<td><input class="ke-rate" type="number" min="0" step="0.01" value="' + (r.rate != null ? r.rate : 0) + '"></td>' +
 			'<td style="width:32px"><button type="button" class="vh-cmp-rm" data-kdel><i class="fa-solid fa-xmark"></i></button></td></tr>';
 		return "<tr>" +
 			'<td><input class="ke-desc" value="' + escAttr(r.service_description || "") + '" placeholder="Service"></td>' +
-			'<td><input class="ke-vendor" value="' + escAttr(r.vendor || "") + '" placeholder="Vendor"></td>' +
+			"<td>" + vendorCellHtml("ke-vendor", r.vendor) + "</td>" +
 			'<td><input class="ke-cost" type="number" min="0" step="0.01" value="' + (r.cost != null ? r.cost : 0) + '"></td>' +
 			'<td><input class="ke-markup" type="number" min="0" step="1" value="' + (r.markup_pct != null ? r.markup_pct : 0) + '"></td>' +
 			'<td style="width:32px"><button type="button" class="vh-cmp-rm" data-kdel><i class="fa-solid fa-xmark"></i></button></td></tr>';
@@ -1162,12 +1600,13 @@
 	function renderKitBody() {
 		document.getElementById("vh-kit-body").innerHTML =
 			'<div class="kit-none" style="margin-bottom:10px">Kit items for this service — edit quantities and rates, add rows if needed, then “Add to Job”.</div>' +
-			kitSection("labor", "Kit Labor", ["Item", "Item Name", "Description", "Hours", "Rate", "Skill"]) +
+			kitSection("labor", "Kit Labor", ["Item", "Description", "Hours", "Rate", "Skill"]) +
 			kitSection("parts", "Kit Parts", ["Item", "Qty", "UOM", "Rate"]) +
 			kitSection("sublet", "Kit Sublet", ["Service", "Vendor", "Cost", "Markup %"]);
 		document.querySelectorAll("#vh-kit-body .ke-item").forEach(attachKitItemAutocomplete);
 		document.querySelectorAll("#vh-kit-body .ke-uom").forEach(attachUomAutocomplete);
 		document.querySelectorAll("#vh-kit-body .ke-op").forEach(attachLabourItemAutocomplete);
+		document.querySelectorAll("#vh-kit-body .ke-vendor").forEach(attachVendorAutocomplete);
 	}
 	// Works with or without a Labor Time Standard: with one the tables open
 	// pre-filled from it, without one they open empty for manual entry.
@@ -1204,6 +1643,8 @@
 				attachUomAutocomplete(tb.lastElementChild.querySelector(".ke-uom"));
 			} else if (add.dataset.kadd === "labor") {
 				attachLabourItemAutocomplete(tb.lastElementChild.querySelector(".ke-op"));
+			} else {
+				attachVendorAutocomplete(tb.lastElementChild.querySelector(".ke-vendor"));
 			}
 			return;
 		}
@@ -1215,9 +1656,12 @@
 		if (!tb) return [];
 		return Array.prototype.map.call(tb.children, function (tr) {
 			function v(sel) { var el = tr.querySelector(sel); return el ? el.value : ""; }
-			if (group === "labor") return { description: v(".ke-desc"), operation: (v(".ke-op") || "").trim(), hours: v(".ke-hours"), rate: v(".ke-rate"), skill_level: v(".ke-skill") };
-			if (group === "parts") return { item_code: v(".ke-item"), qty: v(".ke-qty"), uom: v(".ke-uom"), rate: v(".ke-rate") };
-			return { service_description: v(".ke-desc"), vendor: v(".ke-vendor"), cost: v(".ke-cost"), markup_pct: v(".ke-markup") };
+			if (group === "labor") return { description: v(".ke-desc"), operation: itemCodeOf(tr.querySelector(".ke-op"), true), hours: v(".ke-hours"), rate: v(".ke-rate"), skill_level: v(".ke-skill") };
+			if (group === "parts") {
+				var code = itemCodeOf(tr.querySelector(".ke-item"));
+				return { item_code: code, item_name: itemNameOf(code) || (v(".ke-item") || "").trim(), qty: v(".ke-qty"), uom: v(".ke-uom"), rate: v(".ke-rate") };
+			}
+			return { service_description: v(".ke-desc"), vendor: vendorCodeOf(tr.querySelector(".ke-vendor")), cost: v(".ke-cost"), markup_pct: v(".ke-markup") };
 		});
 	}
 	// Dedupe keys mirror the wizard's, so one line is never carried twice.
@@ -1264,7 +1708,7 @@
 	// card for this service starts with it.
 	document.getElementById("vh-kit-std").addEventListener("click", function () {
 		var btn = this;
-		if (!kitService && !kitStandard) { alert("Pick a service before saving to a Labor Time Standard."); return; }
+		if (!kitService && !kitStandard) { vhAlert("No service", "Pick a service before saving to a Labor Time Standard."); return; }
 		btn.disabled = true;
 		callMethod("garagedesk.workshop.doctype.workshop_job_card.workshop_job_card.save_kit_to_standard", {
 			service: kitService, standard: kitStandard,
@@ -1280,7 +1724,7 @@
 			btn.innerHTML = '<i class="fa-solid fa-check"></i> Saved';
 			setTimeout(function () { btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Update Standard'; }, 1600);
 		}).catch(function (err) {
-			alert("Could not save to Labor Time Standard: " + (err && err.message ? err.message : err));
+			vhAlert("Could not save the standard", errText(err));
 		}).then(function () { btn.disabled = false; });
 	});
 
@@ -1320,6 +1764,86 @@
 			if (sel) sel.value = add.getAttribute("data-tech");
 		}
 		techModal.close();
+	});
+
+	// ------------------------------------------------- new item
+	// The kit Item cells' "Create …" row, as the Service / Task cell has one: an
+	// item nobody has set up yet is made here rather than in the Desk. A labour
+	// item is a service Item billed per hour; a part is a stock Item, so it also
+	// needs a group and a unit. The code is numbered from the Item series.
+	var itemModal = wireModal(document.getElementById("vh-item-modal"));
+	var itemInput = null, itemKind = "";
+
+	// The "Create …" row for what was typed, unless it already names an item the
+	// cell offers: labour offers service Items only, parts offer any Item.
+	function itemCreateRow(typed, kind) {
+		typed = (typed || "").trim();
+		if (!typed) return null;
+		var low = typed.toLowerCase();
+		var taken = KIT_ITEMS.some(function (it) {
+			if (kind === "labour" && (it.is_stock || it.is_item === 0)) return false;
+			return (it.item || "").toLowerCase() === low || (it.item_name || "").toLowerCase() === low;
+		});
+		if (taken) return null;
+		return { action: "create", typed: typed,
+			label: '<i class="fa-solid fa-plus"></i> Create “' + esc(typed) + "”",
+			sub: kind === "labour" ? "New labour item" : "New part" };
+	}
+	function itemError(msg) {
+		var box = document.getElementById("vh-item-err");
+		box.textContent = msg || ""; box.hidden = !msg;
+	}
+	function openItemDialog(kind, typed, input) {
+		itemInput = input; itemKind = kind;
+		var part = kind === "part";
+		document.getElementById("vh-item-title").textContent = part ? "New Part" : "New Labour Item";
+		document.getElementById("vh-item-sub").textContent = part
+			? "A stock item. Its code is numbered automatically."
+			: "A service item billed per hour, filed under Services. Its code is numbered automatically.";
+		document.querySelectorAll("#vh-item-modal [data-part-only]").forEach(function (f) {
+			f.style.display = part ? "" : "none";
+		});
+		document.getElementById("vh-item-group").innerHTML = '<option value="">— pick a group —</option>' +
+			PART_GROUPS.map(function (g) { return '<option value="' + escAttr(g) + '">' + esc(g) + "</option>"; }).join("");
+		var row = input && input.closest("tr"), rowRate = row && row.querySelector(".ke-rate");
+		var rowUom = row && row.querySelector(".ke-uom");
+		document.getElementById("vh-item-uom").value = rowUom ? rowUom.value.trim() : "";
+		document.getElementById("vh-item-rate").value = rowRate && parseFloat(rowRate.value) ? rowRate.value : "";
+		document.getElementById("vh-item-name").value = typed || "";
+		itemError("");
+		itemModal.open();
+		var name = document.getElementById("vh-item-name");
+		name.focus(); name.select();
+	}
+	attachUomAutocomplete(document.getElementById("vh-item-uom"));
+	document.getElementById("vh-item-name").addEventListener("keydown", function (e) {
+		if (e.key === "Enter") { e.preventDefault(); document.getElementById("vh-item-create").click(); }
+	});
+	document.getElementById("vh-item-create").addEventListener("click", function () {
+		var btn = this, input = itemInput, kind = itemKind;
+		var name = document.getElementById("vh-item-name").value.trim();
+		var group = document.getElementById("vh-item-group").value;
+		if (!name) { itemError("Enter the item name."); return; }
+		if (kind === "part" && !group) { itemError("Pick the group this part belongs in."); return; }
+		btn.disabled = true;
+		callMethod("garagedesk.api.front_office.create_kit_item", {
+			item_name: name, kind: kind, item_group: group,
+			uom: document.getElementById("vh-item-uom").value.trim(),
+			rate: document.getElementById("vh-item-rate").value || 0
+		}).then(function (res) {
+			if (!res || !res.item) throw new Error("No item returned.");
+			// Into the catalog, so every other kit row can pick it too.
+			if (!KIT_ITEMS.some(function (it) { return it.item === res.item; })) KIT_ITEMS.push(res);
+			itemModal.close();
+			if (!input || !input.isConnected) return;
+			setItemCell(input, res.item, res.item_name);
+			var tr = input.closest("tr");
+			var rate = tr.querySelector(".ke-rate"), uom = tr.querySelector(".ke-uom");
+			if (rate && res.rate && !parseFloat(rate.value)) rate.value = res.rate;
+			if (uom && res.uom && !uom.value.trim()) uom.value = res.uom;
+		}).catch(function (err) {
+			itemError("Could not create the item: " + ((err && err.message) || err));
+		}).then(function () { btn.disabled = false; });
 	});
 
 	// ------------------------------------------------- new service / task
@@ -1365,14 +1889,78 @@
 	});
 
 
-	// Save records both halves of this popup: the damages, and the repair planned
-	// for them. Nothing is created here — the job card is raised from the
-	// Handovers tab, which opens the wizard on exactly what was saved.
+	// Raise the job card for the party the filter shows: their damage without a
+	// card, with the service jobs planned against it and those services' kit.
+	// The whole popup is sent and saved first, so the card is exactly what is
+	// showing and the other parties' plans are kept. The popup then re-opens on
+	// the same party, its rows now locked under the new card.
+	document.getElementById("vh-cmp-create").addEventListener("click", function () {
+		if (!cmpHandover || cmpFilter === "") return;
+		// No party picked: one card for every open damage, whoever it is held against.
+		var everyone = cmpFilter === null, groups = cmpGroups();
+		var parties = groups.filter(function (g) { return g.open && (everyone || g.key === cmpFilter); });
+		var count = parties.reduce(function (n, g) { return n + g.open; }, 0);
+		if (!count) return;
+		var label = everyone
+			? parties.map(function (g) { return respLabel(g.key); }).join(", ")
+			: respLabel(cmpFilter);
+		var services = cmpServiceRows(shownServiceRows());
+		if (!services.length) {
+			vhAlert("No service jobs", "Pick the service type and task for " +
+				(everyone ? "the" : "<b>" + esc(label) + "</b>’s") + " damage first.");
+			return;
+		}
+		var btn = this;
+		var damages = "<b>" + count + " damage" + (count === 1 ? "" : "s") + "</b>";
+		var jobs = "<b>" + services.length + " service job" + (services.length === 1 ? "" : "s") + "</b>";
+		vhDialog({
+			title: "Create job card",
+			html: (everyone
+				? "<p>One job card for all " + damages + " — " + esc(label) + " — with " + jobs + ".</p>"
+				: "<p>A job card for <b>" + esc(label) + "</b>’s " + damages + ", with " + jobs + ".</p>") +
+				'<p class="muted">It is created straight away, with a task for each service job.</p>',
+			ok: '<i class="fa-solid fa-plus"></i> Create Job Card'
+		}).then(function (yes) {
+			if (yes) raiseJobCard(btn, everyone);
+		});
+	});
+	function raiseJobCard(btn, everyone) {
+		var who = respSplit(cmpFilter || ""), handover = cmpHandover, filter = cmpFilter;
+		btn.disabled = true;
+		btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Creating…';
+		callMethod("garagedesk.api.handover_comparison.create_job_card_for_responsible", {
+			handover: handover,
+			responsible_party: who.party,
+			responsible_driver: who.driver,
+			damages: JSON.stringify(cmpRows()),
+			services: JSON.stringify(cmpServiceRows()),
+			kit_labor: JSON.stringify(kitLabor),
+			kit_parts: JSON.stringify(kitParts),
+			kit_sublet: JSON.stringify(kitSublet),
+			everyone: everyone ? 1 : 0
+		})
+			.then(function (res) {
+				loadHistory();
+				openComparison(handover, {
+					filter: filter,
+					notice: '<i class="fa-solid fa-circle-check" style="color:var(--green)"></i> Job card ' +
+						jcLink(res.job_card) + " raised for <b>" + esc(res.responsible) + "</b> (" +
+						res.damages + " damage" + (res.damages === 1 ? "" : "s") + ")."
+				});
+			})
+			.catch(function (err) {
+				vhAlert("Could not create the job card", errText(err));
+			})
+			.then(function () { btn.disabled = false; cmpSync(); });
+	}
+
+	// Save records both halves of this popup: the damages, with who is
+	// responsible for each, and the repair planned for them. Nothing is created
+	// here — Create Job Card does that, one party at a time.
 	//
 	// The popup closes once it has saved, so the confirmation is the Handovers
-	// row itself: refreshed underneath, it shows the damage count and the Create
-	// Job Card button that raises the card from what was just written. A failure
-	// leaves the popup open with the work still in it.
+	// row itself, refreshed underneath. A failure leaves the popup open with the
+	// work still in it.
 	document.getElementById("vh-cmp-save").addEventListener("click", function () {
 		if (!cmpHandover) return;
 		var btn = this, original = btn.innerHTML;
@@ -1389,10 +1977,10 @@
 		})
 			.then(function () {
 				cmpModal.close();
-				mergeHandoverLinks([handover]);
+				loadHistory();
 			})
 			.catch(function (err) {
-				alert("Could not save: " + (err && err.message ? err.message : err));
+				vhAlert("Could not save", errText(err));
 			})
 			.then(function () { btn.disabled = false; btn.innerHTML = original; });
 	});
@@ -1403,13 +1991,11 @@
 		if (img) window.open(img.getAttribute("data-zoom"), "_blank", "noopener");
 	});
 
-	// View is a link to the handover's own page; only the two buttons that do
-	// something here are handled.
+	// View is a link to the handover's own page; Damages is the one button that
+	// does something here — job cards are raised inside it.
 	document.getElementById("pane-handovers").addEventListener("click", function (e) {
 		var cmp = e.target.closest("[data-cmp]");
-		if (cmp) { openComparison(cmp.getAttribute("data-cmp")); return; }
-		var jc = e.target.closest("[data-newjc]");
-		if (jc) { window.location.href = newJobCardUrl(jc.getAttribute("data-newjc")); }
+		if (cmp) openComparison(cmp.getAttribute("data-cmp"));
 	});
 
 })();
