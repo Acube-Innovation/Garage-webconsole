@@ -1250,8 +1250,11 @@
 			.then(function (c) {
 				cmpOpts = { areas: c.areas, damage_types: c.damage_types, severities: c.severities };
 				cmpDrivers = (c.drivers || []).slice();
+				var srcs = c.previous_sources || [];
 				document.getElementById("vh-cmp-sub").textContent = c.previous
-					? c.handover + " (" + c.date + ")  vs  " + c.previous + " (" + c.previous_date + ")"
+					? c.handover + " (" + c.date + ")  vs  " + (srcs.length > 1
+						? srcs.slice().reverse().join(" + ") + " (issues layered on the last full handover)"
+						: c.previous + " (" + c.previous_date + ")")
 					: c.handover + " (" + c.date + ")  —  no earlier handover to compare against";
 
 				var groups = [], seen = {};
@@ -1270,7 +1273,10 @@
 						var changed = p.was.note && p.now.note && p.was.note !== p.now.note;
 						html += '<div class="vh-cmp-row' + (changed ? " is-changed" : "") + '">' +
 							'<div class="vh-cmp-lbl">' + esc(p.label) + "</div>" +
-							side("Previous", p.was) + side("This handover", p.now) + "</div>";
+							side(p.was.source && srcs.length > 1
+								? "Previous · " + p.was.source + (p.was.source_date ? " (" + p.was.source_date + ")" : "") +
+									(p.was.photo_source ? ", photo from " + p.was.photo_source : "")
+								: "Previous", p.was) + side("This handover", p.now) + "</div>";
 					});
 					html += "</div>";
 				});

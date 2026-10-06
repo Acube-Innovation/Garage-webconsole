@@ -10,7 +10,18 @@
 	<a class="btn btn--outline btn--sm" href="/a3-workshop/vehicle-history-detail?vehicle={{ vehicle | urlencode }}"><i class="fa-solid fa-arrow-left"></i> Back to Vehicle</a>
 	{%- if readonly %}
 	<a class="btn btn--navy btn--sm" href="/a3-workshop/vehicle-history-print?handover={{ handover | urlencode }}" target="_blank" rel="noopener"><i class="fa-solid fa-print"></i> Print Handover</a>
+	{%- else %}
+	{#- Everything typed or photographed is kept on this device as it is entered
+	    (see the draft section of the script), so a refresh no longer loses the
+	    walk-round. Cancel is the one way to throw it away and start again. -#}
+	<div class="toolbar__right" style="display:flex;align-items:center;gap:10px">
+		<span id="ho-draft-state" class="muted" style="font-size:12px"></span>
+		<button type="button" class="btn btn--outline btn--sm" id="ho-cancel"><i class="fa-solid fa-xmark"></i> Cancel</button>
+	</div>
 	{%- endif %}
+</div>
+<div class="card" id="ho-resume" style="display:none;margin-bottom:18px;border-color:var(--amber,#d98324)">
+	<div class="card__body" id="ho-resume-body"></div>
 </div>
 
 {%- if readonly %}
@@ -54,7 +65,7 @@
 			{{ field("Handover Type","handover_type",type="select",options=["Issue","Return","Driver Change"]) }}
 			{#- A towed unit has no odometer and no fuel gauge; both fields are taken
 			    off the form when the record being handed over is an attachment. -#}
-			<div class="field" data-motor><label>Odometer (km) <span class="req">*</span></label><input name="odometer" type="number" placeholder="0"></div>
+			<div class="field" data-motor><label>Odometer (km) <span class="req" id="ho-odo-req">*</span></label><input name="odometer" type="number" placeholder="0"></div>
 			<div class="field"><label>From Driver (returning)</label><input name="from_driver_label" placeholder="Search driver..." autocomplete="off"><input type="hidden" name="from_driver"></div>
 			<div class="field"><label>To Driver (receiving)</label><input name="to_driver_label" placeholder="Search driver..." autocomplete="off"><input type="hidden" name="to_driver"></div>
 			<div data-motor style="display:contents">
@@ -1076,6 +1087,12 @@
 						  "the remark if it is worse — it stays on the record until a repair job card is raised for it."
 						: "No damage is open against this vehicle.");
 			}
+			// Last: the draft overrides the defaults and the seeded rows above,
+			// because it is what the inspector had already entered.
+			// What save_handover falls back to on a blank Issue: the last handover's reading.
+			lastOdometer = (p.previous_handover && p.previous_handover.odometer) || p.odometer || 0;
+			syncIssueMode();
+			return draftRestore();
 		})
 		.catch(function (err) {
 			document.getElementById("ho-context").innerHTML =
@@ -1364,7 +1381,11 @@
 				if (!shots[i]) return;
 				if (!shots[i].remote) { try { URL.revokeObjectURL(shots[i].url); } catch (e) {} }
 				shots.splice(i, 1); render();
+				draftChanged();
 			},
+			// A shot read back out of the draft: same as a fresh capture, but it
+			// keeps the id its blob is already stored under.
+			restore: function (file, id) { add(file, id); },
 		};
 		photoWidgets.push(w);
 
@@ -1373,10 +1394,15 @@
 		if (multi) picker.multiple = true;
 		host.appendChild(picker);
 
-		function add(file) {
+		function add(file, id) {
 			if (!multi) { revokeAll(); shots = []; }
-			shots.push({ file: file, url: URL.createObjectURL(file) });
+			var sh = { file: file, url: URL.createObjectURL(file), id: id || draftPhotoId() };
+			shots.push(sh);
 			render();
+			// Stored once, as it is taken -- a tablet that drops the page while its
+			// camera app is open must not lose the shot it just came back with.
+			if (!id) draftPutPhoto(sh.id, file);
+			draftChanged();
 		}
         function revokeAll() {
 			shots.forEach(function (sh) {
@@ -1610,6 +1636,7 @@
 			// row was ever looked at -- which is what decides whether an otherwise
 			// untouched row is saved at all.
 			answered: function () { return (!!driver && !isDefault) || box.checked; },
+			suggested: function () { return !!driver && isDefault; },
 			label: function () {
 				if (driver) { return input.value.trim() || driver; }
 				return box.checked ? "Company" : "";
@@ -2578,11 +2605,15 @@
 
 	saveBtn.addEventListener("click", function () {
 		var odo = val("odometer");
-		if (!isAttachment && (!odo || !Number(odo))) {
+		// An Issue reports one fault mid-assignment: nothing on it is mandatory.
+		// The server fills a blank odometer and fuel from the last handover and
+		// keeps the vehicle with its current driver.
+		var issue = isIssue();
+		if (!issue && !isAttachment && (!odo || !Number(odo))) {
 			alert("Odometer reading is required.");
 			return;
 		}
-		if (!val("from_driver") && !val("to_driver")) { alert("Pick at least one driver (From and/or To)."); return; }
+		if (!issue && !val("from_driver") && !val("to_driver")) { alert("Pick at least one driver (From and/or To)."); return; }
 		var chk = collectTicks(chkBox);
 		if (chk.missing) { alert('Please enter a value for the checklist item "' + chk.missing + '".'); return; }
 		var att = collectTicks(attBox);
@@ -2632,7 +2663,7 @@
 			// Uploads can only happen now: /api/method/upload_file needs a docname.
 			// Every capture came from an inline widget, which carries its own
 			// routing for attach_handover_photos to drop it into the right slot.
-			var jobs = [];
+			var jobs = [], files = {};
 			photoWidgets.forEach(function (w) {
 				// A photo shot against an attachment that was then unticked has no
 				// row on the saved handover to land on, so uploading it would only
@@ -2641,54 +2672,24 @@
 				    !w.route.unit_no && !attachmentIsTicked(w.route.item)) {
 					return;
 				}
-				w.shots().forEach(function (sh) { jobs.push({ file: sh.file, route: w.route }); });
-			});
-			if (!jobs.length) return res;
-
-			// Past this point the handover exists. A photo that will not upload must
-			// not take the other photos -- or the record -- down with it, so failures
-			// are counted and reported rather than thrown: retrying the whole save
-			// would file a second handover for the same inspection.
-			var routed = [], failed = 0, done = 0;
-			function progress() {
-				confirmGo.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Uploading photo ' +
-					(done + 1) + " of " + jobs.length + "…";
-			}
-			progress();
-			return jobs.reduce(function (chain, job) {
-				return chain.then(function () {
-					return downscale(job.file).then(function (file) {
-						return uploadFile(file, res.name);
-					}).then(function (info) {
-						if (job.route && info && info.file_url) {
-							// Object.assign is ES6; this page targets the same
-							// browsers as the rest of the portal, so build it plainly.
-							// A route value may be a function — an added inspection
-							// area reads its name at upload time, so renaming a row
-							// after shooting it still routes the photo correctly.
-							var entry = { file_url: info.file_url };
-							for (var k in job.route) {
-								if (!job.route.hasOwnProperty(k)) continue;
-								var rv = job.route[k];
-								entry[k] = (typeof rv === "function") ? rv() : rv;
-							}
-							routed.push(entry);
-						}
-					}).catch(function (e) {
-						failed += 1;
-						if (window.console) console.error("handover photo upload failed", e);
-					}).then(function () { done += 1; if (done < jobs.length) progress(); });
+				w.shots().forEach(function (sh) {
+					if (!sh.file) return;
+					files[sh.id] = sh.file;
+					// Routes are read now, while the rows still exist: an added area
+					// names itself at upload time, and a resumed upload has no rows.
+					jobs.push({ id: sh.id, route: plainRoute(w.route) });
 				});
-			}, Promise.resolve()).then(function () {
-				if (!routed.length) { res.photos_failed = failed; return res; }
-				return callMethod("garagedesk.api.fleet.attach_handover_photos", {
-					handover: res.name, photos: JSON.stringify(routed)
-				}).catch(function (e) {
-					// The files uploaded and are attached to the handover; only the
-					// routing onto their slots failed. Say so rather than losing them.
-					failed += routed.length;
-					if (window.console) console.error("handover photo routing failed", e);
-				}).then(function () { res.photos_failed = failed; return res; });
+			});
+			// The handover exists from here on. The form's draft becomes a queue of
+			// photos still to upload, so a refresh mid-upload finishes the job on
+			// the next visit instead of losing the photos or filing a second record.
+			return draftMarkFiled(res, jobs).then(function (rec) {
+				if (!jobs.length) return res;
+				return runUploads(rec, function (id) { return Promise.resolve(files[id]); },
+					function (done, total) {
+						confirmGo.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Uploading photo ' +
+							(done + 1) + " of " + total + "…";
+					}).then(function (failed) { res.photos_failed = failed; return res; });
 			});
 		}).then(function (res) {
 			// The receipt: what is open against the vehicle, in the two tables
@@ -2721,6 +2722,502 @@
 					"\n\nDo not record it again — open the vehicle to check it.");
 			}
 		});
+	}
+
+	// ============================================================ draft
+	// A walk-round on a tablet takes a while, and a tablet drops the page easily --
+	// a refresh, or the browser reclaiming the tab while its camera app is open.
+	// Everything entered is kept on this device as it is entered, and put back
+	// when the page opens again for the same vehicle:
+	//
+	//   records["draft::<vehicle>"]  the form as it stands (small; rewritten on
+	//                                every change, debounced)
+	//   records["filed::<handover>"] a handover that was filed but whose photos
+	//                                had not all uploaded -- finished on the next
+	//                                visit rather than lost or filed twice
+	//   photos[<id>]                 each captured photo, stored once when taken
+	//
+	// IndexedDB rather than localStorage because the photos are Blobs. Storage is
+	// a convenience: if the browser refuses it, the form works exactly as before.
+	var DRAFT_FIELDS = ["handover_type", "odometer", "from_driver", "from_driver_label",
+		"to_driver", "to_driver_label", "fuel_level", "overall_condition", "observations"];
+	var draftReady = false, draftTimer = null, draftDbP = null, lastOdometer = 0;
+
+	function draftKey() { return "draft::" + window.ho_vehicle; }
+	function draftPhotoId() {
+		return Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10);
+	}
+
+	function draftDb() {
+		if (draftDbP) return draftDbP;
+		draftDbP = new Promise(function (resolve, reject) {
+			var req = indexedDB.open("a3-handover-drafts", 1);
+			req.onupgradeneeded = function () {
+				var db = req.result;
+				if (!db.objectStoreNames.contains("records")) db.createObjectStore("records");
+				if (!db.objectStoreNames.contains("photos")) db.createObjectStore("photos");
+			};
+			req.onsuccess = function () { resolve(req.result); };
+			req.onerror = function () { reject(req.error); };
+		}).catch(function (e) {
+			if (window.console) console.warn("handover draft storage unavailable", e);
+			return null;
+		});
+		return draftDbP;
+	}
+
+	// Runs fn(tx) in one transaction; resolves to whatever fn returned (an
+	// IDBRequest resolves to its result) once it commits, or null without storage.
+	function idbTx(stores, mode, fn) {
+		return Promise.resolve().then(draftDb).then(function (db) {
+			if (!db) return null;
+			return new Promise(function (resolve, reject) {
+				var tx = db.transaction(stores, mode);
+				var out = fn(tx);
+				tx.oncomplete = function () {
+					resolve(out && typeof out === "object" && "readyState" in out ? out.result : (out === undefined ? true : out));
+				};
+				tx.onerror = tx.onabort = function () { reject(tx.error); };
+			});
+		}).catch(function (e) {
+			if (window.console) console.warn("handover draft storage failed", e);
+			return null;
+		});
+	}
+
+	function draftPutPhoto(id, file) {
+		if (RO) return;
+		idbTx(["photos"], "readwrite", function (tx) { tx.objectStore("photos").put(file, id); });
+	}
+
+	function draftState(text) {
+		var el = document.getElementById("ho-draft-state");
+		if (el) el.textContent = text || "";
+	}
+	function clock(t) {
+		var d = new Date(t || Date.now());
+		return ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2);
+	}
+
+	function draftChanged() {
+		if (!draftReady || RO) return;
+		clearTimeout(draftTimer);
+		draftTimer = setTimeout(draftSave, 500);
+	}
+
+	function shotIds(w) {
+		return w ? w.shots().filter(function (sh) { return sh.file && sh.id; })
+			.map(function (sh) { return sh.id; }) : [];
+	}
+	function respState(r) {
+		var v = r.resp.value();
+		return { party: v.responsible_party, driver: v.responsible_driver,
+		         name: r.resp.label(), suggested: !!(r.resp.suggested && r.resp.suggested()) };
+	}
+
+	function draftCompose() {
+		var fields = {};
+		DRAFT_FIELDS.forEach(function (n) {
+			var el = document.querySelector('#ho-form [name="' + n + '"]');
+			if (el) fields[n] = el.value;
+		});
+		return {
+			kind: "draft",
+			vehicle: window.ho_vehicle,
+			saved_at: Date.now(),
+			fields: fields,
+			field_photos: { odometer: shotIds(fieldWidget("odometer")), fuel: shotIds(fieldWidget("fuel")) },
+			checklist: collectTicks(chkBox).rows,
+			attachments: collectTicks(attBox).rows,
+			walk: walkRows.map(function (r) {
+				return { kind: r.kind, label: r.value(), custom: !r.fixed, condition: r.condition,
+				         remark: r.remark.value, depth: r.depth ? r.depth.value : "",
+				         resp: respState(r), photos: shotIds(r.widget) };
+			}),
+			views: Object.keys(viewPanels).map(function (k) {
+				var p = viewPanels[k];
+				return { item: p.item, unit_no: p.unit_no, rows: p.rows.map(function (r) {
+					return { view: r.view(), custom: !!r.name, condition: r.condition,
+					         remark: r.remark.value, resp: respState(r), photos: shotIds(r.widget) };
+				}) };
+			}),
+		};
+	}
+
+	function draftSave() {
+		clearTimeout(draftTimer);
+		draftTimer = null;
+		if (!draftReady || RO) return Promise.resolve();
+		var rec;
+		try { rec = draftCompose(); } catch (e) {
+			if (window.console) console.warn("handover draft not saved", e);
+			return Promise.resolve();
+		}
+		return idbTx(["records"], "readwrite", function (tx) {
+			tx.objectStore("records").put(rec, draftKey());
+		}).then(function (ok) {
+			if (ok) draftState("Draft saved " + clock(rec.saved_at));
+			return draftGc();
+		});
+	}
+
+	// Every photo id a stored record still points at.
+	function recordPhotoIds(rec) {
+		var ids = [];
+		if (!rec) return ids;
+		if (rec.kind === "filed") {
+			(rec.queue || []).forEach(function (j) { ids.push(j.id); });
+			return ids;
+		}
+		var fp = rec.field_photos || {};
+		ids = ids.concat(fp.odometer || [], fp.fuel || []);
+		(rec.walk || []).forEach(function (r) { ids = ids.concat(r.photos || []); });
+		(rec.views || []).forEach(function (p) {
+			(p.rows || []).forEach(function (r) { ids = ids.concat(r.photos || []); });
+		});
+		return ids;
+	}
+
+	// Drop stored photos nothing points at any more -- removed, retaken, or
+	// belonging to a draft that was cancelled or filed. A shot on screen is kept
+	// even before the debounced save has written the record that names it.
+	function draftGc() {
+		var live = {};
+		photoWidgets.forEach(function (w) {
+			w.shots().forEach(function (sh) { if (sh.id) live[sh.id] = 1; });
+		});
+		return idbTx(["records", "photos"], "readwrite", function (tx) {
+			var photos = tx.objectStore("photos");
+			tx.objectStore("records").getAll().onsuccess = function (e) {
+				(e.target.result || []).forEach(function (rec) {
+					recordPhotoIds(rec).forEach(function (id) { live[id] = 1; });
+				});
+				photos.getAllKeys().onsuccess = function (e2) {
+					(e2.target.result || []).forEach(function (k) { if (!live[k]) photos.delete(k); });
+				};
+			};
+		});
+	}
+
+	function loadPhotos(ids) {
+		var out = {};
+		if (!ids.length) return Promise.resolve(out);
+		return idbTx(["photos"], "readonly", function (tx) {
+			var st = tx.objectStore("photos");
+			ids.forEach(function (id) {
+				st.get(id).onsuccess = function (e) { if (e.target.result) out[id] = e.target.result; };
+			});
+		}).then(function () { return out; });
+	}
+
+	// ---- restore
+	function fillDraftRow(row, d, blobs, conditions) {
+		row.condition = (d.condition && conditions.indexOf(d.condition) !== -1) ? d.condition : "";
+		row.remark.value = d.remark || "";
+		if (row.depth) row.depth.value = d.depth || "";
+		var r = d.resp || {};
+		if (r.suggested || !r.party) {
+			row.resp.set("", "", "");
+			if (r.suggested) row.resp.applyDefault();
+		} else {
+			row.resp.set(r.party, r.driver, r.name);
+		}
+		(d.photos || []).forEach(function (id) {
+			if (blobs[id]) row.widget.restore(blobs[id], id);
+		});
+		paintCondition(row);
+	}
+
+	// Lines the rows the draft holds up with the rows the form just built: same
+	// name, same kind -- a standard row against a standard row, an added one
+	// against an added one (a seeded row from the last handover can be either).
+	// Whatever the draft has that the form does not is added; whatever the form
+	// has that the draft does not was removed by the inspector, and goes again.
+	function reconcileRows(live, saved, nameOf, isFixed, add, remove, fill) {
+		var used = [];
+		saved.forEach(function (d) {
+			var name = String(d.label != null ? d.label : d.view || "").trim().toLowerCase();
+			var row = name ? live.filter(function (r) {
+				return used.indexOf(r) === -1 && nameOf(r).toLowerCase() === name &&
+					(isFixed(r) === !d.custom || !isFixed(r));
+			})[0] : null;
+			if (!row) row = add(d);
+			if (!row) return;
+			used.push(row);
+			fill(row, d);
+		});
+		live.slice().forEach(function (r) { if (used.indexOf(r) === -1) remove(r); });
+	}
+
+	function applyTicks(box, rows) {
+		var by = {};
+		(rows || []).forEach(function (r) { by[r.item] = r; });
+		box.querySelectorAll(".ho-chk-row").forEach(function (row) {
+			var rec = by[row.getAttribute("data-item")];
+			if (!rec) return;
+			var chk = row.querySelector("[data-chk]");
+			if (chk && chk.checked !== !!rec.checked) {
+				chk.checked = !!rec.checked;
+				chk.dispatchEvent(new Event("change", { bubbles: true }));
+			}
+			var qtyEl = row.querySelector("[data-qty]");
+			if (qtyEl && rec.qty && parseInt(qtyEl.value, 10) !== rec.qty) {
+				qtyEl.value = rec.qty;
+				qtyEl.dispatchEvent(new Event("change", { bubbles: true }));
+			}
+			var valEl = row.querySelector("[data-val]");
+			if (valEl) valEl.value = rec.value || "";
+			var remEl = row.parentNode.querySelector("[data-remark]");
+			if (remEl) remEl.value = rec.remark || "";
+			var serialEls = row.parentNode.querySelectorAll("[data-serial]");
+			(rec.serials || []).forEach(function (sn, i) {
+				if (serialEls[i]) serialEls[i].value = sn || "";
+			});
+		});
+	}
+
+	function applyDraft(d, blobs) {
+		var f = d.fields || {};
+		DRAFT_FIELDS.forEach(function (n) {
+			var el = document.querySelector('#ho-form [name="' + n + '"]');
+			if (el && f[n] !== undefined) el.value = f[n];
+		});
+		syncIssueMode();
+
+		applyTicks(chkBox, d.checklist);
+		applyTicks(attBox, d.attachments);
+
+		var areaConds = lastAreaConditions || AREA_FALLBACK_CONDITIONS;
+		var tyreConds = lastTyreConditions || TYRE_FALLBACK_CONDITIONS;
+		["area", "tyre"].forEach(function (kind) {
+			var conds = kind === "tyre" ? tyreConds : areaConds;
+			reconcileRows(rowsOfKind(kind),
+				(d.walk || []).filter(function (r) { return r.kind === kind; }),
+				function (r) { return r.value(); },
+				function (r) { return r.fixed; },
+				function (s) {
+					return addWalkRow(kind, s.label || "", conds, true, kind === "area" ? tyreGroupTr : null);
+				},
+				function (r) {
+					var rm = r.tr.querySelector(".ho-area-rm");
+					if (rm) rm.click();
+				},
+				function (row, s) { fillDraftRow(row, s, blobs, conds); });
+		});
+
+		(d.views || []).forEach(function (pd) {
+			var key = viewKey(pd.item, pd.unit_no);
+			var p = viewPanels[key];
+			if (!p) return;
+			reconcileRows(p.rows, pd.rows || [],
+				function (r) { return r.view(); },
+				function (r) { return !r.name; },
+				function (s) {
+					var row = addViewRow(key, s.view || "", true);
+					if (row && row.name) row.name.value = s.view || "";
+					return row;
+				},
+				function (r) {
+					var tr = r.seg.closest("tr");
+					var rm = tr && tr.querySelector(".ho-area-rm");
+					if (rm) rm.click();
+				},
+				function (row, s) { fillDraftRow(row, s, blobs, areaConds); });
+		});
+
+		var fp = d.field_photos || {};
+		[["odometer", fp.odometer], ["fuel", fp.fuel]].forEach(function (pair) {
+			var w = fieldWidget(pair[0]);
+			(pair[1] || []).forEach(function (id) { if (w && blobs[id]) w.restore(blobs[id], id); });
+		});
+	}
+
+	function draftRestore() {
+		if (RO) return Promise.resolve();
+		return idbTx(["records"], "readonly", function (tx) {
+			return tx.objectStore("records").getAll();
+		}).then(function (recs) {
+			recs = recs || [];
+			recs.filter(function (r) { return r.kind === "filed" && r.vehicle === window.ho_vehicle; })
+				.forEach(resumeFiled);
+			var draft = recs.filter(function (r) {
+				return r.kind === "draft" && r.vehicle === window.ho_vehicle;
+			})[0];
+			if (!draft) return;
+			return loadPhotos(recordPhotoIds(draft)).then(function (blobs) {
+				applyDraft(draft, blobs);
+				draftState("Draft restored from " + clock(draft.saved_at));
+			});
+		}).catch(function (e) {
+			if (window.console) console.warn("handover draft could not be restored", e);
+		}).then(function () {
+			draftReady = true;
+		});
+	}
+
+	// Any edit anywhere on the form. Debounced, so a burst of typing is one write.
+	["input", "change", "click"].forEach(function (ev) {
+		document.addEventListener(ev, function () { draftChanged(); }, true);
+	});
+	// The camera app is about to take over, or the tab is going away: write now
+	// rather than after the debounce, which may never come.
+	document.addEventListener("visibilitychange", function () {
+		if (document.visibilityState === "hidden" && draftTimer) draftSave();
+	});
+	window.addEventListener("pagehide", function () { if (draftTimer) draftSave(); });
+
+	// ---- issue handovers
+	function isIssue() { return val("handover_type") === "Issue"; }
+	// Nothing is mandatory on an Issue; a blank odometer is the last reading.
+	function syncIssueMode() {
+		var issue = isIssue();
+		var req = document.getElementById("ho-odo-req");
+		if (req) req.style.display = issue ? "none" : "";
+		var odo = document.querySelector('#ho-form [name="odometer"]');
+		if (odo) {
+			odo.placeholder = issue
+				? (lastOdometer ? "Blank keeps the last reading (" + Number(lastOdometer).toLocaleString() + " km)"
+				                : "Blank keeps the last reading")
+				: "0";
+		}
+	}
+	var typeSel = document.querySelector('#ho-form [name="handover_type"]');
+	if (typeSel && !RO) typeSel.addEventListener("change", syncIssueMode);
+
+	// ---- cancel
+	var cancelBtn = document.getElementById("ho-cancel");
+	if (cancelBtn) cancelBtn.addEventListener("click", function () {
+		if (!confirm("Discard everything entered on this handover, including its photos? This cannot be undone.")) return;
+		draftReady = false;
+		clearTimeout(draftTimer);
+		draftTimer = null;
+		idbTx(["records"], "readwrite", function (tx) {
+			tx.objectStore("records").delete(draftKey());
+		}).then(function () {
+			// Nothing on screen is wanted any more, so no shot is kept as live.
+			photoWidgets = [];
+			return draftGc();
+		}).then(function () { location.reload(); });
+	});
+
+	// ---- filed, photos still uploading
+	function plainRoute(route) {
+		var out = {};
+		for (var k in route) {
+			if (!route.hasOwnProperty(k)) continue;
+			out[k] = typeof route[k] === "function" ? route[k]() : route[k];
+		}
+		return out;
+	}
+
+	// The form's draft is replaced by the upload queue in one step, so a refresh
+	// from here on resumes the uploads and never re-offers the filed form.
+	function draftMarkFiled(res, jobs) {
+		draftReady = false;
+		clearTimeout(draftTimer);
+		draftTimer = null;
+		var rec = { kind: "filed", vehicle: window.ho_vehicle, handover: res.name,
+		            saved_at: Date.now(), queue: jobs, routed: [] };
+		return idbTx(["records"], "readwrite", function (tx) {
+			var st = tx.objectStore("records");
+			st.delete(draftKey());
+			if (jobs.length) st.put(rec, "filed::" + res.name);
+		}).then(function () { return rec; });
+	}
+
+	function putFiled(rec) {
+		return idbTx(["records"], "readwrite", function (tx) {
+			var st = tx.objectStore("records");
+			if (rec.queue.length || rec.routed.length) st.put(rec, "filed::" + rec.handover);
+			else st.delete("filed::" + rec.handover);
+		});
+	}
+
+	// Upload every queued photo, then route the lot onto their slots. Each upload
+	// is written back to the record as it lands, so a refresh part-way repeats
+	// none of them. Resolves to how many photos are still not on the handover;
+	// those stay queued for the next visit.
+	function runUploads(rec, getFile, onProgress) {
+		var total = rec.queue.length, done = 0, failed = [];
+		return rec.queue.slice().reduce(function (chain, job) {
+			return chain.then(function () {
+				if (onProgress) onProgress(done, total);
+				return getFile(job.id).then(function (f) {
+					if (!f) throw new Error("photo no longer stored on this device");
+					return downscale(f);
+				}).then(function (file) {
+					return uploadFile(file, rec.handover);
+				}).then(function (info) {
+					if (info && info.file_url) {
+						var entry = { file_url: info.file_url };
+						for (var k in job.route) { if (job.route.hasOwnProperty(k)) entry[k] = job.route[k]; }
+						rec.routed.push(entry);
+					}
+					rec.queue = rec.queue.filter(function (j) { return j !== job; });
+					return putFiled(rec);
+				}).catch(function (e) {
+					failed.push(job);
+					if (window.console) console.error("handover photo upload failed", e);
+				}).then(function () { done += 1; });
+			});
+		}, Promise.resolve()).then(function () {
+			if (!rec.routed.length) return;
+			return callMethod("garagedesk.api.fleet.attach_handover_photos", {
+				handover: rec.handover, photos: JSON.stringify(rec.routed)
+			}).then(function () { rec.routed = []; }, function (e) {
+				// The files are on the server, attached to the handover; only the
+				// routing failed. Kept, so the next visit routes them again.
+				if (window.console) console.error("handover photo routing failed", e);
+			});
+		}).then(function () {
+			rec.queue = failed.concat(rec.queue.filter(function (j) { return failed.indexOf(j) === -1; }));
+			return putFiled(rec);
+		}).then(function () {
+			draftGc();
+			return rec.queue.length + (rec.routed.length ? rec.routed.length : 0);
+		});
+	}
+
+	function resumeFiled(rec) {
+		var box = document.getElementById("ho-resume");
+		var body = document.getElementById("ho-resume-body");
+		if (!box || !body) return;
+		var link = '<a href="/a3-workshop/vehicle-history-handover?handover=' +
+			encodeURIComponent(rec.handover) + '"><b>' + esc(rec.handover) + "</b></a>";
+		box.style.display = "";
+		function go() {
+			var n = rec.queue.length;
+			body.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Handover ' + link +
+				" is saved — finishing its photo upload" + (n ? " (" + n + " left)" : "") + "…";
+			runUploads(rec, function (id) {
+				return loadPhotos([id]).then(function (b) { return b[id]; });
+			}, function (done, total) {
+				body.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Handover ' + link +
+					" is saved — uploading photo " + (done + 1) + " of " + total + "…";
+			}).then(function (left) {
+				if (!left) {
+					body.innerHTML = '<i class="fa-solid fa-circle-check" style="color:var(--green)"></i> ' +
+						"All photos for handover " + link + " are uploaded.";
+					box.style.borderColor = "var(--green)";
+					return;
+				}
+				body.innerHTML = '<i class="fa-solid fa-triangle-exclamation" style="color:var(--amber,#d98324)"></i> ' +
+					"Handover " + link + " is saved, but <b>" + left + "</b> photo" + (left === 1 ? "" : "s") +
+					" could not be uploaded yet. They are kept on this device." +
+					' <button type="button" class="btn btn--primary btn--sm" data-resume="retry" style="margin-left:8px">Retry</button>' +
+					' <button type="button" class="btn btn--outline btn--sm" data-resume="drop">Discard photos</button>';
+			});
+		}
+		body.onclick = function (e) {
+			var b = e.target.closest("[data-resume]");
+			if (!b) return;
+			if (b.dataset.resume === "retry") { go(); return; }
+			if (!confirm("Discard the photos that did not upload? The handover itself stays saved.")) return;
+			rec.queue = []; rec.routed = [];
+			putFiled(rec).then(draftGc);
+			box.style.display = "none";
+		};
+		go();
 	}
 
 	// ==================================================== filed handover (read-only)
@@ -2956,7 +3453,8 @@
 				'<i class="fa-solid fa-triangle-exclamation"></i> ' + res.photos_failed +
 				" photograph" + (res.photos_failed === 1 ? "" : "s") + " could not be uploaded.</div>" +
 				'<div class="muted" style="font-size:13px;margin-top:6px">The handover itself is saved — ' +
-				"do not record it again. Open the vehicle and add the missing photos there.</div>";
+				"do not record it again. The missing photos are kept on this device and upload " +
+				"again the next time this vehicle's New Handover page is opened.</div>";
 		}
 		body.innerHTML = head + damageTables(existing, fresh, { addButton: true }) + foot;
 		var add = document.getElementById("ho-add-dmg");
