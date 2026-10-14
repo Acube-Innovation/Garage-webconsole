@@ -6,7 +6,7 @@
     received and read, what the customer reports is written down, and only then
     are the jobs that answer those complaints raised. Each `data-tab` below
     matches its position here. -#}
-{%- set steps = ["Customer Details", "Readings", "Complaints / Check-Up", "Service Jobs", "Estimate", "Billing"] -%}
+{%- set steps = ["Customer Details", "Readings", "Complaints / Check-Up", "Service Jobs", "Estimate", "Task Preview", "QC", "Billing"] -%}
 
 <style>
 	.jc-ac { position:absolute; left:0; right:0; top:100%; z-index:60; margin-top:2px; background:#fff;
@@ -175,6 +175,27 @@
 	</div>
 </div>
 
+<!-- New QC Checklist popup — opened from the QC step. -->
+<div class="modal-overlay" id="qc-modal" role="dialog" aria-modal="true" aria-labelledby="qc-modal-title">
+	<div class="modal" style="max-width:460px">
+		<div class="modal__head">
+			<div><h3 id="qc-modal-title">New QC Checklist</h3><div class="sub">Saved as a Workshop QC Checklist other job cards can use</div></div>
+			<button type="button" class="modal__close" data-qc-close aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+		</div>
+		<div class="modal__body stack">
+			<div class="field"><label>Checklist Name <span class="req">*</span></label>
+				<input id="qc-modal-name" type="text" placeholder="e.g. Body Shop QC" autocomplete="off"></div>
+			<label class="check"><input type="checkbox" id="qc-modal-copy" checked> Start from the check points on screen</label>
+			<label class="check"><input type="checkbox" id="qc-modal-default"> Make it the default checklist</label>
+			<div class="svc-modal-err" id="qc-modal-err" hidden></div>
+		</div>
+		<div class="modal__foot">
+			<button type="button" class="btn btn--outline btn--sm" data-qc-close>Cancel</button>
+			<button type="button" class="btn btn--primary btn--sm" id="qc-modal-create"><i class="fa-solid fa-plus"></i> Create Checklist</button>
+		</div>
+	</div>
+</div>
+
 <!-- New Item popup — opened from the "Create …" row of a kit Item type-ahead (labour or part).
      After the kit popup in the document so it stacks above it. -->
 <div class="modal-overlay" id="item-modal" role="dialog" aria-modal="true" aria-labelledby="item-modal-title">
@@ -304,19 +325,20 @@
 	</div>
 </section>
 
-<!-- STEP 5 — Estimate (LHS items, RHS cart, totals) -->
+<!-- STEP 5 — Estimate: the cart, filled from the Service Jobs kit (labour, parts,
+     sublet with the hours / quantities / rates given there) and editable here. -->
 <section class="wizard-tab" data-tab="5" style="margin-top:18px">
-	<div class="split">
-		<div class="card"><div class="card__head"><h3>Items</h3>
-			<input id="item-search" placeholder="Search items..." style="border:1px solid var(--border);border-radius:8px;padding:7px 10px;font:inherit"></div>
-			<div class="card__body" style="padding:6px 18px"><div id="catalog">
-				<div class="empty">Add service lines in the Service Jobs tab, then open this tab.</div>
-			</div></div>
-		</div>
-		<div class="card"><div class="card__head"><h3>Cart</h3><span class="muted">Adjust quantities</span></div>
+	<div class="card"><div class="card__head"><h3>Cart</h3><span class="muted">From the Service Jobs kit — edit, remove or add items</span></div>
 			<div class="card__body">
-				<div id="cart"></div>
-				<div class="empty" id="cart-empty">Cart is empty — add items from the left.</div>
+				<div id="cart-wrap"><table class="table editable" id="cart-table"><thead><tr>
+					<th style="width:80px">Type</th><th style="width:24%">Item</th><th>Description</th>
+					<th style="width:90px">Qty / Hrs</th><th style="width:110px">Rate</th><th style="width:120px;text-align:right">Amount</th><th style="width:40px"></th>
+				</tr></thead><tbody id="cart"></tbody></table></div>
+				<div class="empty" id="cart-empty">Cart is empty — add kit components in Service Jobs, or add an item below.</div>
+				<div class="cart-add">
+					<div style="position:relative;flex:1 1 auto;max-width:420px"><input id="cart-add-item" placeholder="Add item — search by name or code…" autocomplete="off"></div>
+					<button type="button" class="btn btn--outline btn--sm" id="cart-reset" title="Rebuild the cart from the Service Jobs kit"><i class="fa-solid fa-rotate"></i> Reload from Service Jobs</button>
+				</div>
 				{#- The tax row exists only when the company has a Sales Taxes and Charges
 				    Template to read a rate from (see new.py `_estimate_tax`); with none
 				    configured the estimate shows no tax rather than a guessed rate. -#}
@@ -332,12 +354,133 @@
 				<button type="button" class="btn btn--primary" id="create-quotation" style="width:100%;justify-content:center;margin-top:14px"><i class="fa-solid fa-file-invoice-dollar"></i> Create / Update Quotation</button>
 				<div id="quotation-result" class="muted" style="font-size:12px;margin-top:8px"></div>
 			</div>
-		</div>
 	</div>
 </section>
 
-<!-- STEP 6 — Billing (LHS completed tasks, RHS editable kit billing tables) -->
+<!-- STEP 6 — Task Preview: a Task per kit labour line, grouped under its service's
+     Task, with hours, dates and every employee working it (the first is the lead). -->
 <section class="wizard-tab" data-tab="6" style="margin-top:18px">
+	<div class="card"><div class="card__head"><h3>Task Preview</h3>
+		<div class="row" style="gap:8px;align-items:center">
+			<span class="muted" id="tp-count"></span>
+			<select id="tp-assign-all" class="tp-toolbar-sel"><option value="">+ Assign employee to all tasks…</option></select>
+		</div></div>
+		<div class="card__body" style="padding:0">
+			<table class="table editable" id="tp-table"><thead><tr>
+				<th style="width:26%">Task</th><th style="width:13%">Labour Item</th><th style="width:70px">Skill</th>
+				<th style="width:80px">Hrs</th><th style="width:140px">Start</th><th style="width:140px">End</th>
+				<th style="width:24%">Assigned Employees <span style="font-weight:400;text-transform:none">(★ lead)</span></th><th style="width:140px">Status</th>
+			</tr></thead><tbody id="tp-body"></tbody></table>
+			<div class="empty" id="tp-empty">No tasks yet — add services and their kit labour in Service Jobs; the tasks are created when the job card is saved.</div>
+		</div>
+	</div>
+</section>
+<style>
+	#tp-table td { padding:6px 8px; vertical-align:middle; }
+	#tp-table input, #tp-table select { width:100%; box-sizing:border-box; }
+	#tp-table tr.tp-group td { background:var(--bg,#f1f4f8); font-weight:700; }
+	#tp-table tr.tp-group .tp-sub { font-weight:500; }
+	#tp-table tr.tp-child td:first-child { padding-left:28px; }
+	.tp-sub { display:block; font-size:11.5px; color:var(--muted,#7a8598); font-weight:500; }
+	.tp-sub a { color:inherit; }
+	.tp-status { display:inline-block; font-size:11px; font-weight:700; border-radius:999px; padding:3px 10px;
+		background:#eef4ff; color:#1b4fd6; white-space:nowrap; }
+	.tp-status.is-Completed { background:#ecfdf3; color:#15803d; }
+	.tp-status.is-Cancelled { background:#f1f4f8; color:#7a8598; }
+	.tp-status.is-Working { background:#f3e8ff; color:#7e22ce; }
+	.tp-status.is-Overdue { background:#fee2e2; color:#b91c1c; }
+	/* Employee multi-select: a button showing who is on the task, opening a
+	   checkbox list (search on top, ★ marks the lead). */
+	.tp-ms { position:relative; }
+	.tp-ms__btn { width:100%; display:flex; align-items:center; gap:6px; text-align:left; cursor:pointer;
+		border:1px solid var(--border,#d8dee9); border-radius:8px; background:#fff; padding:6px 10px; font:inherit; font-size:12.5px; }
+	.tp-ms__btn .tp-ms__txt { flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+	.tp-ms__btn .tp-ms__ph { color:var(--muted,#7a8598); }
+	.tp-ms__btn .tp-ms__n { font-size:11px; font-weight:700; background:var(--red-soft,#fde7ee); color:var(--red,#ec2e5d);
+		border-radius:999px; padding:1px 7px; }
+	.tp-ms.is-open .tp-ms__btn { border-color:var(--red,#ec2e5d); }
+	/* Fixed, placed by tpPlacePanel(): the step scrolls inside itself, which would
+	   clip a panel positioned inside it. */
+	.tp-ms__panel { position:fixed; z-index:1000; width:300px; background:#fff;
+		border:1px solid var(--border,#d8dee9); border-radius:10px; box-shadow:0 10px 28px rgba(0,0,0,.14); }
+	#tp-table .tp-ms__q { width:100%; box-sizing:border-box; border:0; border-bottom:1px solid var(--border,#e3e8ef);
+		padding:9px 12px; font:inherit; font-size:13px; outline:none; border-radius:10px 10px 0 0; }
+	.tp-ms__list { max-height:240px; overflow:auto; padding:4px 0; }
+	.tp-ms__row { display:flex; align-items:center; gap:6px; padding:5px 12px; }
+	.tp-ms__row:hover { background:#f6f8fb; }
+	.tp-ms__row label { flex:1 1 auto; display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; margin:0; }
+	#tp-table .tp-ms__row input[type=checkbox] { width:16px; height:16px; flex:0 0 auto; margin:0; accent-color:var(--red,#ec2e5d); }
+	.tp-ms__lead { border:0; background:transparent; cursor:pointer; font-size:11px; color:var(--muted,#7a8598); white-space:nowrap; }
+	.tp-ms__lead.is-lead { color:var(--red,#ec2e5d); font-weight:700; }
+	.tp-ms__foot { display:flex; justify-content:space-between; padding:7px 10px; border-top:1px solid var(--border,#e3e8ef); }
+	.tp-ms__foot button { border:0; background:transparent; cursor:pointer; font-size:12.5px; font-weight:600; color:var(--muted,#7a8598); }
+	.tp-ms__foot [data-ms-done] { color:var(--red,#ec2e5d); }
+	#tp-table select.tp-st { font-weight:700; font-size:12px; border-radius:999px; padding:4px 8px; }
+	#tp-table select.tp-st.is-Completed { background:#ecfdf3; color:#15803d; border-color:#bbf7d0; }
+	#tp-table select.tp-st.is-Working { background:#f3e8ff; color:#7e22ce; border-color:#e9d5ff; }
+	#tp-table select.tp-st.is-Pending-Review { background:#fff7e6; color:#b45309; border-color:#fde68a; }
+	#tp-table select.tp-st.is-Overdue { background:#fee2e2; color:#b91c1c; border-color:#fecaca; }
+	#tp-table select.tp-st.is-Cancelled { background:#f1f4f8; color:#7a8598; }
+	#tp-table select.tp-st.is-Open { background:#eef4ff; color:#1b4fd6; border-color:#cfe0ff; }
+	.tp-toolbar-sel { min-width:240px; }
+	.tp-none { color:var(--muted,#7a8598); font-size:12px; }
+</style>
+
+<!-- STEP 7 — QC: the job card's check points, filled from a Workshop QC Checklist. -->
+<section class="wizard-tab" data-tab="7" style="margin-top:18px">
+	<div class="card"><div class="card__head"><h3>Quality Check</h3><span id="qc-status" class="tp-status">Pending</span></div>
+		<div class="card__body">
+			<div class="qc-grid">
+				<div class="field"><label>Checklist</label><select id="qc-checklist"></select></div>
+				<div class="field"><label>Inspector</label><select id="qc-inspector"></select></div>
+				<div class="qc-grid__actions">
+					<button type="button" class="btn btn--outline btn--sm" id="qc-std-save" title="Save these check points to the selected checklist"><i class="fa-solid fa-floppy-disk"></i> Update Checklist</button>
+					<button type="button" class="btn btn--outline btn--sm" id="qc-new" title="Create a new checklist"><i class="fa-solid fa-plus"></i> New Checklist</button>
+				</div>
+			</div>
+			<table class="table editable" id="qc-table"><thead><tr>
+				<th style="width:40px">#</th><th style="width:150px">Category</th><th>Check Point</th>
+				<th style="width:80px;text-align:center">Mandatory</th>
+				<th style="width:190px">Result</th><th style="width:24%">Remarks</th><th style="width:40px"></th>
+			</tr></thead><tbody id="qc-body"></tbody></table>
+			<div class="empty" id="qc-empty">No check points — pick a checklist, create a new one, or add check points.</div>
+			<div class="qc-bar"><button type="button" class="btn btn--primary btn--sm" id="qc-add" title="Add a check point"><i class="fa-solid fa-plus"></i> Add</button></div>
+			<div class="field" style="margin-top:14px"><label>QC Remarks</label><textarea id="qc-remarks" rows="2" placeholder="Overall remarks"></textarea></div>
+			<div class="muted" id="qc-date" style="font-size:12px;margin-top:6px"></div>
+		</div>
+	</div>
+</section>
+<style>
+	/* Checklist and Inspector side by side at one height; the checklist's own
+	   actions sit after them on the same line, bottom-aligned with the fields. */
+	.qc-grid { display:grid; grid-template-columns:1fr 1fr auto; gap:14px; align-items:end; margin-bottom:12px; }
+	.qc-grid .field { margin:0; }
+	.qc-grid__actions { display:flex; gap:8px; padding-bottom:4px; }
+	@media (max-width: 1100px) { .qc-grid { grid-template-columns:1fr 1fr; } .qc-grid__actions { grid-column:1 / -1; padding-bottom:0; } }
+	.qc-grid .btn { white-space:nowrap; }
+	.qc-bar { display:flex; justify-content:flex-end; margin-top:10px; }
+	#qc-table td .jc-ac { min-width:200px; }
+	#qc-std-save { background:var(--red-soft,#fde7ee); border-color:var(--red,#ec2e5d); color:var(--red,#ec2e5d); }
+	#qc-table input[type=checkbox] { width:16px; height:16px; accent-color:var(--red,#ec2e5d); }
+	@media (max-width: 700px) { .qc-grid { grid-template-columns:1fr; } }
+	.qc-grid label { display:block; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em;
+		color:var(--muted,#7a8598); margin-bottom:4px; }
+	.qc-grid select { width:100%; box-sizing:border-box; }
+	#qc-table td { padding:6px 8px; vertical-align:middle; }
+	#qc-table input { width:100%; box-sizing:border-box; }
+	.qc-res { display:inline-flex; border:1px solid var(--border,#d8dee9); border-radius:8px; overflow:hidden; }
+	.qc-res button { border:0; background:#fff; padding:5px 12px; font-size:12px; font-weight:600; cursor:pointer; color:var(--muted,#7a8598); }
+	.qc-res button + button { border-left:1px solid var(--border,#d8dee9); }
+	.qc-res button.is-on[data-r="Pass"] { background:#16a34a; color:#fff; }
+	.qc-res button.is-on[data-r="Fail"] { background:#dc2626; color:#fff; }
+	.qc-res button.is-on[data-r="N/A"] { background:#64748b; color:#fff; }
+	.qc-req { color:var(--red,#ec2e5d); font-weight:700; margin-left:3px; }
+	#qc-status.is-passed { background:#ecfdf3; color:#15803d; }
+	#qc-status.is-failed { background:#fee2e2; color:#b91c1c; }
+</style>
+
+<!-- STEP 8 — Billing (LHS completed tasks, RHS editable kit billing tables) -->
+<section class="wizard-tab" data-tab="8" style="margin-top:18px">
 	<div id="billing-need-save" class="card" style="display:none"><div class="card__body">
 		<div class="empty">Save the job card first — billing appears once the card exists and its tasks are completed.</div></div></div>
 	<div id="billing-body" class="split">
@@ -392,35 +535,34 @@
 </section>
 
 <style>
-	/* The item catalogue scrolls inside its own card rather than lengthening the
-	   page: the cart, the totals and Create Quotation sit opposite it, and every
-	   one of them went off-screen once a workshop had a few hundred items. Capped
-	   against the viewport, not a fixed height, so a short list still takes only
-	   the room it needs. The search box stays put — it lives in the card head,
-	   outside this box.
-
-	   The 360px is what everything else on the tab occupies — topbar, stepper,
-	   card head and the Previous/Next row — measured, then rounded up so the page
-	   itself does not scroll at all at a normal window height. */
-	#catalog { max-height: calc(100vh - 360px); min-height: 220px; overflow-y: auto;
+	/* Only the cart's LINES scroll: the totals and Create / Update Quotation stay
+	   put underneath, so the total can be checked before the quotation is sent. */
+	#cart-wrap { max-height: calc(100vh - 560px); min-height: 120px; overflow: auto;
 		overscroll-behavior: contain; }
-	/* The cart scrolls the same way, but only its LINES: the totals and Create /
-	   Update Quotation stay put underneath, which is the whole reason for capping
-	   the list — a cart long enough to push the total off the screen is a cart
-	   nobody can check before they send the quotation.
-
-	   215px more than the catalogue's allowance, which is what those two fixed
-	   blocks occupy, so the two columns end up the same height. */
-	#cart { max-height: calc(100vh - 575px); min-height: 120px; overflow-y: auto;
-		overscroll-behavior: contain; }
+	#cart-table td { padding:5px 8px; vertical-align:middle; }
+	#cart-table input { width:100%; box-sizing:border-box; }
+	#cart-table .amt { text-align:right; font-weight:700; white-space:nowrap; }
+	.cart-kind { display:inline-block; font-size:11px; font-weight:700; border-radius:5px; padding:2px 7px;
+		background:#eef4ff; color:#1b4fd6; }
+	.cart-kind.is-part { background:#ecfdf3; color:#15803d; }
+	.cart-kind.is-sublet { background:#fff7e6; color:#b45309; }
+	.cart-add { display:flex; align-items:center; gap:10px; margin-top:12px; flex-wrap:wrap; }
+	.cart-add #cart-reset { margin-left:auto; }
 	.bill-kit-title { display:flex; align-items:center; justify-content:space-between; gap:8px;
 		font-size:13px; font-weight:800; letter-spacing:.02em; margin:0 0 8px; }
 	#billing-body .table.editable td { padding:5px 6px; }
 	#billing-body .table.editable input { width:100%; box-sizing:border-box; }
 </style>
 
+<style>
+	/* Each step scrolls inside its own box, sized by fitTab() to the window, so
+	   Previous / Save Draft / Next always sit at the page end instead of below a
+	   long step (Readings with its drawing and photos ran well past the fold). */
+	.wizard-tab.is-active { overflow-y:auto; overscroll-behavior:contain; padding:2px 4px 2px 2px; }
+</style>
+
 <!-- nav -->
-<div class="form-actions" style="margin-top:18px">
+<div class="form-actions" id="wiz-nav" style="margin-top:18px">
 	<button type="button" class="btn btn--outline" id="wiz-prev" style="visibility:hidden"><i class="fa-solid fa-arrow-left"></i> Previous</button>
 	<div class="row" style="gap:10px">
 		<button type="button" class="btn btn--ghost" id="wiz-save">Save Draft</button>
@@ -437,7 +579,8 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 {% raw %}
 <script>
 (function () {
-	var TOTAL = 6, cur = 1;
+	var TOTAL = 8, cur = 1;
+	var TASKS_STEP = 6, QC_STEP = 7;
 	// The canvas can only be sized once its tab is on screen, so the step that
 	// holds it is named rather than written as a number in three places.
 	var READINGS_STEP = 2;
@@ -460,12 +603,35 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 		nextBtn.innerHTML = cur === TOTAL
 			? '<i class="fa-solid fa-check"></i> ' + (isEditing ? 'Update Job Card' : 'Create Job Card')
 			: 'Next <i class="fa-solid fa-arrow-right"></i>';
+		fitTab();
 		// Step numbers, not document order: Readings is step 2 (see the stepper).
 		if (cur === READINGS_STEP) sizeCanvas();
-		if (cur === 5) loadEstimateItems();
+		if (cur === 5) { ensureKitItems(); syncCartFromKit(); }
+		if (cur === TASKS_STEP) loadTaskPreview();
+		if (cur === QC_STEP) loadQc();
 		if (cur === TOTAL) loadBillingData();
 	}
-	function goTo(n) { cur = Math.max(1, Math.min(TOTAL, n)); render(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+	// Cap the active step to what the window has left below it, less the nav row,
+	// so the nav lands at the page end and the step scrolls inside itself.
+	var wizNav = document.getElementById('wiz-nav');
+	function fitTab() {
+		var tab = document.querySelector('.wizard-tab.is-active');
+		if (!tab) return;
+		tab.style.maxHeight = tab.style.minHeight = '';
+		var top = tab.getBoundingClientRect().top + window.scrollY;
+		var navH = wizNav.offsetHeight + parseFloat(getComputedStyle(wizNav).marginTop || 0);
+		var avail = window.innerHeight - top - navH - 24;
+		// Fills the window down to the nav, short step or long, so the nav stays at
+		// the page end and a dropdown opened low in the step has room below it.
+		tab.style.maxHeight = tab.style.minHeight = Math.max(320, avail) + 'px';
+	}
+	window.addEventListener('resize', fitTab);
+	function goTo(n) {
+		cur = Math.max(1, Math.min(TOTAL, n)); render();
+		var tab = document.querySelector('.wizard-tab.is-active');
+		if (tab) tab.scrollTop = 0;
+		window.scrollTo({ top: 0, behavior: 'smooth' });
+	}
 	steps.forEach(function (s) { s.addEventListener('click', function () { goTo(+s.dataset.goto); }); });
 	prevBtn.addEventListener('click', function () { goTo(cur - 1); });
 
@@ -506,7 +672,7 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 	}
 	function renderHandoverBanner(jobCard) {
 		if (!handoverRef) return;
-		hoBanner.style.display = "";
+		hoBanner.style.display = ""; fitTab();
 		hoNote.innerHTML = jobCard
 			? '<i class="fa-solid fa-circle-check" style="color:var(--green)"></i> Job card <b>' + jobCard +
 			  '</b> is now the rectification for handover <b>' + handoverRef +
@@ -838,6 +1004,7 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 			if (el) el.focus();
 			return Promise.reject(new Error("required fields missing"));
 		}
+		if (tpDirty) mirrorTasksToServiceRows();
 		return callMethod("garagedesk.api.front_office.save_job_card", {
 			job_card: jobCardName,
 			customer: val("customer_id"),
@@ -858,13 +1025,17 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 			jobCardName = res.name;
 			setVal("job_no", res.name); // Job Number appears once saved as draft
 			linkHandover(res.name);
-			if (advance) {
-				// Next on the middle steps moves on; on the last one it IS the
-				// Create / Update button, so the card is finished with here.
-				if (cur < TOTAL) goTo(cur + 1);
-				else finishAndLeave(res.name);
-			}
-			return res;
+			// Task Preview and QC are written on their own, after the card they hang off.
+			return saveTaskPreview().then(saveQc).then(function () {
+				if (advance) {
+					// Next on the middle steps moves on; on the last one it IS the
+					// Create / Update button, so the card is finished with here.
+					cardJustSaved = cur + 1 === TASKS_STEP;
+					if (cur < TOTAL) goTo(cur + 1);
+					else finishAndLeave(res.name);
+				}
+				return res;
+			});
 		}).catch(function (err) {
 			alert("Could not save job card: " + (err && err.message ? err.message : err));
 			throw err;
@@ -958,9 +1129,17 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 			photos = (jc.photos || []).map(function (p) { return { image: p.image, caption: p.caption || "" }; });
 			renderPhotos();
 			// Tab 5 — reload the estimate cart from the linked Draft quotation.
+			// Saved against the kit loaded above, so opening the tab keeps the quoted
+			// lines (and their edits) until that kit is changed in Service Jobs.
 			if (jc.estimate && jc.estimate.length) {
-				cart = {};
-				jc.estimate.forEach(function (e) { cart[e.item] = { item_name: e.item_name, rate: e.rate, qty: e.qty }; });
+				var kitItemSet = {};
+				kitCartLines().forEach(function (l) { if (l.item) kitItemSet[l.item] = 1; });
+				cart = jc.estimate.map(function (e) {
+					return { kind: e.kind || 'part', item: e.item || '', item_name: e.item_name || '', description: e.description || '',
+						qty: parseFloat(e.qty) || 0, rate: parseFloat(e.rate) || 0, uom: e.uom || '',
+						src: (e.kind === 'sublet' || kitItemSet[e.item]) ? 'kit' : 'manual' };
+				});
+				cartKitSig = kitSig();
 				renderCart();
 			}
 			if (jc.quotation_name) renderQuotationState(jc.quotation_name, jc.quotation_docstatus, jc.quotation_total);
@@ -1406,6 +1585,7 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 				o = o || {}; KIT_ITEMS = (o.mapped || []).concat(o.others || []);
 				relabelItemCells();
 				renderKitTables();
+				if (cur === 5) renderCart(); // item names, now that they are known
 			}).catch(function () { kitItemsAsked = false; });
 	}
 	// A kit Item cell shows the item's name only -- the code is numbered by the
@@ -1690,13 +1870,15 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 			renderKitModalBody();
 			return;
 		}
+		// Already added to this job: show those lines, as edited for this booking,
+		// rather than the standard's.
+		var booked = bookedKit(standard);
+		if (booked) { kitDialogData = booked; renderKitModalBody(); return; }
 		var body = document.getElementById('kit-modal-body');
 		body.innerHTML = '<div class="empty">Loading…</div>';
 		callMethod('garagedesk.workshop.doctype.workshop_job_card.workshop_job_card.kit_components_for_standard', { standard: standard })
 			.then(function (data) {
 				data = data || { labor: [], parts: [], sublet: [] };
-				// Always show the standard's full kit — "Add to Job" dedupes on commit,
-				// so re-opening a saved card still shows the components (not an empty popup).
 				kitDialogData = { labor: data.labor || [], parts: data.parts || [], sublet: data.sublet || [] };
 				renderKitModalBody();
 			})
@@ -1795,10 +1977,22 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 		});
 		renderKitTables();
 	}
-	// "Add to Job" — commit the popup rows to the Job's kit tables (stamped with the standard).
+	function bookedKit(standard) {
+		function mine(r) { return r.source_standard === standard; }
+		var b = { labor: kitLabor.filter(mine), parts: kitParts.filter(mine), sublet: kitSublet.filter(mine) };
+		return (b.labor.length || b.parts.length || b.sublet.length) ? b : null;
+	}
+	// "Add to Job" — the popup rows become this job's kit for the standard, replacing
+	// what was added before, so edited hours / rates / quantities apply to this booking
+	// only. The standard itself changes only through "Update Standard".
 	document.getElementById('kit-add-btn').addEventListener('click', function () {
 		var rows = { labor: gatherKitModal('labor'), parts: gatherKitModal('parts'), sublet: gatherKitModal('sublet') };
-		commitKitRows(rows, kitDialogStandard || '');
+		var std = kitDialogStandard || '';
+		if (std) {
+			var other = function (r) { return r.source_standard !== std; };
+			kitLabor = kitLabor.filter(other); kitParts = kitParts.filter(other); kitSublet = kitSublet.filter(other);
+		}
+		commitKitRows(rows, std);
 		kitModalClose();
 	});
 	// Top-right "Create / Update Standard" — persist the popup rows to the Labor Time Standard.
@@ -2014,82 +2208,115 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 
 	// ---- Estimate: items driven by Labor Time Standard; cart -> Quotation ----
 	function esc(s) { return String(s == null ? '' : s).replace(/[&<>]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]; }); }
-	var cart = {}; // item_code -> { item_name, rate, qty }
+	// Cart lines: { kind: labor|part|sublet, item, item_name, description, qty, rate, uom, src: kit|manual }.
+	var cart = [];
+	var cartKitSig = null; // the Service Jobs kit the cart was last built from
 	var cartEl = document.getElementById('cart');
 	var cartEmpty = document.getElementById('cart-empty');
-	var catalogEl = document.getElementById('catalog');
-	var mappedHours = {}; // item_code -> default qty (from the mapped service's hours)
 	function money(v) { return (window.WS_CURRENCY ? window.WS_CURRENCY + ' ' : '') + (v || 0).toFixed(2); }
 	// Rate resolved from the company's tax template server-side; 0 when none is configured.
 	var TAX_RATE = Number(window.WS_TAX_RATE) || 0;
 
-	function serviceHours() {
-		var m = {};
-		gatherServices().forEach(function (r) { if (r.service) m[r.service] = parseFloat(r.hours) || 1; });
-		return m;
+	// The kit as Service Jobs holds it, as cart lines: labour bills hours x rate,
+	// parts qty x rate, sublet once at its sell price (cost + markup).
+	function kitCartLines() {
+		var out = [];
+		kitLabor.forEach(function (r) {
+			if (!(r.description || '').trim() && !r.operation) return;
+			out.push({ kind: 'labor', item: r.operation || '', item_name: itemNameOf(r.operation) || '',
+				description: r.description || '', qty: parseFloat(r.hours) || 0, rate: parseFloat(r.rate) || 0, uom: '', src: 'kit' });
+		});
+		kitParts.forEach(function (r) {
+			if (!r.item_code) return;
+			out.push({ kind: 'part', item: r.item_code, item_name: r.item_name || itemNameOf(r.item_code) || '',
+				description: '', qty: parseFloat(r.qty) || 1, rate: parseFloat(r.rate) || 0, uom: r.uom || '', src: 'kit' });
+		});
+		kitSublet.forEach(function (r) {
+			if (!(r.service_description || '').trim()) return;
+			var sell = (parseFloat(r.cost) || 0) * (1 + (parseFloat(r.markup_pct) || 0) / 100);
+			out.push({ kind: 'sublet', item: '', item_name: '', description: r.service_description,
+				qty: 1, rate: Math.round(sell * 100) / 100, uom: '', src: 'kit' });
+		});
+		return out;
 	}
-	function itemRow(it, mapped) {
-		return '<div class="cart-item" data-item="' + escAttr(it.item) + '" data-rate="' + (it.rate || 0) + '" style="cursor:pointer">' +
-			'<div><div class="name">' + (mapped ? '<i class="fa-solid fa-circle-check" style="color:#16a34a;margin-right:6px"></i>' : '') + esc(it.item_name) + '</div>' +
-			'<div class="unit">' + money(it.rate) + (mapped ? ' /hr' : '') + '</div></div>' +
-			'<span></span><span></span>' +
-			'<button type="button" class="btn btn--primary btn--icon" title="Add"><i class="fa-solid fa-plus"></i></button></div>';
+	function kitSig() {
+		return JSON.stringify(kitCartLines().map(function (l) { return [l.kind, l.item, l.description, l.qty, l.rate]; }));
 	}
-	// Refresh the item list from the currently-selected services (mapped first, green tick).
-	function loadEstimateItems() {
-		var services = gatherServices().map(function (r) { return r.service; }).filter(Boolean);
-		return callMethod("garagedesk.api.front_office.get_estimate_items", { services: services }).then(function (o) {
-			o = o || { mapped: [], others: [] };
-			var hrs = serviceHours();
-			mappedHours = {};
-			(o.mapped || []).forEach(function (m) { mappedHours[m.item] = hrs[m.service] || 1; });
-			var html = (o.mapped || []).map(function (m) { return itemRow(m, true); }).join('') +
-				(o.others || []).map(function (m) { return itemRow(m, false); }).join('');
-			catalogEl.innerHTML = html || '<div class="empty">No items configured.</div>';
-		}).catch(function () { catalogEl.innerHTML = '<div class="empty">Could not load items.</div>'; });
-	}
-	catalogEl.addEventListener('click', function (e) {
-		var row = e.target.closest('[data-item]'); if (!row) return;
-		var code = row.dataset.item, rate = parseFloat(row.dataset.rate) || 0;
-		var name = row.querySelector('.name').textContent.trim();
-		if (cart[code]) cart[code].qty += 1;
-		else cart[code] = { item_name: name, rate: rate, qty: mappedHours[code] || 1 };
+	// On opening the Estimate: when the kit changed since the cart was built, the
+	// kit lines are rebuilt from it; items added by hand here stay. An unchanged
+	// kit leaves the cart -- and every edit made in it -- alone.
+	function syncCartFromKit(force) {
+		var sig = kitSig();
+		if (!force && sig === cartKitSig) { renderCart(); return; }
+		var kit = kitCartLines();
+		var kitItems = {};
+		kit.forEach(function (l) { if (l.item) kitItems[l.item] = 1; });
+		var manual = cart.filter(function (l) { return l.src === 'manual' && !(l.item && kitItems[l.item]); });
+		cart = kit.concat(manual);
+		cartKitSig = sig;
 		renderCart();
-	});
+	}
+	var KIND_LABEL = { labor: 'Labour', part: 'Part', sublet: 'Sublet' };
 	function renderCart() {
-		var codes = Object.keys(cart);
-		cartEmpty.style.display = codes.length ? 'none' : 'block';
-		cartEl.innerHTML = codes.map(function (c) {
-			var it = cart[c];
-			return '<div class="cart-item" data-cn="' + escAttr(c) + '">' +
-				'<div><div class="name">' + esc(it.item_name) + '</div><div class="unit">' + money(it.rate) + '</div></div>' +
-				'<div class="qty"><button type="button" data-dec>−</button><input data-q value="' + it.qty + '"><button type="button" data-inc>+</button></div>' +
-				'<div class="line">' + money(it.rate * it.qty) + '</div>' +
-				'<button type="button" class="icon-del" data-rm><i class="fa-solid fa-trash"></i></button></div>';
+		cartEmpty.style.display = cart.length ? 'none' : 'block';
+		document.getElementById('cart-table').style.display = cart.length ? '' : 'none';
+		cartEl.innerHTML = cart.map(function (l, i) {
+			var name = l.item ? (l.item_name || itemNameOf(l.item) || l.item)
+				: '<span class="muted" title="Quoted against the default ' + (l.kind === 'sublet' ? 'Sublet' : 'Labour') + ' Item in Workshop Settings">— default item —</span>';
+			return '<tr data-i="' + i + '">' +
+				'<td><span class="cart-kind is-' + l.kind + '">' + KIND_LABEL[l.kind] + '</span></td>' +
+				'<td>' + (l.item ? esc(name) : name) + '</td>' +
+				'<td><input data-f="description" value="' + escAttr(l.description || '') + '" placeholder="Description"></td>' +
+				'<td><input data-f="qty" type="number" min="0" step="any" value="' + (l.qty || 0) + '"></td>' +
+				'<td><input data-f="rate" type="number" min="0" step="0.01" value="' + (l.rate || 0) + '"></td>' +
+				'<td class="amt">' + money((l.qty || 0) * (l.rate || 0)) + '</td>' +
+				'<td><button type="button" class="icon-del" data-rm title="Remove"><i class="fa-solid fa-trash"></i></button></td></tr>';
 		}).join('');
-		var sub = codes.reduce(function (s, c) { return s + cart[c].rate * cart[c].qty; }, 0);
+		renderCartTotals();
+	}
+	function renderCartTotals() {
+		var sub = cart.reduce(function (s, l) { return s + (l.qty || 0) * (l.rate || 0); }, 0);
 		var vatEl = document.getElementById('t-vat'); // absent when no tax rate is configured
 		document.getElementById('t-sub').textContent = money(sub);
 		if (vatEl) vatEl.textContent = money(sub * TAX_RATE / 100);
 		document.getElementById('t-grand').textContent = money(sub * (1 + TAX_RATE / 100));
 	}
 	cartEl.addEventListener('click', function (e) {
-		var item = e.target.closest('[data-cn]'); if (!item) return; var c = item.dataset.cn;
-		if (e.target.closest('[data-inc]')) cart[c].qty++;
-		else if (e.target.closest('[data-dec]')) cart[c].qty = Math.max(1, cart[c].qty - 1);
-		else if (e.target.closest('[data-rm]')) delete cart[c];
-		else return;
+		if (!e.target.closest('[data-rm]')) return;
+		cart.splice(+e.target.closest('tr').dataset.i, 1);
 		renderCart();
 	});
-	cartEl.addEventListener('change', function (e) {
-		if (!e.target.matches('[data-q]')) return;
-		var item = e.target.closest('[data-cn]'); cart[item.dataset.cn].qty = Math.max(1, parseFloat(e.target.value) || 1); renderCart();
+	// Typing updates the line and the totals without redrawing the row being typed in.
+	cartEl.addEventListener('input', function (e) {
+		var f = e.target.dataset.f; if (!f) return;
+		var tr = e.target.closest('tr'), l = cart[+tr.dataset.i];
+		l[f] = f === 'description' ? e.target.value : (parseFloat(e.target.value) || 0);
+		tr.querySelector('.amt').textContent = money((l.qty || 0) * (l.rate || 0));
+		renderCartTotals();
 	});
-	document.getElementById('item-search').addEventListener('input', function () {
-		var q = this.value.toLowerCase();
-		catalogEl.querySelectorAll('[data-item]').forEach(function (r) {
-			r.style.display = r.querySelector('.name').textContent.toLowerCase().indexOf(q) >= 0 ? '' : 'none';
+	// "Add item" — any sellable Item; a labour Item is added as labour.
+	var cartAddInput = document.getElementById('cart-add-item');
+	cartAddInput.addEventListener('focus', ensureKitItems);
+	attachAutocomplete(cartAddInput, function (typed) {
+		var q = (typed || '').toLowerCase();
+		return KIT_ITEMS.filter(function (it) {
+			if (it.is_item === 0) return false;
+			return !q || (it.item || '').toLowerCase().indexOf(q) >= 0 || (it.item_name || '').toLowerCase().indexOf(q) >= 0;
+		}).slice(0, 10).map(function (it) {
+			return { label: esc(it.item_name || it.item), sub: money(it.rate),
+				value: it.item, name: it.item_name || it.item, rate: it.rate, uom: it.uom, labour: it.is_stock === 0 };
 		});
+	}, function (it) {
+		var have = cart.filter(function (l) { return l.item === it.value && l.kind !== 'labor'; })[0];
+		if (have) have.qty = (have.qty || 0) + 1;
+		else cart.push({ kind: it.labour ? 'labor' : 'part', item: it.value, item_name: it.name, description: '',
+			qty: 1, rate: parseFloat(it.rate) || 0, uom: it.uom || '', src: 'manual' });
+		cartAddInput.value = '';
+		renderCart();
+	});
+	document.getElementById('cart-reset').addEventListener('click', function () {
+		if (cart.length && !confirm('Rebuild the cart from the Service Jobs kit? Edits made here to kit lines are lost; items added here stay.')) return;
+		syncCartFromKit(true);
 	});
 	// Open a transaction's print-format PDF in a new tab.
 	function openPdf(doctype, name) {
@@ -2121,7 +2348,9 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 	// Create / Update the Quotation from the cart.
 	document.getElementById('create-quotation').addEventListener('click', function () {
 		var btn = this, out = document.getElementById('quotation-result');
-		var lines = Object.keys(cart).map(function (c) { return { item: c, qty: cart[c].qty, rate: cart[c].rate }; });
+		var lines = cart.map(function (l) {
+			return { kind: l.kind, item: l.item, qty: l.qty, rate: l.rate, description: l.description, uom: l.uom };
+		});
 		if (!lines.length) { alert('Add at least one item to the estimate.'); return; }
 		if (!jobCardName) { alert('Save the job card first (it needs a customer).'); return; }
 		btn.disabled = true; out.textContent = 'Creating quotation…';
@@ -2130,6 +2359,398 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 			.catch(function (err) { out.textContent = 'Could not create quotation: ' + (err && err.message ? err.message : err); })
 			.then(function () { btn.disabled = false; });
 	});
+
+	// ---- Task Preview: the card's Tasks, with several employees on each ----------
+	var tpTasks = [], tpDirty = false;
+	var tpList = document.getElementById('tp-body'), tpEmpty = document.getElementById('tp-empty');
+	function empName(id) {
+		var e = EMPLOYEES.filter(function (x) { return x.name === id; })[0];
+		return e ? (e.employee_name || e.name) : id;
+	}
+	// The tasks are made from Service Jobs when the card is saved, so opening this
+	// step saves it first -- arriving by the stepper (which does not save) would
+	// otherwise show tasks for a kit that has since changed, or none at all.
+	// Skipped when Next has just saved it, or the card cannot be saved yet.
+	var cardJustSaved = false;
+	function loadTaskPreview() {
+		var saved = cardJustSaved; cardJustSaved = false;
+		if (!saved && !missingRequired().length) {
+			tpList.innerHTML = '<tr><td colspan="8" class="tp-none">Saving the job card…</td></tr>'; tpEmpty.style.display = 'none';
+			saveJobCard(false).then(fetchTaskPreview).catch(function () { tpDirty = false; fetchTaskPreview(); });
+			return;
+		}
+		fetchTaskPreview();
+	}
+	function fetchTaskPreview() {
+		if (!jobCardName) { tpTasks = []; renderTaskPreview(); return; }
+		tpList.innerHTML = '<tr><td colspan="8" class="tp-none">Loading…</td></tr>'; tpEmpty.style.display = 'none';
+		callMethod('garagedesk.api.job_card_steps.get_job_card_tasks', { job_card: jobCardName })
+			.then(function (rows) { tpTasks = rows || []; renderTaskPreview(); })
+			.catch(function () { tpList.innerHTML = '<tr><td colspan="8" class="tp-none">Could not load the tasks.</td></tr>'; });
+	}
+	function empOptions(exclude, placeholder) {
+		return '<option value="">' + placeholder + '</option>' + EMPLOYEES.filter(function (e) {
+			return exclude.indexOf(e.name) < 0;
+		}).map(function (e) {
+			return '<option value="' + escAttr(e.name) + '">' + esc(e.employee_name || e.name) + '</option>';
+		}).join('');
+	}
+	var TASK_STATUSES = ['Open', 'Working', 'Pending Review', 'Overdue', 'Completed', 'Cancelled'];
+	var tpOpen = -1; // the task whose employee list is open
+	function tpEmpSummary(t) {
+		if (!t.employees.length) return '<span class="tp-ms__txt tp-ms__ph">Select employees</span>';
+		return '<span class="tp-ms__txt">★ ' + esc(t.employees.map(empName).join(', ')) + '</span>' +
+			(t.employees.length > 1 ? '<span class="tp-ms__n">' + t.employees.length + '</span>' : '');
+	}
+	function tpEmpCell(t, i) {
+		return '<div class="tp-ms' + (tpOpen === i ? ' is-open' : '') + '" data-ms="' + i + '">' +
+			'<button type="button" class="tp-ms__btn" data-ms-toggle>' + tpEmpSummary(t) +
+			'<i class="fa-solid fa-chevron-down" style="font-size:10px;color:var(--muted,#7a8598)"></i></button>' +
+			(tpOpen === i ? '<div class="tp-ms__panel"><input class="tp-ms__q" placeholder="Search employees…" autocomplete="off">' +
+				'<div class="tp-ms__list">' + tpEmpRows(t) + '</div>' +
+				'<div class="tp-ms__foot"><button type="button" data-ms-clear>Clear</button><button type="button" data-ms-done>Done</button></div></div>' : '') +
+			'</div>';
+	}
+	// Ticked employees first, in lead order, then everyone else.
+	function tpEmpRows(t, q) {
+		q = (q || '').toLowerCase();
+		var on = t.employees.map(function (id) { return EMPLOYEES.filter(function (e) { return e.name === id; })[0] || { name: id }; });
+		var off = EMPLOYEES.filter(function (e) { return t.employees.indexOf(e.name) < 0; });
+		return on.concat(off).filter(function (e) {
+			return !q || (e.employee_name || e.name).toLowerCase().indexOf(q) >= 0 || e.name.toLowerCase().indexOf(q) >= 0;
+		}).map(function (e) {
+			var k = t.employees.indexOf(e.name);
+			return '<div class="tp-ms__row" data-e="' + escAttr(e.name) + '"><label><input type="checkbox"' + (k >= 0 ? ' checked' : '') + '> ' +
+				esc(e.employee_name || e.name) + '</label>' +
+				(k >= 0 ? '<button type="button" class="tp-ms__lead' + (k === 0 ? ' is-lead' : '') + '" data-ms-lead>' +
+					(k === 0 ? '★ Lead' : '☆ Make lead') + '</button>' : '') + '</div>';
+		}).join('') || '<div class="tp-ms__row tp-none">No match</div>';
+	}
+	// Redraw one open list in place, so the search box keeps its text and focus.
+	function tpRefreshPicker(box, t) {
+		var q = box.querySelector('.tp-ms__q');
+		box.querySelector('.tp-ms__list').innerHTML = tpEmpRows(t, q ? q.value : '');
+		box.querySelector('.tp-ms__btn').innerHTML = tpEmpSummary(t) +
+			'<i class="fa-solid fa-chevron-down" style="font-size:10px;color:var(--muted,#7a8598)"></i>';
+		tpCount();
+	}
+	function tpCount() {
+		var work = tpTasks.filter(function (t) { return !t.is_group; });
+		var unassigned = work.filter(function (t) { return !t.employees.length; }).length;
+		document.getElementById('tp-count').textContent = work.length
+			? work.length + ' task' + (work.length === 1 ? '' : 's') + (unassigned ? ' · ' + unassigned + ' unassigned' : ' · all assigned')
+			: '';
+	}
+	function tpStatusSelect(t) {
+		var list = TASK_STATUSES.indexOf(t.status) < 0 && t.status ? TASK_STATUSES.concat([t.status]) : TASK_STATUSES;
+		return '<select class="tp-st is-' + escAttr((t.status || 'Open').replace(/ /g, '-')) + '" data-f="status">' + list.map(function (st) {
+			return '<option' + (st === (t.status || 'Open') ? ' selected' : '') + '>' + esc(st) + '</option>';
+		}).join('') + '</select>';
+	}
+	function tpTaskLink(t) {
+		return '<a href="/app/task/' + encodeURIComponent(t.task) + '" target="_blank">' + esc(t.task) + '</a>';
+	}
+	// A service Task with labour sub-tasks is a heading row (the work and the people
+	// are on its sub-tasks); one without any is a task row of its own.
+	function renderTaskPreview() {
+		tpEmpty.style.display = tpTasks.length ? 'none' : 'block';
+		document.getElementById('tp-table').style.display = tpTasks.length ? '' : 'none';
+		tpCount();
+		document.getElementById('tp-assign-all').innerHTML = empOptions([], '+ Assign employee to all tasks…');
+		tpList.innerHTML = tpTasks.map(function (t, i) {
+			if (t.is_group) {
+				var kids = tpTasks.filter(function (c) { return c.parent_task === t.task; });
+				var hrs = kids.reduce(function (sum, c) { return sum + (parseFloat(c.expected_time) || 0); }, 0);
+				return '<tr class="tp-group" data-i="' + i + '"><td colspan="3">' + esc(t.service_name || t.subject) +
+					'<span class="tp-sub">' + tpTaskLink(t) + (t.jobtype ? ' · ' + esc(t.jobtype) : '') + ' · ' + kids.length + ' labour task' + (kids.length === 1 ? '' : 's') + '</span></td>' +
+					'<td>' + hrs + '</td><td colspan="3" class="tp-none" style="font-weight:500">Completes when its labour tasks are done</td>' +
+					'<td><span class="tp-status is-' + escAttr(t.status) + '">' + esc(t.status || 'Open') + '</span></td></tr>';
+			}
+			var dis = '';
+			return '<tr class="' + (t.parent_task ? 'tp-child' : '') + '" data-i="' + i + '">' +
+				'<td>' + esc(t.parent_task ? (t.description ? stripTags(t.description).split('\n')[0] : t.subject) : (t.service_name || t.subject)) +
+				'<span class="tp-sub">' + tpTaskLink(t) + (!t.parent_task && t.jobtype ? ' · ' + esc(t.jobtype) : '') + '</span></td>' +
+				'<td>' + (t.labour_item ? esc(t.labour_item) : '<span class="tp-none">—</span>') + '</td>' +
+				'<td>' + (t.skill ? esc(t.skill) : '<span class="tp-none">—</span>') + '</td>' +
+				'<td><input type="number" min="0" step="0.25" data-f="expected_time" value="' + (t.expected_time || 0) + '"' + dis + '></td>' +
+				'<td><input type="date" data-f="exp_start_date" value="' + escAttr(t.exp_start_date || '') + '"' + dis + '></td>' +
+				'<td><input type="date" data-f="exp_end_date" value="' + escAttr(t.exp_end_date || '') + '"' + dis + '></td>' +
+				'<td>' + tpEmpCell(t, i) + '</td>' +
+				'<td>' + tpStatusSelect(t) + '</td></tr>';
+		}).join('');
+		tpPlacePanel();
+	}
+	// Under the button, or above it when the window has no room below.
+	function tpPlacePanel() {
+		var box = tpList.querySelector('.tp-ms.is-open'); if (!box) return;
+		var panel = box.querySelector('.tp-ms__panel'), r = box.getBoundingClientRect();
+		var h = panel.offsetHeight, below = window.innerHeight - r.bottom - 8;
+		panel.style.left = Math.max(8, Math.min(r.left, window.innerWidth - panel.offsetWidth - 8)) + 'px';
+		panel.style.width = Math.max(300, r.width) + 'px';
+		panel.style.top = (below >= h || r.top < h ? r.bottom + 3 : r.top - h - 3) + 'px';
+	}
+	window.addEventListener('resize', tpPlacePanel);
+	// The panel is fixed, so it would drift from its button once the step scrolls.
+	document.querySelector('.wizard-tab[data-tab="6"]').addEventListener('scroll', function () {
+		if (tpOpen >= 0) { tpOpen = -1; renderTaskPreview(); }
+	});
+	function stripTags(html) {
+		var d = document.createElement('div'); d.innerHTML = html.replace(/<\/p>/g, '\n'); return (d.textContent || '').trim();
+	}
+	tpList.addEventListener('click', function (e) {
+		var box = e.target.closest('.tp-ms'); if (!box) return;
+		var i = +box.dataset.ms, t = tpTasks[i];
+		if (e.target.closest('[data-ms-toggle]')) {
+			tpOpen = tpOpen === i ? -1 : i; renderTaskPreview();
+			var q = tpList.querySelector('.tp-ms.is-open .tp-ms__q'); if (q) q.focus({ preventScroll: true });
+			return;
+		}
+		if (e.target.closest('[data-ms-done]')) { tpOpen = -1; renderTaskPreview(); return; }
+		if (e.target.closest('[data-ms-clear]')) { t.employees = []; tpDirty = true; tpRefreshPicker(box, t); return; }
+		var lead = e.target.closest('[data-ms-lead]');
+		if (lead) {
+			var id = lead.closest('[data-e]').dataset.e, k = t.employees.indexOf(id);
+			if (k > 0) { t.employees.splice(k, 1); t.employees.unshift(id); tpDirty = true; tpRefreshPicker(box, t); }
+		}
+	});
+	tpList.addEventListener('input', function (e) {
+		if (!e.target.classList.contains('tp-ms__q')) return;
+		var box = e.target.closest('.tp-ms');
+		box.querySelector('.tp-ms__list').innerHTML = tpEmpRows(tpTasks[+box.dataset.ms], e.target.value);
+	});
+	tpList.addEventListener('change', function (e) {
+		var box = e.target.closest('.tp-ms');
+		if (box && e.target.type === 'checkbox') {
+			var t = tpTasks[+box.dataset.ms], id = e.target.closest('[data-e]').dataset.e, k = t.employees.indexOf(id);
+			if (e.target.checked && k < 0) t.employees.push(id);
+			if (!e.target.checked && k >= 0) t.employees.splice(k, 1);
+			tpDirty = true; tpRefreshPicker(box, t); return;
+		}
+		var tr = e.target.closest('tr[data-i]'); if (!tr) return;
+		var t2 = tpTasks[+tr.dataset.i], f = e.target.dataset.f; if (!f) return;
+		t2[f] = f === 'expected_time' ? (parseFloat(e.target.value) || 0) : e.target.value;
+		tpDirty = true;
+		if (f === 'status') e.target.className = 'tp-st is-' + e.target.value.replace(/ /g, '-');
+		if (f === 'expected_time' && t2.parent_task) renderTaskPreview(); // the heading's total
+	});
+	// A click anywhere else closes the open list.
+	document.addEventListener('mousedown', function (e) {
+		// Another task's button is left to its click, which moves the list there.
+		if (tpOpen < 0 || e.target.closest('.tp-ms.is-open') || e.target.closest('[data-ms-toggle]')) return;
+		tpOpen = -1; renderTaskPreview();
+	});
+	document.getElementById('tp-assign-all').addEventListener('change', function () {
+		var id = this.value; if (!id) return;
+		tpTasks.forEach(function (t) {
+			if (!t.is_group && t.employees.indexOf(id) < 0) t.employees.push(id);
+		});
+		tpDirty = true; renderTaskPreview();
+	});
+	// The Service Jobs row behind a task carries the same lead and hours, so the
+	// card save that runs first does not put the old technician back.
+	function mirrorTasksToServiceRows() {
+		var used = [];
+		tpTasks.forEach(function (t) {
+			// A labour sub-task's lead and hours are its own; a heading has neither.
+			if (t.parent_task || t.is_group) return;
+			var tr = Array.prototype.filter.call(document.querySelectorAll('#job-detail-body tr'), function (r) {
+				if (used.indexOf(r) >= 0) return false;
+				var sv = svcHidden(r);
+				return r.dataset.task === t.task || (!r.dataset.task && sv && sv.value === t.service);
+			})[0];
+			if (!tr) return;
+			used.push(tr); tr.dataset.task = t.task;
+			var tech = tr.querySelector('.tech'), hrs = tr.querySelector('.hrs');
+			if (tech) tech.value = t.employees[0] || '';
+			if (hrs) hrs.value = t.expected_time || 0;
+		});
+	}
+	function saveTaskPreview() {
+		if (!tpDirty || !jobCardName) return Promise.resolve();
+		return callMethod('garagedesk.api.job_card_steps.save_job_card_tasks', {
+			job_card: jobCardName,
+			tasks: tpTasks.filter(function (t) { return !t.is_group; }).map(function (t) {
+				return { task: t.task, status: t.status, expected_time: t.expected_time, exp_start_date: t.exp_start_date,
+					exp_end_date: t.exp_end_date, employees: t.employees };
+			})
+		}).then(function (rows) { tpTasks = rows || []; tpDirty = false; renderTaskPreview(); });
+	}
+
+	// ---- QC: check points from a Workshop QC Checklist ----------------------
+	var qc = { items: [], checklist: '', loaded: false }, qcDirty = false;
+	var qcCategories = [];
+	var qcBody = document.getElementById('qc-body'), qcSel = document.getElementById('qc-checklist');
+	var qcInspector = document.getElementById('qc-inspector');
+	function loadQc(checklist) {
+		if (!jobCardName) { qc.items = []; renderQc(); return Promise.resolve(); }
+		if (qcDirty && !checklist) { renderQc(); return Promise.resolve(); }
+		qcBody.innerHTML = ''; document.getElementById('qc-empty').textContent = 'Loading…';
+		return callMethod('garagedesk.api.job_card_steps.get_job_card_qc', { job_card: jobCardName, checklist: checklist || '' })
+			.then(function (r) {
+				r = r || {};
+				qcSel.innerHTML = (r.checklists || []).map(function (c) {
+					return '<option value="' + escAttr(c.name) + '">' + esc(c.name) + (c.is_default ? ' (default)' : '') + '</option>';
+				}).join('') || '<option value="">— no checklist —</option>';
+				qcSel.value = r.checklist || '';
+				if (!checklist) {
+					qcInspector.innerHTML = '<option value="">— inspector —</option>' + EMPLOYEES.map(function (e) {
+						return '<option value="' + escAttr(e.name) + '">' + esc(e.employee_name || e.name) + '</option>';
+					}).join('');
+					qcInspector.value = r.inspector || '';
+					document.getElementById('qc-remarks').value = r.remarks || '';
+					document.getElementById('qc-date').textContent = r.qc_date ? 'Last checked ' + r.qc_date.slice(0, 16) : '';
+				}
+				qc.items = r.items || []; qc.checklist = r.checklist || '';
+				qcCategories = r.categories || [];
+				qcDirty = !!checklist; // a switched checklist is unsaved until Next / Save
+				renderQc();
+			})
+			.catch(function () { document.getElementById('qc-empty').textContent = 'Could not load the QC checklist.'; });
+	}
+	function renderQc() {
+		document.getElementById('qc-empty').textContent = 'No check points — pick a checklist, create a new one, or add check points.';
+		document.getElementById('qc-empty').style.display = qc.items.length ? 'none' : 'block';
+		document.getElementById('qc-table').style.display = qc.items.length ? '' : 'none';
+		qcBody.innerHTML = qc.items.map(function (it, i) {
+			return '<tr data-i="' + i + '"><td>' + (i + 1) + '</td>' +
+				'<td><input data-f="category" value="' + escAttr(it.category || '') + '" placeholder="Category"></td>' +
+				'<td><input data-f="check_point" value="' + escAttr(it.check_point || '') + '" placeholder="What to check"></td>' +
+				'<td style="text-align:center"><input type="checkbox" data-f="mandatory"' + (it.mandatory ? ' checked' : '') + '></td>' +
+				'<td><div class="qc-res">' + ['Pass', 'Fail', 'N/A'].map(function (r) {
+					return '<button type="button" data-r="' + r + '"' + (it.result === r ? ' class="is-on"' : '') + '>' + r + '</button>';
+				}).join('') + '</div></td>' +
+				'<td><input data-f="remarks" value="' + escAttr(it.remarks || '') + '" placeholder="Remarks"></td>' +
+				'<td><button type="button" class="icon-del" data-qc-del title="Remove"><i class="fa-solid fa-trash"></i></button></td></tr>';
+		}).join('');
+		qcBody.querySelectorAll('[data-f="category"]').forEach(attachQcCategory);
+		renderQcStatus();
+	}
+	// Every category in use -- on this card or in any checklist -- for the
+	// Category cells' list.
+	function qcAllCategories() {
+		var all = qcCategories.slice();
+		qc.items.forEach(function (i) { var c = (i.category || '').trim(); if (c && all.indexOf(c) < 0) all.push(c); });
+		return all.sort(function (a, b) { return a.localeCompare(b); });
+	}
+	// The Category cell lists the categories in use, narrowed as it is typed;
+	// anything new typed is a new category.
+	function attachQcCategory(input) {
+		attachAutocomplete(input, function (q) {
+			q = (q || '').toLowerCase();
+			return qcAllCategories().filter(function (c) { return !q || c.toLowerCase().indexOf(q) >= 0; })
+				.map(function (c) { return { label: esc(c), value: c }; });
+		}, function (it) {
+			input.value = it.value;
+			qc.items[+input.closest('tr').dataset.i].category = it.value;
+			qcDirty = true;
+		});
+	}
+	// Mirrors the server's rule: every mandatory point passed, and none failed.
+	function renderQcStatus() {
+		var failed = qc.items.some(function (i) { return i.result === 'Fail'; });
+		var passed = qc.items.length && qc.items.every(function (i) { return i.mandatory ? i.result === 'Pass' : i.result !== 'Fail'; });
+		var el = document.getElementById('qc-status');
+		el.className = 'tp-status' + (passed ? ' is-passed' : failed ? ' is-failed' : '');
+		el.textContent = passed ? 'QC Passed' : failed ? 'QC Failed' : 'Pending';
+	}
+	qcBody.addEventListener('click', function (e) {
+		if (e.target.closest('[data-qc-del]')) {
+			qc.items.splice(+e.target.closest('tr').dataset.i, 1);
+			qcDirty = true; renderQc(); return;
+		}
+		var b = e.target.closest('[data-r]'); if (!b) return;
+		var it = qc.items[+b.closest('tr').dataset.i];
+		it.result = it.result === b.dataset.r ? '' : b.dataset.r; // a second click clears it
+		qcDirty = true; renderQc();
+	});
+	qcBody.addEventListener('input', function (e) {
+		var f = e.target.dataset.f; if (!f || f === 'mandatory') return;
+		qc.items[+e.target.closest('tr').dataset.i][f] = e.target.value; qcDirty = true;
+	});
+	qcBody.addEventListener('change', function (e) {
+		if (e.target.dataset.f !== 'mandatory') return;
+		qc.items[+e.target.closest('tr').dataset.i].mandatory = e.target.checked ? 1 : 0;
+		qcDirty = true; renderQcStatus();
+	});
+	document.getElementById('qc-add').addEventListener('click', function () {
+		var last = qc.items[qc.items.length - 1];
+		qc.items.push({ category: last ? last.category : '', check_point: '', mandatory: 1, result: '', remarks: '' });
+		qcDirty = true; renderQc();
+		var inputs = qcBody.querySelectorAll('[data-f="check_point"]');
+		if (inputs.length) inputs[inputs.length - 1].focus();
+	});
+	// The table's points, ready to be written to a checklist template.
+	function qcPoints() {
+		return qc.items.filter(function (i) { return (i.check_point || '').trim(); }).map(function (i) {
+			return { check_point: i.check_point, category: i.category, mandatory: i.mandatory ? 1 : 0 };
+		});
+	}
+	function qcSaveChecklist(args) {
+		args.items = args.items || qcPoints();
+		return callMethod('garagedesk.api.job_card_steps.save_qc_checklist', args);
+	}
+	document.getElementById('qc-std-save').addEventListener('click', function () {
+		var btn = this;
+		if (!qcSel.value) { alert('Pick a checklist to update, or create a new one.'); return; }
+		if (!qcPoints().length) { alert('Add at least one check point.'); return; }
+		if (!confirm('Replace the check points of "' + qcSel.value + '" with the ones on screen? Job cards already checked keep their own.')) return;
+		btn.disabled = true;
+		qcSaveChecklist({ checklist: qcSel.value }).then(function () {
+			btn.innerHTML = '<i class="fa-solid fa-check"></i> Saved';
+			setTimeout(function () { btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Update Checklist'; }, 1600);
+		}).catch(function (err) { alert('Could not update the checklist: ' + (err && err.message ? err.message : err)); })
+			.then(function () { btn.disabled = false; });
+	});
+	var qcModal = document.getElementById('qc-modal');
+	function qcModalClose() { qcModal.classList.remove('is-open'); }
+	qcModal.querySelectorAll('[data-qc-close]').forEach(function (b) { b.addEventListener('click', qcModalClose); });
+	document.getElementById('qc-new').addEventListener('click', function () {
+		document.getElementById('qc-modal-name').value = '';
+		document.getElementById('qc-modal-copy').checked = qcPoints().length > 0;
+		document.getElementById('qc-modal-default').checked = false;
+		document.getElementById('qc-modal-err').hidden = true;
+		qcModal.classList.add('is-open');
+		document.getElementById('qc-modal-name').focus();
+	});
+	document.getElementById('qc-modal-create').addEventListener('click', function () {
+		var btn = this, err = document.getElementById('qc-modal-err');
+		var name = document.getElementById('qc-modal-name').value.trim();
+		var copy = document.getElementById('qc-modal-copy').checked;
+		var points = copy ? qcPoints() : [{ check_point: 'New check point', category: '', mandatory: 1 }];
+		function fail(m) { err.textContent = m; err.hidden = false; }
+		if (!name) { fail('Give the checklist a name.'); return; }
+		if (!points.length) { fail('There are no check points on screen to copy — untick "Start from the check points on screen".'); return; }
+		btn.disabled = true;
+		qcSaveChecklist({ new_name: name, items: points, is_default: document.getElementById('qc-modal-default').checked ? 1 : 0 })
+			.then(function (r) {
+				qcModalClose();
+				// Switch this card to it; a copy keeps the results already entered.
+				var keep = copy ? qc.items : null;
+				return loadQc(r.name).then(function () {
+					if (keep) { qc.items = keep; renderQc(); }
+				});
+			})
+			.catch(function (e) { fail(e && e.message ? e.message : String(e)); })
+			.then(function () { btn.disabled = false; });
+	});
+	qcSel.addEventListener('change', function () {
+		if (qc.items.some(function (i) { return i.result || i.remarks; }) &&
+			!confirm('Switch checklist? Results entered for the current one are cleared.')) { qcSel.value = qc.checklist; return; }
+		loadQc(qcSel.value);
+	});
+	qcInspector.addEventListener('change', function () { qcDirty = true; });
+	document.getElementById('qc-remarks').addEventListener('input', function () { qcDirty = true; });
+	function saveQc() {
+		if (!qcDirty || !jobCardName) return Promise.resolve();
+		return callMethod('garagedesk.api.job_card_steps.save_job_card_qc', {
+			job_card: jobCardName, checklist: qcSel.value, inspector: qcInspector.value,
+			remarks: document.getElementById('qc-remarks').value, items: qc.items
+		}).then(function (r) {
+			qcDirty = false; qc.items = (r && r.items) || qc.items;
+			document.getElementById('qc-date').textContent = r && r.qc_date ? 'Last checked ' + r.qc_date.slice(0, 16) : '';
+			renderQc();
+		});
+	}
 
 	// ---- Billing tab: LHS completed tasks (read-only), RHS editable kit tables ----
 	var billTasksBody = document.getElementById('billing-tasks-body');

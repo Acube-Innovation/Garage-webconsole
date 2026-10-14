@@ -1626,6 +1626,9 @@
 			label || LTS_LABEL[standard] || serviceLabel(service) || standard || "Manual kit";
 		kitModal.open();
 		if (!standard) { kitData = { labor: [], parts: [], sublet: [] }; renderKitBody(); return; }
+		// Already added for this booking: show those lines, as edited, not the standard's.
+		var booked = bookedKit(standard);
+		if (booked) { kitData = booked; renderKitBody(); return; }
 		document.getElementById("vh-kit-body").innerHTML = '<div class="empty">Loading…</div>';
 		callMethod("garagedesk.workshop.doctype.workshop_job_card.workshop_job_card.kit_components_for_standard",
 			{ standard: standard })
@@ -1638,6 +1641,17 @@
 				document.getElementById("vh-kit-body").innerHTML =
 					'<div class="kit-none">Could not load kit components.</div>';
 			});
+	}
+	function bookedKit(standard) {
+		function mine(r) { return r.source_standard === standard; }
+		var b = { labor: kitLabor.filter(mine), parts: kitParts.filter(mine), sublet: kitSublet.filter(mine) };
+		return (b.labor.length || b.parts.length || b.sublet.length) ? b : null;
+	}
+	// Drop the booking's lines for a standard, in place (the arrays are shared).
+	function dropBookedKit(standard) {
+		[kitLabor, kitParts, kitSublet].forEach(function (arr) {
+			for (var i = arr.length - 1; i >= 0; i--) if (arr[i].source_standard === standard) arr.splice(i, 1);
+		});
 	}
 	document.getElementById("vh-kit-body").addEventListener("click", function (e) {
 		var add = e.target.closest("[data-kadd]");
@@ -1689,7 +1703,11 @@
 		b.source_standard = s.source_standard || "";
 		return b;
 	}
+	// "Add to Job" — the popup's lines become this booking's kit for the standard,
+	// replacing what was added before, so edited hours / rates / quantities apply to
+	// this job only. The standard itself changes only through "Update Standard".
 	document.getElementById("vh-kit-add").addEventListener("click", function () {
+		if (kitStandard) dropBookedKit(kitStandard);
 		var have = {};
 		[["labor", kitLabor], ["parts", kitParts], ["sublet", kitSublet]].forEach(function (p) {
 			p[1].forEach(function (r) { have[kitKey(p[0], r)] = 1; });
