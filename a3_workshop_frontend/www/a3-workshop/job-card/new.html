@@ -6,7 +6,7 @@
     received and read, what the customer reports is written down, and only then
     are the jobs that answer those complaints raised. Each `data-tab` below
     matches its position here. -#}
-{%- set steps = ["Customer Details", "Readings", "Complaints / Check-Up", "Service Jobs", "Estimate", "Task Preview", "QC", "Billing"] -%}
+{%- set steps = ["Customer Details", "Readings", "Workshop Job Card Complaints", "Workshop Job Card Services", "Estimate", "Task Preview", "QC", "Billing"] -%}
 
 <style>
 	.jc-ac { position:absolute; left:0; right:0; top:100%; z-index:60; margin-top:2px; background:#fff;
@@ -58,8 +58,8 @@
 		    something the advisor types here. -#}
 		<input type="hidden" name="mobile">
 		<input type="hidden" name="job_no">
-		<div class="field"><label>Handover</label>
-			<input name="handover_label" placeholder="Search handovers…" autocomplete="off">
+		<div class="field"><label>Driver Vehicle Handover</label>
+			<input name="handover_label" placeholder="Search Driver Vehicle Handovers…" autocomplete="off">
 			<input type="hidden" name="handover"></div>
 		{{ field("Booking Date","booking_date",type="date",required=True) }}
 		{{ field("Promised Delivery","delivery",type="date") }}
@@ -73,47 +73,47 @@
      active one is ever displayed. -->
 <section class="wizard-tab" data-tab="4" style="margin-top:18px">
 	<div class="split">
-		<div class="card"><div class="card__head"><h3>Job Type</h3><span class="muted" id="jobtype-hint">Select one or more</span></div>
+		<div class="card"><div class="card__head"><h3>Jobcard Type</h3><span class="muted" id="jobtype-hint">Select one or more</span></div>
 			<div class="card__body">
-				<div class="field" style="margin-bottom:12px"><input id="jobtype-search" placeholder="Search job types…" autocomplete="off" aria-label="Search job types"></div>
+				<div class="field" style="margin-bottom:12px"><input id="jobtype-search" placeholder="Search Jobcard Types…" autocomplete="off" aria-label="Search Jobcard Types"></div>
 				<div class="jobtype-list" id="jobtype-list"></div>
 			</div>
 		</div>
-		<div class="card"><div class="card__head"><h3>Job Details</h3>
+		<div class="card"><div class="card__head"><h3>Workshop Job Card Services</h3>
 			<button type="button" class="btn btn--primary btn--sm" id="add-job-detail"><i class="fa-solid fa-plus"></i> Add</button></div>
 			<div class="card__body" style="padding:0">
 				<table class="table editable"><thead><tr>
-					<th style="width:22%">Job Type</th><th>Service / Task</th><th style="width:16%">Labor Code</th><th>Description</th><th>Technician</th><th style="width:60px">Hrs</th><th style="width:40px"></th>
+					<th style="width:22%">Jobcard Type</th><th>Job Type Service</th><th style="width:16%">Labor Time Standard</th><th>Description</th><th style="width:80px">Hrs</th><th style="width:40px"></th>
 				</tr></thead><tbody id="job-detail-body"></tbody></table>
-				<div class="empty" id="job-detail-empty">Select a job type on the left, then click “Add”.</div>
+				<div class="empty" id="job-detail-empty">Select a Jobcard Type on the left, then click “Add”.</div>
 			</div>
 		</div>
 	</div>
 
 	<!-- Kit components pulled from the selected Labor Time Standards -->
 	<div class="card" id="kit-card" style="margin-top:18px; display:none">
-		<div class="card__head"><h3>Kit Components</h3><span class="muted">From the selected labor standards — edit or remove as needed</span></div>
+		<div class="card__head"><h3>Labor Time Standard Components</h3><span class="muted">From the selected Labor Time Standards — edit or remove as needed</span></div>
 		<div class="card__body">
 			<div class="kit-block">
-				<h4 class="kit-title">Kit Labor <span class="muted" id="kit-labor-count"></span></h4>
+				<h4 class="kit-title">Labor Time Kit Labor <span class="muted" id="kit-labor-count"></span></h4>
 				<table class="table editable"><thead><tr>
 					<th style="width:220px">Item</th><th>Description</th><th style="width:70px">Hours</th><th style="width:100px">Rate</th><th style="width:86px">Skill</th><th style="width:40px"></th>
 				</tr></thead><tbody id="kit-labor-body"></tbody></table>
-				<div class="empty kit-empty" id="kit-labor-empty">No kit labor lines.</div>
+				<div class="empty kit-empty" id="kit-labor-empty">No Labor Time Kit Labor lines.</div>
 			</div>
 			<div class="kit-block">
-				<h4 class="kit-title">Kit Parts <span class="muted" id="kit-parts-count"></span></h4>
+				<h4 class="kit-title">Labor Time Kit Parts <span class="muted" id="kit-parts-count"></span></h4>
 				<table class="table editable"><thead><tr>
 					<th style="width:22%">Item</th><th style="width:118px">Task</th><th style="width:132px">Material Request</th><th style="width:78px">Status</th><th style="width:48px">Qty</th><th style="width:54px">UOM</th><th style="width:80px">Rate</th><th style="width:34px"></th>
 				</tr></thead><tbody id="kit-parts-body"></tbody></table>
-				<div class="empty kit-empty" id="kit-parts-empty">No kit parts lines.</div>
+				<div class="empty kit-empty" id="kit-parts-empty">No Labor Time Kit Part lines.</div>
 			</div>
 			<div class="kit-block">
-				<h4 class="kit-title">Kit Sublet <span class="muted" id="kit-sublet-count"></span></h4>
+				<h4 class="kit-title">Labor Time Kit Sublet <span class="muted" id="kit-sublet-count"></span></h4>
 				<table class="table editable"><thead><tr>
 					<th>Service</th><th>Vendor</th><th style="width:110px">Cost</th><th style="width:90px">Markup %</th><th style="width:40px"></th>
 				</tr></thead><tbody id="kit-sublet-body"></tbody></table>
-				<div class="empty kit-empty" id="kit-sublet-empty">No kit sublet lines.</div>
+				<div class="empty kit-empty" id="kit-sublet-empty">No Labor Time Kit Sublet lines.</div>
 			</div>
 		</div>
 	</div>
@@ -123,9 +123,9 @@
 <div class="modal-overlay" id="kit-modal" role="dialog" aria-modal="true" aria-labelledby="kit-modal-title">
 	<div class="modal" style="max-width:860px">
 		<div class="modal__head">
-			<div><h3 id="kit-modal-title">Add Kit Components</h3><div class="sub" id="kit-modal-sub">—</div></div>
+			<div><h3 id="kit-modal-title">Add Labor Time Standard Components</h3><div class="sub" id="kit-modal-sub">—</div></div>
 			<div class="row" style="gap:8px; align-items:center">
-				<button type="button" class="btn btn--outline btn--sm" id="kit-save-standard-btn"><i class="fa-solid fa-floppy-disk"></i> Create / Update Standard</button>
+				<button type="button" class="btn btn--outline btn--sm" id="kit-save-standard-btn"><i class="fa-solid fa-floppy-disk"></i> Create / Update Labor Time Standard</button>
 				<button type="button" class="modal__close" data-kit-close aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
 			</div>
 		</div>
@@ -134,7 +134,7 @@
 		</div>
 		<div class="modal__foot">
 			<button type="button" class="btn btn--outline btn--sm" data-kit-close>Cancel</button>
-			<button type="button" class="btn btn--primary btn--sm" id="kit-add-btn"><i class="fa-solid fa-plus"></i> Add to Job</button>
+			<button type="button" class="btn btn--primary btn--sm" id="kit-add-btn"><i class="fa-solid fa-plus"></i> Add to Workshop Job Card</button>
 		</div>
 	</div>
 </div>
@@ -159,18 +159,18 @@
 <div class="modal-overlay" id="svc-modal" role="dialog" aria-modal="true" aria-labelledby="svc-modal-title">
 	<div class="modal" style="max-width:460px">
 		<div class="modal__head">
-			<div><h3 id="svc-modal-title">New Service / Task</h3><div class="sub" id="svc-modal-sub">—</div></div>
+			<div><h3 id="svc-modal-title">New Job Type Service</h3><div class="sub" id="svc-modal-sub">—</div></div>
 			<button type="button" class="modal__close" data-svc-close aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
 		</div>
 		<div class="modal__body stack">
-			<div class="field"><label>Job Type</label><input id="svc-modal-jobtype" type="text" readonly></div>
-			<div class="field"><label>Service / Task <span class="req">*</span></label>
+			<div class="field"><label>Jobcard Type</label><input id="svc-modal-jobtype" type="text" readonly></div>
+			<div class="field"><label>Job Type Service <span class="req">*</span></label>
 				<input id="svc-modal-name" type="text" placeholder="e.g. Water Service" autocomplete="off"></div>
 			<div class="svc-modal-err" id="svc-modal-err" hidden></div>
 		</div>
 		<div class="modal__foot">
 			<button type="button" class="btn btn--outline btn--sm" data-svc-close>Cancel</button>
-			<button type="button" class="btn btn--primary btn--sm" id="svc-create-btn"><i class="fa-solid fa-plus"></i> Create Service</button>
+			<button type="button" class="btn btn--primary btn--sm" id="svc-create-btn"><i class="fa-solid fa-plus"></i> Create Job Type Service</button>
 		</div>
 	</div>
 </div>
@@ -179,7 +179,7 @@
 <div class="modal-overlay" id="qc-modal" role="dialog" aria-modal="true" aria-labelledby="qc-modal-title">
 	<div class="modal" style="max-width:460px">
 		<div class="modal__head">
-			<div><h3 id="qc-modal-title">New QC Checklist</h3><div class="sub">Saved as a Workshop QC Checklist other job cards can use</div></div>
+			<div><h3 id="qc-modal-title">New QC Checklist</h3><div class="sub">Saved as a Workshop QC Checklist other Workshop Job Cards can use</div></div>
 			<button type="button" class="modal__close" data-qc-close aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
 		</div>
 		<div class="modal__body stack">
@@ -261,13 +261,13 @@
 
 <!-- STEP 3 — Complaints / Check-Up -->
 <section class="wizard-tab" data-tab="3" style="margin-top:18px">
-	<div class="card"><div class="card__head"><h3>Complaints / Check-Up</h3>
-		<button type="button" class="btn btn--primary btn--sm" id="add-complaint"><i class="fa-solid fa-plus"></i> Add Complaint</button></div>
+	<div class="card"><div class="card__head"><h3>Workshop Job Card Complaints</h3>
+		<button type="button" class="btn btn--primary btn--sm" id="add-complaint"><i class="fa-solid fa-plus"></i> Add Workshop Job Card Complaint</button></div>
 		<div class="card__body" style="padding:0">
 			<table class="table editable"><thead><tr>
-				<th style="width:40px">#</th><th>Complaint</th><th>Reported By</th><th style="width:130px">Severity</th><th>Notes</th><th>Technician</th><th style="width:40px"></th>
+				<th style="width:40px">#</th><th>Complaint</th><th>Reported By</th><th style="width:130px">Severity</th><th>Notes</th><th style="width:40px"></th>
 			</tr></thead><tbody id="complaint-body"></tbody></table>
-			<div class="empty" id="complaint-empty">No complaints added yet.</div>
+			<div class="empty" id="complaint-empty">No Workshop Job Card Complaints added yet.</div>
 		</div>
 	</div>
 </section>
@@ -328,16 +328,16 @@
 <!-- STEP 5 — Estimate: the cart, filled from the Service Jobs kit (labour, parts,
      sublet with the hours / quantities / rates given there) and editable here. -->
 <section class="wizard-tab" data-tab="5" style="margin-top:18px">
-	<div class="card"><div class="card__head"><h3>Cart</h3><span class="muted">From the Service Jobs kit — edit, remove or add items</span></div>
+	<div class="card"><div class="card__head"><h3>Cart</h3><span class="muted">From the Workshop Job Card Services Labor Time Standards — edit, remove or add items</span></div>
 			<div class="card__body">
 				<div id="cart-wrap"><table class="table editable" id="cart-table"><thead><tr>
 					<th style="width:80px">Type</th><th style="width:24%">Item</th><th>Description</th>
 					<th style="width:90px">Qty / Hrs</th><th style="width:110px">Rate</th><th style="width:120px;text-align:right">Amount</th><th style="width:40px"></th>
 				</tr></thead><tbody id="cart"></tbody></table></div>
-				<div class="empty" id="cart-empty">Cart is empty — add kit components in Service Jobs, or add an item below.</div>
+				<div class="empty" id="cart-empty">Cart is empty — add Labor Time Standard components in Workshop Job Card Services, or add an item below.</div>
 				<div class="cart-add">
 					<div style="position:relative;flex:1 1 auto;max-width:420px"><input id="cart-add-item" placeholder="Add item — search by name or code…" autocomplete="off"></div>
-					<button type="button" class="btn btn--outline btn--sm" id="cart-reset" title="Rebuild the cart from the Service Jobs kit"><i class="fa-solid fa-rotate"></i> Reload from Service Jobs</button>
+					<button type="button" class="btn btn--outline btn--sm" id="cart-reset" title="Rebuild the cart from the Workshop Job Card Services Labor Time Standards"><i class="fa-solid fa-rotate"></i> Reload from Workshop Job Card Services</button>
 				</div>
 				{#- The tax row exists only when the company has a Sales Taxes and Charges
 				    Template to read a rate from (see new.py `_estimate_tax`); with none
@@ -367,11 +367,11 @@
 		</div></div>
 		<div class="card__body" style="padding:0">
 			<table class="table editable" id="tp-table"><thead><tr>
-				<th style="width:26%">Task</th><th style="width:13%">Labour Item</th><th style="width:70px">Skill</th>
+				<th style="width:26%">Task</th><th style="width:13%">Labor Item</th><th style="width:70px">Skill</th>
 				<th style="width:80px">Hrs</th><th style="width:140px">Start</th><th style="width:140px">End</th>
 				<th style="width:24%">Assigned Employees <span style="font-weight:400;text-transform:none">(★ lead)</span></th><th style="width:140px">Status</th>
 			</tr></thead><tbody id="tp-body"></tbody></table>
-			<div class="empty" id="tp-empty">No tasks yet — add services and their kit labour in Service Jobs; the tasks are created when the job card is saved.</div>
+			<div class="empty" id="tp-empty">No tasks yet — add Job Type Services and their Labor Time Kit Labor in Workshop Job Card Services; the tasks are created when the Workshop Job Card is saved.</div>
 		</div>
 	</div>
 </section>
@@ -482,15 +482,15 @@
 <!-- STEP 8 — Billing (LHS completed tasks, RHS editable kit billing tables) -->
 <section class="wizard-tab" data-tab="8" style="margin-top:18px">
 	<div id="billing-need-save" class="card" style="display:none"><div class="card__body">
-		<div class="empty">Save the job card first — billing appears once the card exists and its tasks are completed.</div></div></div>
+		<div class="empty">Save the Workshop Job Card first — billing appears once the card exists and its tasks are completed.</div></div></div>
 	<div id="billing-body" class="split">
-		<div class="card"><div class="card__head"><h3>Completed Tasks</h3>
+		<div class="card"><div class="card__head"><h3>Workshop Job Card Billing Tasks</h3>
 			<button type="button" class="btn btn--outline btn--sm" id="bill-refresh"><i class="fa-solid fa-rotate"></i> Refresh</button></div>
 			<div class="card__body" style="padding:0">
 				<table class="table"><thead><tr>
-					<th>Task</th><th>Service</th><th>Technician</th><th style="width:50px">Hrs</th><th style="width:120px">Completed</th>
+					<th>Task</th><th>Job Type Service</th><th>Technician</th><th style="width:50px">Hrs</th><th style="width:120px">Completed</th>
 				</tr></thead><tbody id="billing-tasks-body"></tbody></table>
-				<div class="empty" id="billing-tasks-empty">No completed tasks yet.</div>
+				<div class="empty" id="billing-tasks-empty">No Workshop Job Card Billing Tasks yet.</div>
 			</div>
 		</div>
 		<div class="card"><div class="card__head"><h3>Billing</h3><span class="muted">Edit lines, then create the Sales Order</span></div>
@@ -503,7 +503,7 @@
 					    invisibly from the kit, so a line typed here had no way to
 					    get one. -#}
 					<table class="table editable"><thead><tr>
-						<th style="width:104px">Item</th><th style="width:128px">Item Name</th><th>Description</th><th style="width:56px">Hrs</th><th style="width:82px">Rate</th><th style="width:74px">Skill</th><th style="width:34px"></th>
+						<th style="width:104px">Item</th><th style="width:128px">Item Name</th><th>Description</th><th style="width:70px">Hrs</th><th style="width:82px">Rate</th><th style="width:74px">Skill</th><th style="width:34px"></th>
 					</tr></thead><tbody id="bill-labor-body"></tbody></table>
 					<div class="empty" id="bill-labor-empty">No labor lines.</div>
 				</div>
@@ -601,7 +601,7 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 		lines.forEach(function (l) { l.classList.toggle('is-done', +l.dataset.line < cur); });
 		prevBtn.style.visibility = cur === 1 ? 'hidden' : 'visible';
 		nextBtn.innerHTML = cur === TOTAL
-			? '<i class="fa-solid fa-check"></i> ' + (isEditing ? 'Update Job Card' : 'Create Job Card')
+			? '<i class="fa-solid fa-check"></i> ' + (isEditing ? 'Update Workshop Job Card' : 'Create Workshop Job Card')
 			: 'Next <i class="fa-solid fa-arrow-right"></i>';
 		fitTab();
 		// Step numbers, not document order: Readings is step 2 (see the stepper).
@@ -674,12 +674,12 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 		if (!handoverRef) return;
 		hoBanner.style.display = ""; fitTab();
 		hoNote.innerHTML = jobCard
-			? '<i class="fa-solid fa-circle-check" style="color:var(--green)"></i> Job card <b>' + jobCard +
-			  '</b> is now the rectification for handover <b>' + handoverRef +
-			  '</b> — that handover is marked <b>Rectified</b>. ' +
+			? '<i class="fa-solid fa-circle-check" style="color:var(--green)"></i> Workshop Job Card <b>' + jobCard +
+			  '</b> is now the rectification for Driver Vehicle Handover <b>' + handoverRef +
+			  '</b> — that Driver Vehicle Handover is marked <b>Rectified</b>. ' +
 			  '<a href="' + backToVehicle() + '" style="color:var(--red);font-weight:600">Back to vehicle history</a>'
-			: '<i class="fa-solid fa-triangle-exclamation" style="color:var(--red)"></i> Repairing the new damage found at handover <b>' +
-			  handoverRef + '</b>. Saving this job card marks that handover <b>Rectified</b>. ' +
+			: '<i class="fa-solid fa-triangle-exclamation" style="color:var(--red)"></i> Repairing the new Vehicle Damage Lines found at Driver Vehicle Handover <b>' +
+			  handoverRef + '</b>. Saving this Workshop Job Card marks that Driver Vehicle Handover <b>Rectified</b>. ' +
 			  '<a href="' + backToVehicle() + '" style="color:var(--red);font-weight:600">Cancel and go back</a>';
 	}
 	function linkHandover(jobCard) {
@@ -708,7 +708,7 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 			renderHandoverBanner(jobCard);
 		}).catch(function (err) {
 			handoverLinked = false; // let the next save retry
-			alert("Job card " + jobCard + " was saved, but could not be linked to handover " +
+			alert("Workshop Job Card " + jobCard + " was saved, but could not be linked to Driver Vehicle Handover " +
 				handoverRef + ": " + (err && err.message ? err.message : err));
 		});
 	}
@@ -837,7 +837,7 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 			return (rows || []).map(function (h) {
 				var bits = [h.date, h.handover_type, h.vehicle].filter(Boolean);
 				if (h.to_driver) bits.push("to " + h.to_driver);
-				if (h.damages) bits.push(h.damages + " damage" + (h.damages === 1 ? "" : "s"));
+				if (h.damages) bits.push(h.damages + " Vehicle Damage Line" + (h.damages === 1 ? "" : "s"));
 				return { label: h.name, sub: bits.join("  ·  "), value: h.name };
 			});
 		});
@@ -877,9 +877,9 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 		var haveC = val("customer_id"), haveV = val("vehicle_id");
 		var clash = (haveC && wantC && haveC !== wantC) || (haveV && wantV && haveV !== wantV);
 		if (clash) {
-			var ok = confirm("Handover " + r.handover + " is for " +
+			var ok = confirm("Driver Vehicle Handover " + r.handover + " is for " +
 				(r.vehicle_label || wantV) + " (" + (r.customer_name || wantC) + ").\n\n" +
-				"Replace the customer and vehicle already on this job card?");
+				"Replace the customer and vehicle already on this Workshop Job Card?");
 			if (!ok) return false;
 		}
 		if (wantC && wantC !== haveC) {
@@ -915,7 +915,7 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 			// has already typed into, must not be duplicated over.
 			if ((r.complaints || []).length && !cBody.children.length) {
 				r.complaints.forEach(addComplaintRow);
-				added.push(r.complaints.length + " damage item" + (r.complaints.length === 1 ? "" : "s") + " as Complaints");
+				added.push(r.complaints.length + " Vehicle Damage Line" + (r.complaints.length === 1 ? "" : "s") + " as Workshop Job Card Complaints");
 			}
 
 			if ((r.services || []).length && !jdBody.children.length) {
@@ -926,7 +926,7 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 				});
 				renderJobTypeList();
 				r.services.forEach(function (s) { addServiceRow(s); });
-				added.push(r.services.length + " service job" + (r.services.length === 1 ? "" : "s"));
+				added.push(r.services.length + " Workshop Job Card Service" + (r.services.length === 1 ? "" : "s"));
 
 				// Kit rides with the services, so it is only taken when they were.
 				var kit = (r.kit_labor || []).length + (r.kit_parts || []).length + (r.kit_sublet || []).length;
@@ -935,7 +935,7 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 					kitParts = (r.kit_parts || []).map(function (x) { return buildKitRow('parts', x); });
 					kitSublet = (r.kit_sublet || []).map(function (x) { return buildKitRow('sublet', x); });
 					renderKitTables();
-					added.push(kit + " kit line" + (kit === 1 ? "" : "s"));
+					added.push(kit + " Labor Time Kit line" + (kit === 1 ? "" : "s"));
 				}
 			}
 
@@ -951,7 +951,7 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 
 			if (added.length) {
 				hoNote.innerHTML += ' <br><span class="muted" style="font-size:12px">' +
-					added.join(", ") + " carried over from that handover — check and edit before creating.</span>";
+					added.join(", ") + " carried over from that Driver Vehicle Handover — check and edit before creating.</span>";
 			}
 		}).catch(function (err) {
 			console.warn("Could not load handover damages:", err);
@@ -1037,7 +1037,7 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 				return res;
 			});
 		}).catch(function (err) {
-			alert("Could not save job card: " + (err && err.message ? err.message : err));
+			alert("Could not save Workshop Job Card: " + (err && err.message ? err.message : err));
 			throw err;
 		});
 	}
@@ -1048,9 +1048,9 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 	function finishAndLeave(name) {
 		var box = document.getElementById('jc-done');
 		document.getElementById('jc-done-msg').innerHTML =
-			'<i class="fa-solid fa-circle-check" style="color:var(--green)"></i> Job card <b>' +
+			'<i class="fa-solid fa-circle-check" style="color:var(--green)"></i> Workshop Job Card <b>' +
 			esc(name) + '</b> ' + (isEditing ? 'updated' : 'created') +
-			'. <span class="muted">Opening the Job Cards list…</span>';
+			'. <span class="muted">Opening the Workshop Job Cards list…</span>';
 		box.style.display = '';
 		window.scrollTo({ top: 0, behavior: 'smooth' });
 		nextBtn.disabled = true;
@@ -1145,7 +1145,7 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 			if (jc.quotation_name) renderQuotationState(jc.quotation_name, jc.quotation_docstatus, jc.quotation_total);
 			isEditing = true; render();
 		}).catch(function (err) {
-			alert("Could not load job card: " + (err && err.message ? err.message : err));
+			alert("Could not load Workshop Job Card: " + (err && err.message ? err.message : err));
 		});
 	}
 	function loadReadings(r) {
@@ -1180,8 +1180,9 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 	// keeps the count for the same reason.
 	function renderJobTypeList() {
 		var q = (jtSearch.value || '').trim().toLowerCase();
+		// Only the ticked types are listed; the others turn up when searched for.
 		var shown = JOBCARD_TYPES.filter(function (t) {
-			return jobTypeMatches(t, q) || selected.indexOf(t.name) >= 0;
+			return (q && jobTypeMatches(t, q)) || selected.indexOf(t.name) >= 0;
 		});
 		jtList.innerHTML = shown.map(function (t) {
 			var on = selected.indexOf(t.name) >= 0;
@@ -1189,9 +1190,11 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 				'<i class="fa-solid ' + escAttr(t.icon || 'fa-wrench') + '"></i>' +
 				'<div><div class="t">' + esc(t.type_name || t.name) + '</div><div class="s">' + esc(t.description || '') + '</div></div>' +
 				'<i class="fa-solid fa-check tick"></i></div>';
-		}).join('') || (JOBCARD_TYPES.length
-			? '<div class="empty">No job types match \u201c' + esc(jtSearch.value.trim()) + '\u201d.</div>'
-			: '<div class="empty">No job card types configured.</div>');
+		}).join('') || (!JOBCARD_TYPES.length
+			? '<div class="empty">No Jobcard Types configured.</div>'
+			: q
+			? '<div class="empty">No Jobcard Types match \u201c' + esc(jtSearch.value.trim()) + '\u201d.</div>'
+			: '<div class="empty">Search above to add a Jobcard Type.</div>');
 		jtHint.textContent = selected.length ? selected.length + ' selected' : 'Select one or more';
 	}
 	function toggleJobType(name) {
@@ -1257,7 +1260,7 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 		input.dataset.acset = '1';
 		attachAutocomplete(input, function (q) {
 			var jt = (tr.querySelector('select.jt') || {}).value || '';
-			if (!jt) return [{ label: 'Pick a job type first', action: 'noop' }];
+			if (!jt) return [{ label: 'Pick a Jobcard Type first', action: 'noop' }];
 			var rows = serviceMatches(jt, q).slice(0, 12).map(function (s) {
 				return { label: s.service_name || s.name, value: s.name };
 			});
@@ -1306,7 +1309,7 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 		label = label || serviceLabel(name);
 		// A service can only appear once in Job Details.
 		if (name && serviceAlreadyUsed(name, tr)) {
-			alert('“' + label + '” is already added. Each service can only be added once.');
+			alert('“' + label + '” is already added. Each Job Type Service can only be added once.');
 			if (input) input.value = '';
 			if (hidden) hidden.value = '';
 			setRowLaborCode(tr, '');
@@ -1364,11 +1367,11 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 		if (code) {
 			span.className = 'jc-labor-code';
 			span.textContent = LTS_LABEL[code] || code;
-			span.title = 'Click to pick kit components';
+			span.title = 'Click to pick Labor Time Standard components';
 		} else {
 			span.className = 'jc-labor-code is-empty';
-			span.textContent = '+ Kit';
-			span.title = 'Click to add kit components manually';
+			span.textContent = '+ Labor Time Standard';
+			span.title = 'Click to add Labor Time Standard components manually';
 		}
 	}
 	function escAttr(s) { return String(s == null ? '' : s).replace(/"/g, '&quot;'); }
@@ -1376,22 +1379,22 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 	function addServiceRow(v) {
 		v = v || {};
 		if (v.jobtype && selected.indexOf(v.jobtype) < 0) { selected.push(v.jobtype); renderJobTypeList(); }
-		if (!v.jobtype && !selected.length) { jdEmpty.textContent = 'Select at least one job type on the left first.'; return; }
+		if (!v.jobtype && !selected.length) { jdEmpty.textContent = 'Select at least one Jobcard Type on the left first.'; return; }
 		var jt0 = v.jobtype || selected[0];
 		var tr = document.createElement('tr');
 		tr.dataset.task = v.task || '';
 		tr.dataset.labour = v.labour_service_code || '';
+		// Technicians are assigned in Task Preview; the row only carries the value through.
+		tr.dataset.tech = v.technician || '';
 		tr.innerHTML =
 			'<td><select class="jt">' + jobTypeOptions(jt0) + '</select></td>' +
 			'<td><div class="svc-combo">' +
-				'<input type="text" class="svc-input" placeholder="Type a service…" autocomplete="off" value="' + escAttr(serviceLabel(v.service || '')) + '">' +
+				'<input type="text" class="svc-input" placeholder="Type a Job Type Service…" autocomplete="off" value="' + escAttr(serviceLabel(v.service || '')) + '">' +
 				'<input type="hidden" class="svc" value="' + escAttr(v.service || '') + '">' +
 			'</div></td>' +
 			'<td><span class="jc-labor-code is-empty" data-labor-code>—</span></td>' +
 			'<td><input class="desc" placeholder="Description" value="' + escAttr(v.description || '') + '"></td>' +
-			'<td><div class="tech-cell"><select class="tech">' + technicianOptions(v.technician || '') + '</select>' +
-			'<button type="button" class="tech-pick" title="Technician Activity Board"><i class="fa-solid fa-user"></i></button></div></td>' +
-			'<td><input class="hrs" type="number" min="0" step="0.5" value="' + (v.hours != null && v.hours !== '' ? v.hours : 1) + '"></td>' +
+			'<td><input class="hrs" type="number" min="0" step="any" value="' + (v.hours != null && v.hours !== '' ? v.hours : 1) + '"></td>' +
 			'<td><button type="button" class="icon-del"><i class="fa-solid fa-trash"></i></button></td>';
 		tr.querySelector('.icon-del').addEventListener('click', function () {
 			var std = tr.dataset.labour || '';
@@ -1423,7 +1426,7 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 				service: sv ? sv.value : '',
 				labour_service_code: tr.dataset.labour || '',
 				description: (tr.querySelector('.desc') || {}).value || '',
-				technician: (tr.querySelector('.tech') || {}).value || '',
+				technician: tr.dataset.tech || '',
 				hours: (tr.querySelector('.hrs') || {}).value || 0,
 				task: tr.dataset.task || ''
 			});
@@ -1468,13 +1471,13 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 	svcCreateBtn.addEventListener('click', function () {
 		var jobtype = document.getElementById('svc-modal-jobtype').value;
 		var name = document.getElementById('svc-modal-name').value.trim();
-		if (!name) { svcDialogError('Enter a service / task name.'); return; }
+		if (!name) { svcDialogError('Enter a Job Type Service name.'); return; }
 		var tr = svcDialogRow;
 		svcCreateBtn.disabled = true;
 		callMethod('garagedesk.api.front_office.create_job_type_service', {
 			jobcard_type: jobtype, service_name: name
 		}).then(function (res) {
-			if (!res || !res.name) throw new Error('No service returned.');
+			if (!res || !res.name) throw new Error('No Job Type Service returned.');
 			// Add to the catalog unless the server matched an existing one.
 			if (!JOB_SERVICES.some(function (s) { return s.name === res.name; })) {
 				JOB_SERVICES.push({ name: res.name, jobcard_type: res.jobcard_type, service_name: res.service_name });
@@ -1482,7 +1485,7 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 			closeServiceDialog();
 			if (tr && tr.isConnected) setRowService(tr, res.name, res.service_name);
 		}).catch(function (err) {
-			svcDialogError('Could not create the service: ' + ((err && err.message) || err));
+			svcDialogError('Could not create the Job Type Service: ' + ((err && err.message) || err));
 		}).then(function () {
 			svcCreateBtn.disabled = false;
 		});
@@ -1762,7 +1765,7 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 		if (taken) return null;
 		return { action: 'create', typed: typed,
 			label: '<i class="fa-solid fa-plus"></i> Create “' + esc(typed) + '”',
-			sub: kind === 'labour' ? 'New labour item' : 'New part' };
+			sub: kind === 'labour' ? 'New labor item' : 'New part' };
 	}
 	function itemError(msg) {
 		var box = document.getElementById('item-modal-err');
@@ -1776,7 +1779,7 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 	function openItemDialog(kind, typed, input) {
 		itemInput = input; itemKind = kind;
 		var part = kind === 'part';
-		document.getElementById('item-modal-title').textContent = part ? 'New Part' : 'New Labour Item';
+		document.getElementById('item-modal-title').textContent = part ? 'New Part' : 'New Labor Item';
 		document.getElementById('item-modal-sub').textContent = part
 			? 'A stock item. Its code is numbered automatically.'
 			: 'A service item billed per hour, filed under Services. Its code is numbered automatically.';
@@ -1861,9 +1864,9 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 		kitDialogService = service || '';
 		kitDialogRow = row || null;
 		var stdBtn = document.getElementById('kit-save-standard-btn');
-		if (stdBtn) { stdBtn.disabled = false; stdBtn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> ' + (standard ? 'Update Standard' : 'Create Standard'); }
+		if (stdBtn) { stdBtn.disabled = false; stdBtn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> ' + (standard ? 'Update Labor Time Standard' : 'Create Labor Time Standard'); }
 		ensureKitItems();
-		document.getElementById('kit-modal-sub').textContent = label || LTS_LABEL[standard] || service || standard || __svcLabelForRow(row) || 'Manual kit';
+		document.getElementById('kit-modal-sub').textContent = label || LTS_LABEL[standard] || service || standard || __svcLabelForRow(row) || 'Manual Labor Time Standard';
 		kitModal.classList.add('is-open');
 		if (!standard) { // no standard for this service — start with empty editable tables
 			kitDialogData = { labor: [], parts: [], sublet: [] };
@@ -1882,7 +1885,7 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 				kitDialogData = { labor: data.labor || [], parts: data.parts || [], sublet: data.sublet || [] };
 				renderKitModalBody();
 			})
-			.catch(function () { body.innerHTML = '<div class="kit-none">Could not load kit components.</div>'; });
+			.catch(function () { body.innerHTML = '<div class="kit-none">Could not load Labor Time Standard components.</div>'; });
 	}
 	function __svcLabelForRow(row) {
 		var input = svcInput(row);
@@ -1892,9 +1895,9 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 	function kitEditRow(group, r) {
 		r = r || {};
 		if (group === 'labor') return '<tr>' +
-			'<td>' + itemCellHtml('ke-op', r.operation, '', 'Labour item') + '</td>' +
+			'<td>' + itemCellHtml('ke-op', r.operation, '', 'Labor item') + '</td>' +
 			'<td><input class="ke-desc" value="' + escAttr(r.description || '') + '" placeholder="Description"></td>' +
-			'<td><input class="ke-hours" type="number" min="0" step="0.1" value="' + (r.hours != null ? r.hours : 0) + '"></td>' +
+			'<td><input class="ke-hours" type="number" min="0" step="any" value="' + (r.hours != null ? r.hours : 0) + '"></td>' +
 			'<td><input class="ke-rate" type="number" min="0" step="0.01" value="' + (r.rate != null ? r.rate : 0) + '"></td>' +
 			'<td><select class="ke-skill">' + skillOptions(r.skill_level || '') + '</select></td>' +
 			'<td><button type="button" class="icon-del" data-kdel><i class="fa-solid fa-trash"></i></button></td></tr>';
@@ -1920,10 +1923,10 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 	}
 	function renderKitModalBody() {
 		document.getElementById('kit-modal-body').innerHTML =
-			'<div class="kit-none" style="margin-bottom:10px">Kit items for this service are listed below — edit quantities/rates, add rows if needed, then “Add to Job”.</div>' +
-			kitEditSection('labor', 'Kit Labor', ['Item', 'Description', 'Hours', 'Rate', 'Skill']) +
-			kitEditSection('parts', 'Kit Parts', ['Item', 'Qty', 'UOM', 'Rate']) +
-			kitEditSection('sublet', 'Kit Sublet', ['Service', 'Vendor', 'Cost', 'Markup %']);
+			'<div class="kit-none" style="margin-bottom:10px">Labor Time Standard items for this Job Type Service are listed below — edit quantities/rates, add rows if needed, then “Add to Workshop Job Card”.</div>' +
+			kitEditSection('labor', 'Labor Time Kit Labor', ['Item', 'Description', 'Hours', 'Rate', 'Skill']) +
+			kitEditSection('parts', 'Labor Time Kit Parts', ['Item', 'Qty', 'UOM', 'Rate']) +
+			kitEditSection('sublet', 'Labor Time Kit Sublet', ['Service', 'Vendor', 'Cost', 'Markup %']);
 		document.querySelectorAll('#kit-modal-body .ke-item').forEach(attachKitItemAutocomplete);
 		document.querySelectorAll('#kit-modal-body .ke-uom').forEach(attachUomAutocomplete);
 		document.querySelectorAll('#kit-modal-body .ke-op').forEach(attachLabourItemAutocomplete);
@@ -1998,7 +2001,7 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 	// Top-right "Create / Update Standard" — persist the popup rows to the Labor Time Standard.
 	document.getElementById('kit-save-standard-btn').addEventListener('click', function () {
 		var btn = this;
-		if (!kitDialogService && !kitDialogStandard) { alert('Pick a service before saving to a Labor Time Standard.'); return; }
+		if (!kitDialogService && !kitDialogStandard) { alert('Pick a Job Type Service before saving to a Labor Time Standard.'); return; }
 		var rows = { labor: gatherKitModal('labor'), parts: gatherKitModal('parts'), sublet: gatherKitModal('sublet') };
 		btn.disabled = true;
 		callMethod('garagedesk.workshop.doctype.workshop_job_card.workshop_job_card.save_kit_to_standard', {
@@ -2013,7 +2016,7 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 				if (kitDialogRow) setRowLaborCode(kitDialogRow, std); // reflect the (new) code on the row
 			}
 			btn.innerHTML = '<i class="fa-solid fa-check"></i> Saved';
-			setTimeout(function () { btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Update Standard'; }, 1600);
+			setTimeout(function () { btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Update Labor Time Standard'; }, 1600);
 		}).catch(function (err) {
 			alert('Could not save to Labor Time Standard: ' + (err && err.message ? err.message : err));
 		}).then(function () { btn.disabled = false; });
@@ -2028,7 +2031,7 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 			cells: function (r) {
 				var op = r.operation
 					? esc(itemNameOf(r.operation) || r.operation)
-					: '<span class="muted" title="No labour Item — this line needs one to bill, or a Default Labour Item in Workshop Settings">— none —</span>';
+					: '<span class="muted" title="No labor Item — this line needs one to bill, or a Default Labor Item in Workshop Settings">— none —</span>';
 				return '<td>' + op + '</td><td>' +
 					esc(r.description || '') + '</td><td>' + fmtNum(r.hours) +
 					'</td><td>' + fmtMoney(r.rate) + '</td><td>' + esc(r.skill_level || '') + '</td>';
@@ -2043,8 +2046,27 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 		sublet: { body: 'kit-sublet-body', empty: 'kit-sublet-empty', count: 'kit-sublet-count', arr: function () { return kitSublet; },
 			cells: function (r) { return '<td>' + esc(r.service_description || '') + '</td><td>' + esc(supplierName(r.vendor)) + '</td><td>' + fmtMoney(r.cost) + '</td><td>' + fmtNum(r.markup_pct) + '</td>'; } }
 	};
+	// A service's Hrs is the labour its Labor Time Standard books: the total of
+	// the kit labour lines carrying that standard. Only the first row on a
+	// standard takes it, as the kit is held once per standard. Rows with no
+	// kit labour keep whatever was typed.
+	function syncServiceHours(rows, hrsSel) {
+		var total = {};
+		kitLabor.forEach(function (r) {
+			if (r.source_standard) total[r.source_standard] = (total[r.source_standard] || 0) + (parseFloat(r.hours) || 0);
+		});
+		var done = {};
+		Array.prototype.forEach.call(rows, function (tr) {
+			var std = tr.dataset.labour || '';
+			if (!std || !(std in total) || done[std]) return;
+			done[std] = 1;
+			var hrs = tr.querySelector(hrsSel);
+			if (hrs) hrs.value = Math.round(total[std] * 100) / 100;
+		});
+	}
 	function renderKitTables() {
 		if (kitLabor.length || kitParts.length) ensureKitItems();
+		syncServiceHours(jdBody.children, '.hrs');
 		['labor', 'parts', 'sublet'].forEach(function (g) {
 			var m = KIT_TABLES[g], rows = m.arr();
 			document.getElementById(m.body).innerHTML = rows.map(function (r) {
@@ -2075,13 +2097,13 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 	function addComplaintRow(v) {
 		v = v || {};
 		var tr = document.createElement('tr');
+		tr.dataset.tech = v.technician || '';
 		tr.innerHTML =
 			'<td>' + (cBody.children.length + 1) + '</td>' +
 			'<td><input class="cmp" placeholder="Complaint" value="' + escAttr(v.complaint || '') + '"></td>' +
 			'<td><input class="rby" placeholder="Reported by" value="' + escAttr(v.reported_by || '') + '"></td>' +
 			'<td><select class="sev">' + sevOptions(v.severity || '') + '</select></td>' +
 			'<td><input class="nts" placeholder="Notes" value="' + escAttr(v.notes || '') + '"></td>' +
-			'<td><select class="ctech">' + technicianOptions(v.technician || '') + '</select></td>' +
 			'<td><button type="button" class="icon-del"><i class="fa-solid fa-trash"></i></button></td>';
 		tr.querySelector('.icon-del').addEventListener('click', function () { tr.remove(); renumber(cBody); toggleEmpty(cBody, cEmpty); });
 		cBody.appendChild(tr); toggleEmpty(cBody, cEmpty);
@@ -2111,7 +2133,7 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 				reported_by: (tr.querySelector('.rby') || {}).value || '',
 				severity: (tr.querySelector('.sev') || {}).value || '',
 				notes: (tr.querySelector('.nts') || {}).value || '',
-				technician: (tr.querySelector('.ctech') || {}).value || ''
+				technician: tr.dataset.tech || ''
 			});
 		});
 		return rows.filter(function (r) { return r.complaint || r.notes; });
@@ -2256,13 +2278,13 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 		cartKitSig = sig;
 		renderCart();
 	}
-	var KIND_LABEL = { labor: 'Labour', part: 'Part', sublet: 'Sublet' };
+	var KIND_LABEL = { labor: 'Labor', part: 'Part', sublet: 'Sublet' };
 	function renderCart() {
 		cartEmpty.style.display = cart.length ? 'none' : 'block';
 		document.getElementById('cart-table').style.display = cart.length ? '' : 'none';
 		cartEl.innerHTML = cart.map(function (l, i) {
 			var name = l.item ? (l.item_name || itemNameOf(l.item) || l.item)
-				: '<span class="muted" title="Quoted against the default ' + (l.kind === 'sublet' ? 'Sublet' : 'Labour') + ' Item in Workshop Settings">— default item —</span>';
+				: '<span class="muted" title="Quoted against the default ' + (l.kind === 'sublet' ? 'Sublet' : 'Labor') + ' Item in Workshop Settings">— default item —</span>';
 			return '<tr data-i="' + i + '">' +
 				'<td><span class="cart-kind is-' + l.kind + '">' + KIND_LABEL[l.kind] + '</span></td>' +
 				'<td>' + (l.item ? esc(name) : name) + '</td>' +
@@ -2315,7 +2337,7 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 		renderCart();
 	});
 	document.getElementById('cart-reset').addEventListener('click', function () {
-		if (cart.length && !confirm('Rebuild the cart from the Service Jobs kit? Edits made here to kit lines are lost; items added here stay.')) return;
+		if (cart.length && !confirm('Rebuild the cart from the Workshop Job Card Services Labor Time Standards? Edits made here to Labor Time Kit lines are lost; items added here stay.')) return;
 		syncCartFromKit(true);
 	});
 	// Open a transaction's print-format PDF in a new tab.
@@ -2352,7 +2374,7 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 			return { kind: l.kind, item: l.item, qty: l.qty, rate: l.rate, description: l.description, uom: l.uom };
 		});
 		if (!lines.length) { alert('Add at least one item to the estimate.'); return; }
-		if (!jobCardName) { alert('Save the job card first (it needs a customer).'); return; }
+		if (!jobCardName) { alert('Save the Workshop Job Card first (it needs a customer).'); return; }
 		btn.disabled = true; out.textContent = 'Creating quotation…';
 		callMethod("garagedesk.api.front_office.create_quotation", { job_card: jobCardName, items: lines })
 			.then(function (r) { renderQuotationState(r.name, r.docstatus, r.grand_total); })
@@ -2375,7 +2397,7 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 	function loadTaskPreview() {
 		var saved = cardJustSaved; cardJustSaved = false;
 		if (!saved && !missingRequired().length) {
-			tpList.innerHTML = '<tr><td colspan="8" class="tp-none">Saving the job card…</td></tr>'; tpEmpty.style.display = 'none';
+			tpList.innerHTML = '<tr><td colspan="8" class="tp-none">Saving the Workshop Job Card…</td></tr>'; tpEmpty.style.display = 'none';
 			saveJobCard(false).then(fetchTaskPreview).catch(function () { tpDirty = false; fetchTaskPreview(); });
 			return;
 		}
@@ -2462,8 +2484,8 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 				var kids = tpTasks.filter(function (c) { return c.parent_task === t.task; });
 				var hrs = kids.reduce(function (sum, c) { return sum + (parseFloat(c.expected_time) || 0); }, 0);
 				return '<tr class="tp-group" data-i="' + i + '"><td colspan="3">' + esc(t.service_name || t.subject) +
-					'<span class="tp-sub">' + tpTaskLink(t) + (t.jobtype ? ' · ' + esc(t.jobtype) : '') + ' · ' + kids.length + ' labour task' + (kids.length === 1 ? '' : 's') + '</span></td>' +
-					'<td>' + hrs + '</td><td colspan="3" class="tp-none" style="font-weight:500">Completes when its labour tasks are done</td>' +
+					'<span class="tp-sub">' + tpTaskLink(t) + (t.jobtype ? ' · ' + esc(t.jobtype) : '') + ' · ' + kids.length + ' labor task' + (kids.length === 1 ? '' : 's') + '</span></td>' +
+					'<td>' + hrs + '</td><td colspan="3" class="tp-none" style="font-weight:500">Completes when its labor tasks are done</td>' +
 					'<td><span class="tp-status is-' + escAttr(t.status) + '">' + esc(t.status || 'Open') + '</span></td></tr>';
 			}
 			var dis = '';
@@ -2472,7 +2494,7 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 				'<span class="tp-sub">' + tpTaskLink(t) + (!t.parent_task && t.jobtype ? ' · ' + esc(t.jobtype) : '') + '</span></td>' +
 				'<td>' + (t.labour_item ? esc(t.labour_item) : '<span class="tp-none">—</span>') + '</td>' +
 				'<td>' + (t.skill ? esc(t.skill) : '<span class="tp-none">—</span>') + '</td>' +
-				'<td><input type="number" min="0" step="0.25" data-f="expected_time" value="' + (t.expected_time || 0) + '"' + dis + '></td>' +
+				'<td><input type="number" min="0" step="any" data-f="expected_time" value="' + (t.expected_time || 0) + '"' + dis + '></td>' +
 				'<td><input type="date" data-f="exp_start_date" value="' + escAttr(t.exp_start_date || '') + '"' + dis + '></td>' +
 				'<td><input type="date" data-f="exp_end_date" value="' + escAttr(t.exp_end_date || '') + '"' + dis + '></td>' +
 				'<td>' + tpEmpCell(t, i) + '</td>' +
@@ -2560,8 +2582,8 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 			})[0];
 			if (!tr) return;
 			used.push(tr); tr.dataset.task = t.task;
-			var tech = tr.querySelector('.tech'), hrs = tr.querySelector('.hrs');
-			if (tech) tech.value = t.employees[0] || '';
+			var hrs = tr.querySelector('.hrs');
+			tr.dataset.tech = t.employees[0] || '';
 			if (hrs) hrs.value = t.expected_time || 0;
 		});
 	}
@@ -2693,7 +2715,7 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 		var btn = this;
 		if (!qcSel.value) { alert('Pick a checklist to update, or create a new one.'); return; }
 		if (!qcPoints().length) { alert('Add at least one check point.'); return; }
-		if (!confirm('Replace the check points of "' + qcSel.value + '" with the ones on screen? Job cards already checked keep their own.')) return;
+		if (!confirm('Replace the check points of "' + qcSel.value + '" with the ones on screen? Workshop Job Cards already checked keep their own.')) return;
 		btn.disabled = true;
 		qcSaveChecklist({ checklist: qcSel.value }).then(function () {
 			btn.innerHTML = '<i class="fa-solid fa-check"></i> Saved';
@@ -2774,10 +2796,10 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 		var tr = document.createElement('tr');
 		tr.dataset.src = r.source_task || ''; tr.dataset.dar = r.description_ar || '';
 		tr.innerHTML =
-			'<td><input class="bl-item" value="' + escAttr(r.operation || '') + '" placeholder="Labour item" autocomplete="off"></td>' +
+			'<td><input class="bl-item" value="' + escAttr(r.operation || '') + '" placeholder="Labor item" autocomplete="off"></td>' +
 			'<td><span class="bl-itemname muted">' + esc(billItemNameOf(r.operation)) + '</span></td>' +
 			'<td><input class="bl-desc" value="' + escAttr(r.description || '') + '" placeholder="Description"></td>' +
-			'<td><input class="bl-hours" type="number" min="0" step="0.1" value="' + (r.hours != null ? r.hours : 0) + '"></td>' +
+			'<td><input class="bl-hours" type="number" min="0" step="any" value="' + (r.hours != null ? r.hours : 0) + '"></td>' +
 			'<td><input class="bl-rate" type="number" min="0" step="0.01" value="' + (r.rate != null ? r.rate : 0) + '"></td>' +
 			'<td><select class="bl-skill">' + skillOptions(r.skill_level || '') + '</select></td>' +
 			'<td><button type="button" class="icon-del" data-brm><i class="fa-solid fa-trash"></i></button></td>';
@@ -2968,7 +2990,7 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 	document.getElementById('bill-refresh').addEventListener('click', function () { billLoaded = false; loadBillingData(); });
 	document.getElementById('bill-save').addEventListener('click', function () {
 		var out = document.getElementById('bill-so-result');
-		if (!jobCardName) { alert('Save the job card first.'); return; }
+		if (!jobCardName) { alert('Save the Workshop Job Card first.'); return; }
 		out.textContent = 'Saving…';
 		saveBilling().then(function () { out.textContent = 'Billing saved.'; })
 			.catch(function (err) { out.textContent = 'Could not save billing: ' + (err && err.message ? err.message : err); });
@@ -2976,7 +2998,7 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 	document.getElementById('bill-create-so').addEventListener('click', function () {
 		var btn = this, out = document.getElementById('bill-so-result');
 		if (btn.dataset.so) { window.open('/app/sales-order/' + encodeURIComponent(btn.dataset.so), '_blank'); return; }
-		if (!jobCardName) { alert('Save the job card first (it needs a customer).'); return; }
+		if (!jobCardName) { alert('Save the Workshop Job Card first (it needs a customer).'); return; }
 		btn.disabled = true; out.textContent = 'Saving billing…';
 		saveBilling().then(function () {
 			out.textContent = 'Creating sales order…';

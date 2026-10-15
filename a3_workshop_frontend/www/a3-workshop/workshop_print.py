@@ -96,7 +96,7 @@ def _jobcard(context, name):
 		return
 	doc = frappe.get_doc("Workshop Job Card", name)
 	context.mode = "jobcard"
-	context.title = f"Job Card {name}"
+	context.title = f"Workshop Job Card {name}"
 
 	services = []
 	for s in doc.get("service_items") or []:
@@ -364,7 +364,7 @@ def _workorder(context, name):
 
 def _complaints(context):
 	context.mode = "complaints"
-	context.title = "Complaints Register"
+	context.title = "Workshop Job Card Complaint Register"
 	rows = frappe.get_all(
 		"Workshop Job Card Complaint",
 		fields=["parent", "complaint", "severity", "notes", "technician", "creation"],
@@ -406,7 +406,7 @@ def _complaints(context):
 def _calls(context, date_arg):
 	date = nowdate() if date_arg in ("", "today") else str(getdate(date_arg))
 	context.mode = "calls"
-	context.title = f"Call List {_fmt_date(date)}"
+	context.title = f"Call Log List {_fmt_date(date)}"
 	context.day = _fmt_date(date)
 	rows = frappe.get_all(
 		"Call Log",

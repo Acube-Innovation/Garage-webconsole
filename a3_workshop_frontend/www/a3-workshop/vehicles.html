@@ -32,7 +32,7 @@
 		{#- Trailer / Curtain Side / Bed. Filled from the rows like the two beside
 		    it, and hidden outright on a fleet that has registered no attachments —
 		    a dropdown with nothing in it is just a thing to click twice. -#}
-		<select class="chip-select" data-filter-key="atype" aria-label="Filter by attachment type"></select>
+		<select class="chip-select" data-filter-key="atype" aria-label="Filter by Handover Attachment Item"></select>
 	</div>
 	<span class="filter-count" data-filter-count></span>
 	<span class="filter-count">· {{ "{:,}".format(total_vehicles) }} in total</span>
@@ -97,7 +97,7 @@
 		var f = new WorkshopFilter({ root: "#vh-rows", bar: "#vh-bar", search: "#vh-search", searchParam: "q" });
 		f.populate("customer", "All customers");
 		f.populate("fuel", "All fuel types");
-		f.populate("atype", "All attachment types");
+		f.populate("atype", "All Handover Attachment Items");
 
 		// Only a fleet that actually runs attachments is offered the filter for
 		// them; populate() leaves the placeholder alone when no row carries one.

@@ -25,10 +25,10 @@
 <div class="page-grid-2" style="margin-top:18px">
 	<div class="card">
 		<div class="card__head"><h3>Service Analytics</h3>
-			<span class="muted">This week &middot; {{ chart.total }} job card{{ "" if chart.total == 1 else "s" }}</span></div>
+			<span class="muted">This week &middot; {{ chart.total }} Workshop Job Card{{ "" if chart.total == 1 else "s" }}</span></div>
 		<div class="card__body">
 			<svg class="chart-svg" viewBox="0 0 560 240" role="img"
-				aria-label="Job cards booked per day this week">
+				aria-label="Workshop Job Cards booked per day this week">
 				{%- for g in chart.grid %}
 				<line x1="40" y1="{{ "%.1f"|format(g.y) }}" x2="540" y2="{{ "%.1f"|format(g.y) }}" stroke="#eef0f3" stroke-width="1"/>
 				<text x="30" y="{{ "%.1f"|format(g.y + 4) }}" font-size="10" fill="#8a94a6" text-anchor="end">{{ g.value }}</text>
@@ -36,7 +36,7 @@
 				{%- for b in chart.bars %}
 				{%- if b.h > 0 %}
 				<rect x="{{ b.x }}" y="{{ "%.1f"|format(b.y) }}" width="{{ b.w }}" height="{{ "%.1f"|format(b.h) }}" rx="6" fill="#ec2e5d">
-					<title>{{ b.label }} — {{ b.count }} job card{{ "" if b.count == 1 else "s" }}</title>
+					<title>{{ b.label }} — {{ b.count }} Workshop Job Card{{ "" if b.count == 1 else "s" }}</title>
 				</rect>
 				{%- endif %}
 				<text x="{{ b.x + b.w // 2 }}" y="218" font-size="11" fill="#8a94a6" text-anchor="middle">{{ b.label }}</text>
@@ -72,11 +72,11 @@
 </div>
 
 <div class="card" style="margin-top:18px">
-	<div class="card__head"><h3>Recent Job Cards</h3><a class="btn btn--outline btn--sm" href="/a3-workshop/job-cards">View all</a></div>
+	<div class="card__head"><h3>Recent Workshop Job Cards</h3><a class="btn btn--outline btn--sm" href="/a3-workshop/job-cards">View all</a></div>
 	<div class="card__body" style="padding:0">
 		{%- if recent_job_cards %}
 		<table class="table">
-			<thead><tr><th>Job Card</th><th>Customer</th><th>Service</th><th>Date</th><th>Status</th></tr></thead>
+			<thead><tr><th>Workshop Job Card</th><th>Customer</th><th>Job Type Service</th><th>Date</th><th>Status</th></tr></thead>
 			<tbody>
 				{%- for jc in recent_job_cards %}
 				<tr>
@@ -90,7 +90,7 @@
 			</tbody>
 		</table>
 		{%- else %}
-		<div class="empty" style="padding:24px">No job cards yet.</div>
+		<div class="empty" style="padding:24px">No Workshop Job Cards yet.</div>
 		{%- endif %}
 	</div>
 </div>

@@ -72,6 +72,8 @@ h1, h2, h3, h4 { margin: 0; color: var(--text); }
 	position: sticky;
 	top: 0;
 	height: 100vh;
+	overflow-y: auto;
+	scrollbar-width: thin;
 }
 
 .workshop-logo {

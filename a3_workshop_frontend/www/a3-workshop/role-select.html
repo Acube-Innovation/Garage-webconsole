@@ -3,12 +3,12 @@
 
 {% block page_content %}
 {%- set roles = [
-  {"i":"fa-user-tie","t":"Service Advisor","s":"Start a new service job"},
+  {"i":"fa-user-tie","t":"Service Advisor","s":"Start a new Workshop Job Card"},
   {"i":"fa-screwdriver-wrench","t":"Technician","s":"Assigned tasks & QC"},
   {"i":"fa-phone-volume","t":"Telecaller","s":"Feedback & follow-ups"},
   {"i":"fa-chart-line","t":"Manager","s":"Overview & monitoring"},
-  {"i":"fa-headset","t":"Customer Care Manager","s":"Complaints & escalations"},
-  {"i":"fa-bell-concierge","t":"Front Office","s":"Vehicle entry & job creation"}
+  {"i":"fa-headset","t":"Customer Care Manager","s":"Workshop Job Card Complaints & escalations"},
+  {"i":"fa-bell-concierge","t":"Front Office","s":"Vehicle entry & Workshop Job Card creation"}
 ] -%}
 <div class="type-grid" style="grid-template-columns:repeat(3,1fr)">
 	{%- for r in roles %}<a href="/a3-workshop">{{ typecard(r.i, r.t, r.s) }}</a>{%- endfor %}

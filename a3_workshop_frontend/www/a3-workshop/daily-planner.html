@@ -54,7 +54,7 @@
 		</div>
 
 		<!-- 2. Job Cards In Progress -->
-		<div class="card"><div class="card__head"><h3>Job Cards In Progress</h3><span class="muted">By status</span></div>
+		<div class="card"><div class="card__head"><h3>Workshop Job Cards In Progress</h3><span class="muted">By status</span></div>
 			<div class="card__body">
 				<div class="pipeline">
 					{%- for p in pipeline %}
@@ -103,8 +103,8 @@
 			<div class="card__body stack">
 				{%- for t in techs %}
 				<div class="tech-card">
-					<div class="row-between"><b>{{ t.employee_name }}</b><span class="muted" style="font-size:12px">{{ t.jobs|length }} job{{ "" if t.jobs|length == 1 else "s" }} · {{ t.hours }} hrs</span></div>
-					<div class="muted" style="font-size:12px;margin:6px 0">{% for j in t.jobs %}{{ j }}{% if not loop.last %} &nbsp;·&nbsp; {% endif %}{% else %}No open jobs assigned{% endfor %}</div>
+					<div class="row-between"><b>{{ t.employee_name }}</b><span class="muted" style="font-size:12px">{{ t.jobs|length }} Workshop Job Card Service{{ "" if t.jobs|length == 1 else "s" }} · {{ t.hours }} hrs</span></div>
+					<div class="muted" style="font-size:12px;margin:6px 0">{% for j in t.jobs %}{{ j }}{% if not loop.last %} &nbsp;·&nbsp; {% endif %}{% else %}No open Workshop Job Card Services assigned{% endfor %}</div>
 					<div class="row-between" style="font-size:12px;margin-bottom:4px"><span class="muted">Productivity</span><b>{{ t.prod }}%</b></div>
 					<div class="bar"><span style="width:{{ t.prod }}%"></span></div>
 				</div>

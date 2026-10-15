@@ -23,14 +23,14 @@
 	<div class="card__body">
 		<div class="empty" style="padding:48px 24px">
 			<div style="font-size:30px;color:var(--muted)"><i class="fa-regular fa-folder-open"></i></div>
-			<div style="font-weight:800;margin-top:10px">Job card not found</div>
+			<div style="font-weight:800;margin-top:10px">Workshop Job Card not found</div>
 			<div class="muted" style="margin-top:6px">
-				{%- if job_card_id %}No job card <b>{{ job_card_id }}</b> exists on this site.
-				{%- else %}This page needs a job card to show — open it from the job card list.{% endif %}
+				{%- if job_card_id %}No Workshop Job Card <b>{{ job_card_id }}</b> exists on this site.
+				{%- else %}This page needs a Workshop Job Card to show — open it from the Workshop Job Cards list.{% endif %}
 			</div>
 			<div class="row" style="gap:10px;justify-content:center;margin-top:16px">
-				<a class="btn btn--primary" href="/a3-workshop/job-cards"><i class="fa-solid fa-clipboard-list"></i> Back to Job Cards</a>
-				<a class="btn btn--outline" href="/a3-workshop/job-card/new"><i class="fa-solid fa-plus"></i> Create Job Card</a>
+				<a class="btn btn--primary" href="/a3-workshop/job-cards"><i class="fa-solid fa-clipboard-list"></i> Back to Workshop Job Cards</a>
+				<a class="btn btn--outline" href="/a3-workshop/job-card/new"><i class="fa-solid fa-plus"></i> Create Workshop Job Card</a>
 			</div>
 		</div>
 	</div>
@@ -40,10 +40,10 @@
 <div class="card">
 	<div class="card__body row-between" style="align-items:flex-start;gap:16px">
 		<div style="min-width:0">
-			<div class="muted">{{ "New Job Card" if draft else "Job Card" }}</div>
+			<div class="muted">{{ "New Workshop Job Card" if draft else "Workshop Job Card" }}</div>
 			<h2>{{ card.name or "Not created yet" }}</h2>
 			<div class="muted" style="margin-top:4px">
-				{{ card.customer_name or "No customer on this card" }}
+				{{ card.customer_name or "No customer on this Workshop Job Card" }}
 				{%- if card.vehicle_label %} · {{ card.vehicle_label }}{% endif %}
 				{%- if card.mobile_no %} · {{ card.mobile_no }}{% endif %}
 			</div>
@@ -55,12 +55,12 @@
 				{#- Draft: nothing exists to print or link to yet. Edit turns the
 				    sections below into inputs in place; Create writes the card. -#}
 				<a class="btn btn--outline btn--sm" href="/a3-workshop/vehicle-history-detail?vehicle={{ card.vehicle | urlencode }}#handovers"><i class="fa-solid fa-arrow-left"></i> Back</a>
-				<button type="button" class="btn btn--outline btn--sm" id="jc-edit"><i class="fa-solid fa-pen"></i> Edit Job Card</button>
+				<button type="button" class="btn btn--outline btn--sm" id="jc-edit"><i class="fa-solid fa-pen"></i> Edit Workshop Job Card</button>
 				<button type="button" class="btn btn--outline btn--sm" id="jc-cancel" style="display:none"><i class="fa-solid fa-xmark"></i> Cancel</button>
-				<button type="button" class="btn btn--primary btn--sm" id="jc-create"><i class="fa-solid fa-plus"></i> Create Job Card</button>
+				<button type="button" class="btn btn--primary btn--sm" id="jc-create"><i class="fa-solid fa-plus"></i> Create Workshop Job Card</button>
 				{%- else %}
 				<a class="btn btn--outline btn--sm" href="/a3-workshop/workshop-print?jobcard={{ card.name }}" target="_blank" rel="noopener"><i class="fa-solid fa-print"></i> Print</a>
-				<a class="btn btn--primary btn--sm" href="/a3-workshop/job-card/new?id={{ card.name }}"><i class="fa-solid fa-pen"></i> Edit Job Card</a>
+				<a class="btn btn--primary btn--sm" href="/a3-workshop/job-card/new?id={{ card.name }}"><i class="fa-solid fa-pen"></i> Edit Workshop Job Card</a>
 				{%- endif %}
 			</div>
 		</div>
@@ -68,11 +68,11 @@
 	{%- if draft %}
 	<div class="card__body" id="jc-draft-note" style="border-top:1px solid var(--border);padding-top:14px">
 		<i class="fa-solid fa-circle-info" style="color:var(--navy)"></i>
-		This is the job card handover <b>{{ card.handover }}</b>
+		This is the Workshop Job Card Driver Vehicle Handover <b>{{ card.handover }}</b>
 		{%- if card.handover_date %} ({{ card.handover_date }}){% endif %} would raise, built from the
-		damages and service jobs saved against it. <b>Nothing has been created yet.</b>
-		Press <b>Edit Job Card</b> to change anything, then <b>Create Job Card</b>.
-		{%- if card.discrepancy_found %} Creating it marks that handover <b>Rectified</b>.{% endif %}
+		Vehicle Damage Lines and Workshop Job Card Services saved against it. <b>Nothing has been created yet.</b>
+		Press <b>Edit Workshop Job Card</b> to change anything, then <b>Create Workshop Job Card</b>.
+		{%- if card.discrepancy_found %} Creating it marks that Driver Vehicle Handover <b>Rectified</b>.{% endif %}
 	</div>
 	{%- endif %}
 </div>
@@ -95,7 +95,7 @@
 			<div class="kv-row"><span class="k">Spare Tyre</span><b>{{ "Present" if r.spare else "—" }}</b></div>
 		</div>
 		{%- else %}
-		<div class="empty" style="padding:20px">No readings were captured on this job card.</div>
+		<div class="empty" style="padding:20px">No readings were captured on this Workshop Job Card.</div>
 		{%- endif %}
 
 		{%- if card.body_condition %}
@@ -133,14 +133,14 @@
 <div class="page-grid-2" style="margin-top:18px">
 	<div class="stack">
 		<div class="card">
-			<div class="card__head"><h3>Service Jobs</h3>
-				<span class="muted" id="jc-svc-count">{{ card.services|length }} on this card</span>
+			<div class="card__head"><h3>Workshop Job Card Services</h3>
+				<span class="muted" id="jc-svc-count">{{ card.services|length }} on this Workshop Job Card</span>
 				{%- if draft %}<button type="button" class="btn btn--outline btn--sm jc-add" data-add="service" style="display:none"><i class="fa-solid fa-plus"></i> Add</button>{% endif %}</div>
 			<div class="card__body" style="padding:0">
 				<table class="table" id="jc-svc-table">
 					{#- No task exists before the card does, so a draft drops that
 					    column and keeps the last one for the row's remove button. -#}
-					<thead><tr><th>Job</th><th>Technician</th><th>Hours</th>
+					<thead><tr><th>Job Type Service</th><th>Technician</th><th>Hours</th>
 						<th{% if draft %} style="width:40px"{% endif %}>{{ "" if draft else "Task Status" }}</th></tr></thead>
 					<tbody id="jc-svc-body">
 						{%- for s in card.services %}
@@ -161,8 +161,8 @@
 						</tr>
 						{%- else %}
 						<tr><td colspan="4" class="empty">
-							{%- if draft %}Nothing planned to repair this handover yet — press <b>Edit Job Card</b> to add a service job.
-							{%- else %}No service jobs on this card yet. Add them in the job card's <b>Service Jobs</b> tab.{% endif %}</td></tr>
+							{%- if draft %}Nothing planned to repair this Driver Vehicle Handover yet — press <b>Edit Workshop Job Card</b> to add a Workshop Job Card Service.
+							{%- else %}No Workshop Job Card Services on this Workshop Job Card yet. Add them in the Workshop Job Card's <b>Workshop Job Card Services</b> tab.{% endif %}</td></tr>
 						{%- endfor %}
 					</tbody>
 				</table>
@@ -170,7 +170,7 @@
 		</div>
 
 		<div class="card">
-			<div class="card__head"><h3>Complaints / Check-Up</h3>
+			<div class="card__head"><h3>Workshop Job Card Complaints</h3>
 				{%- if draft %}<button type="button" class="btn btn--outline btn--sm jc-add" data-add="complaint" style="display:none"><i class="fa-solid fa-plus"></i> Add</button>{% endif %}</div>
 			<div class="card__body" style="padding:0">
 				<table class="table" id="jc-cmp-table">
@@ -189,7 +189,7 @@
 							{%- if draft %}<td></td>{% endif %}
 						</tr>
 						{%- else %}
-						<tr><td colspan="{{ 5 if draft else 4 }}" class="empty">No complaints recorded on this job card.</td></tr>
+						<tr><td colspan="{{ 5 if draft else 4 }}" class="empty">No Workshop Job Card Complaints recorded on this Workshop Job Card.</td></tr>
 						{%- endfor %}
 					</tbody>
 				</table>
@@ -200,7 +200,7 @@
 		    nothing to say and is left off until the card exists. -#}
 		{%- if not draft %}
 		<div class="card">
-			<div class="card__head"><h3>Completed Tasks</h3><span class="muted">Billing ledger</span></div>
+			<div class="card__head"><h3>Workshop Job Card Billing Tasks</h3><span class="muted">Billing ledger</span></div>
 			<div class="card__body" style="padding:0">
 				<table class="table">
 					<thead><tr><th>Task</th><th>Technician</th><th>Hours</th><th>Completed On</th></tr></thead>
@@ -213,7 +213,7 @@
 							<td>{{ t.completed_on or "—" }}</td>
 						</tr>
 						{%- else %}
-						<tr><td colspan="4" class="empty">No task on this card has been completed yet — a task lands here the moment it is marked Completed.</td></tr>
+						<tr><td colspan="4" class="empty">No task on this Workshop Job Card has been completed yet — a task lands here the moment it is marked Completed.</td></tr>
 						{%- endfor %}
 					</tbody>
 				</table>
@@ -229,10 +229,10 @@
 				{%- for t in card.technicians %}
 				<div class="row-between">
 					<span>{{ t.technician }}</span>
-					<b>{{ t.jobs }} job{{ "" if t.jobs == 1 else "s" }}{% if t.hours %} · {{ t.hours_display }} h{% endif %}</b>
+					<b>{{ t.jobs }} Workshop Job Card Service{{ "" if t.jobs == 1 else "s" }}{% if t.hours %} · {{ t.hours_display }} h{% endif %}</b>
 				</div>
 				{%- else %}
-				<div class="empty" style="padding:16px">No technician assigned to any service job yet.</div>
+				<div class="empty" style="padding:16px">No technician assigned to any Workshop Job Card Service yet.</div>
 				{%- endfor %}
 			</div>
 		</div>
@@ -243,29 +243,29 @@
 		    table, so the draft gets its own card. -#}
 		{%- if draft %}
 		<div class="card">
-			<div class="card__head"><h3>Kit Components</h3><span class="muted">From the planned service jobs</span></div>
+			<div class="card__head"><h3>Labor Time Kit Components</h3><span class="muted">From the planned Workshop Job Card Services</span></div>
 			<div class="card__body stack" id="jc-kit-body">
 				{%- if card.billing.has_costs %}
-				<div class="row-between"><span class="muted">Labour ({{ card.billing.labour_lines }} line{{ "" if card.billing.labour_lines == 1 else "s" }})</span><span>{{ card.billing.labour_total }}</span></div>
+				<div class="row-between"><span class="muted">Labor ({{ card.billing.labour_lines }} line{{ "" if card.billing.labour_lines == 1 else "s" }})</span><span>{{ card.billing.labour_total }}</span></div>
 				<div class="row-between"><span class="muted">Parts ({{ card.billing.parts_lines }} line{{ "" if card.billing.parts_lines == 1 else "s" }})</span><span>{{ card.billing.parts_total }}</span></div>
 				<div class="row-between"><span class="muted">Sublet ({{ card.billing.sublet_lines }} line{{ "" if card.billing.sublet_lines == 1 else "s" }})</span><span>{{ card.billing.sublet_total }}</span></div>
 				<div class="row-between" style="font-weight:800"><span>Total</span><span style="color:var(--red)">{{ card.billing.total }}</span></div>
 				{%- else %}
-				<div class="empty" style="padding:16px">No kit components on this plan. Add them from the handover's <b>Damages</b> popup, where the labor standards are.</div>
+				<div class="empty" style="padding:16px">No Labor Time Kit components on this plan. Add them from the Driver Vehicle Handover's <b>Vehicle Damage Lines</b> popup, where the Labor Time Standards are.</div>
 				{%- endif %}
 			</div>
 		</div>
 		{%- else %}
 		<div class="card">
-			<div class="card__head"><h3>Cost Summary</h3><span class="muted">Kit for billing</span></div>
+			<div class="card__head"><h3>Cost Summary</h3><span class="muted">Labor Time Kit for billing</span></div>
 			<div class="card__body stack">
 				{%- if card.billing.has_costs %}
-				<div class="row-between"><span class="muted">Labour ({{ card.billing.labour_lines }} line{{ "" if card.billing.labour_lines == 1 else "s" }})</span><span>{{ card.billing.labour_total }}</span></div>
+				<div class="row-between"><span class="muted">Labor ({{ card.billing.labour_lines }} line{{ "" if card.billing.labour_lines == 1 else "s" }})</span><span>{{ card.billing.labour_total }}</span></div>
 				<div class="row-between"><span class="muted">Parts ({{ card.billing.parts_lines }} line{{ "" if card.billing.parts_lines == 1 else "s" }})</span><span>{{ card.billing.parts_total }}</span></div>
 				<div class="row-between"><span class="muted">Sublet ({{ card.billing.sublet_lines }} line{{ "" if card.billing.sublet_lines == 1 else "s" }})</span><span>{{ card.billing.sublet_total }}</span></div>
 				<div class="row-between" style="font-weight:800"><span>Total (pre-tax)</span><span style="color:var(--red)">{{ card.billing.total }}</span></div>
 				{%- else %}
-				<div class="empty" style="padding:16px">Nothing costed yet — labour, parts and sublet lines appear here from the job card's <b>Billing</b> tab.</div>
+				<div class="empty" style="padding:16px">Nothing costed yet — labor, parts and sublet lines appear here from the Workshop Job Card's <b>Billing</b> tab.</div>
 				{%- endif %}
 				{%- if card.estimate %}
 				<div class="row-between" style="border-top:1px solid var(--border);padding-top:10px">
@@ -446,7 +446,7 @@
 		var list = OPT.suppliers || [], v = input.value.trim(), code = vendorCodeOf(input);
 		var ok = !v || !list.length || list.some(function (x) { return x.name === code; });
 		input.classList.toggle("is-unmatched", !ok);
-		input.title = ok ? "" : "Not a supplier — pick one from the list, or it is dropped when the card is created.";
+		input.title = ok ? "" : "Not a supplier — pick one from the list, or it is dropped when the Workshop Job Card is created.";
 	}
 
 	// The labour Item's name, looked up rather than stored — the kit labour row
@@ -510,7 +510,7 @@
 		s = s || {};
 		var tr = document.createElement("tr");
 		tr.innerHTML =
-			'<td><select class="jc-jt">' + options(OPT.jobcard_types, s.jobtype, "name", "type_name", "— job type —") + "</select>" +
+			'<td><select class="jc-jt">' + options(OPT.jobcard_types, s.jobtype, "name", "type_name", "— Jobcard Type —") + "</select>" +
 				'<select class="jc-svc" style="margin-top:5px">' + serviceOptions(s.jobtype, s.service) + "</select>" +
 				'<input class="jc-desc" style="margin-top:5px" placeholder="Description" value="' + esc(s.description || "") + '">' +
 				'<input type="hidden" class="jc-std" value="' + esc(s.labour_service_code || "") + '"></td>' +
@@ -611,7 +611,7 @@
 	}
 	function syncCounts() {
 		var n = el("jc-svc-body").querySelectorAll("tr").length;
-		el("jc-svc-count").textContent = n + " on this card";
+		el("jc-svc-count").textContent = n + " on this Workshop Job Card";
 	}
 
 	// ---- the kit editor -------------------------------------------------
@@ -620,7 +620,7 @@
 	// picker that searches items lives in the Damages popup, against the
 	// standards, so a code typed here is checked when the card is written.
 	var KIT_SPEC = {
-		labor: { title: "Labour", arr: function () { return kitLabor; },
+		labor: { title: "Labor", arr: function () { return kitLabor; },
 			// Item first, then what the line says. The Item is what a Sales Order
 			// bills against; the column is narrow, so the item's name sits under
 			// the code rather than in a column of its own.
@@ -935,7 +935,7 @@
 		var btn = this, original = btn.innerHTML;
 		var p = payload();
 		if (!p.services.filter(function (s) { return s.jobtype || s.service; }).length) {
-			alert("Add at least one service job before creating the job card.");
+			alert("Add at least one Workshop Job Card Service before creating the Workshop Job Card.");
 			return;
 		}
 		btn.disabled = true;
@@ -954,7 +954,7 @@
 		}).then(function (r) {
 			window.location.href = "/a3-workshop/job-card/detail?id=" + encodeURIComponent(r.job_card);
 		}).catch(function (err) {
-			alert("Could not create the job card: " + (err && err.message ? err.message : err));
+			alert("Could not create the Workshop Job Card: " + (err && err.message ? err.message : err));
 			btn.disabled = false;
 			btn.innerHTML = original;
 		});

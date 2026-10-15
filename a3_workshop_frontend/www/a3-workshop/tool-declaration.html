@@ -2,7 +2,7 @@
 
 {% block doc_title %}
 {%- if mode == "statement" %}Tool Responsibility Declaration
-{%- elif mode == "slip" %}Tool {{ doc.purpose }} — Declaration
+{%- elif mode == "slip" %}Tool Custody {{ doc.purpose }} — Declaration
 {%- else %}Tool Responsibility Declaration{% endif %}
 {% endblock %}
 
@@ -19,7 +19,7 @@
 
 {%- elif mode == "cancelled" %}
 <p class="muted">
-	<b>{{ doc.name }} was cancelled.</b> A cancelled custody document carries no declaration —
+	<b>{{ doc.name }} was cancelled.</b> A cancelled Tool Custody document carries no declaration —
 	the tools it covered were reversed to their previous holder.
 </p>
 
@@ -116,7 +116,7 @@
 </p>
 {%- endif %}
 
-<h2 class="sec">Handover</h2>
+<h2 class="sec">Tool Custody</h2>
 <div class="kv">
 	<div><div class="k">Document</div><div class="v">{{ doc.name }}</div></div>
 	<div><div class="k">Type</div><div class="v">{{ doc.purpose }}</div></div>
@@ -129,8 +129,8 @@
 	{%- if to_emp %}
 	<div><div class="k">Received By</div><div class="v">{{ to_emp.employee_name }} ({{ to_emp.name }})</div></div>
 	{%- endif %}
-	<div><div class="k">Kit</div><div class="v">{{ doc.kit_template or "—" }}</div></div>
-	<div><div class="k">Job Card</div><div class="v">{{ doc.reference_job_card or "—" }}</div></div>
+	<div><div class="k">Tool Kit Template</div><div class="v">{{ doc.kit_template or "—" }}</div></div>
+	<div><div class="k">Workshop Job Card</div><div class="v">{{ doc.reference_job_card or "—" }}</div></div>
 </div>
 
 <h2 class="sec">Tools ({{ rows|length }})</h2>

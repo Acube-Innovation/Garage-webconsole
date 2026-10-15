@@ -36,7 +36,7 @@
 {% block doc_title -%}
 {%- if mode == "vehicle" %}Vehicle History Report
 {%- elif mode == "customer" %}Customer Fleet Summary
-{%- elif mode == "handover" %}Vehicle Handover Inspection
+{%- elif mode == "handover" %}Driver Vehicle Handover Inspection
 {%- elif mode == "driver" %}Driver Performance Report
 {%- else %}Print{% endif -%}
 {%- endblock %}
@@ -69,7 +69,7 @@
 </div>
 
 {% if d.is_own_fleet %}
-<h2 class="sec">Driver Assignment History</h2>
+<h2 class="sec">Driver Vehicle Assignments</h2>
 {% if d.assignments %}
 <table class="t"><thead><tr><th>Driver</th><th>From</th><th>To</th><th class="right">Start Odo</th><th class="right">End Odo</th><th class="right">Distance</th><th>Status</th></tr></thead><tbody>
 	{% for a in d.assignments %}
@@ -84,12 +84,12 @@
 	</tr>
 	{% endfor %}
 </tbody></table>
-{% else %}<p class="muted">No driver assignments recorded.</p>{% endif %}
+{% else %}<p class="muted">No Driver Vehicle Assignments recorded.</p>{% endif %}
 {% endif %}
 
 <h2 class="sec">Service History</h2>
 {% if d.service_history %}
-<table class="t"><thead><tr><th>Job Card</th><th>Date</th><th>Job Type</th><th>Service</th><th>Status</th><th class="right">Amount</th></tr></thead><tbody>
+<table class="t"><thead><tr><th>Workshop Job Card</th><th>Date</th><th>Jobcard Type</th><th>Job Type Service</th><th>Status</th><th class="right">Amount</th></tr></thead><tbody>
 	{% for r in d.service_history %}
 	<tr><td>{{ r.name }}</td><td>{{ r.date }}</td><td>{{ r.jobtype }}</td><td>{{ r.service }}</td><td>{{ r.status }}</td><td class="right">{{ money(r.amount) }}</td></tr>
 	{% endfor %}
@@ -99,7 +99,7 @@
 
 <h2 class="sec">Mechanical Repair History</h2>
 {% if d.repair_history %}
-<table class="t"><thead><tr><th>Job Card</th><th>Date</th><th>Job Type</th><th>Work</th><th>Status</th><th class="right">Amount</th></tr></thead><tbody>
+<table class="t"><thead><tr><th>Workshop Job Card</th><th>Date</th><th>Jobcard Type</th><th>Job Type Service</th><th>Status</th><th class="right">Amount</th></tr></thead><tbody>
 	{% for r in d.repair_history %}
 	<tr><td>{{ r.name }}</td><td>{{ r.date }}</td><td>{{ r.jobtype }}</td><td>{{ r.service }}</td><td>{{ r.status }}</td><td class="right">{{ money(r.amount) }}</td></tr>
 	{% endfor %}
@@ -108,7 +108,7 @@
 {% else %}<p class="muted">No mechanical repair history.</p>{% endif %}
 
 <h2 class="sec">Monthly Travel Summary (12 months)</h2>
-<table class="t"><thead><tr><th>Month</th><th class="right">Distance</th><th class="right">Utilisation</th><th class="right">Handovers</th><th class="right">Service Visits</th><th class="right">Cost</th></tr></thead><tbody>
+<table class="t"><thead><tr><th>Month</th><th class="right">Distance</th><th class="right">Utilisation</th><th class="right">Driver Vehicle Handovers</th><th class="right">Service Visits</th><th class="right">Cost</th></tr></thead><tbody>
 	{% for m in d.monthly %}
 	<tr><td>{{ m.month }}</td><td class="right">{{ num(m.distance_km) }} km</td><td class="right">{{ m.utilisation_pct }}%</td><td class="right">{{ m.handovers }}</td><td class="right">{{ m.service_visits }}</td><td class="right">{{ money(m.cost) }}</td></tr>
 	{% endfor %}
@@ -123,9 +123,9 @@
 </tbody></table>
 
 {% if d.is_own_fleet %}
-<h2 class="sec">Handover Inspections</h2>
+<h2 class="sec">Driver Vehicle Handovers</h2>
 {% if d.handovers %}
-<table class="t"><thead><tr><th>Date</th><th>Type</th><th>From</th><th>To</th><th class="right">Odometer</th><th>New Damages</th><th>Responsible</th><th>Job Card</th><th>Rectification</th></tr></thead><tbody>
+<table class="t"><thead><tr><th>Date</th><th>Type</th><th>From</th><th>To</th><th class="right">Odometer</th><th>New Vehicle Damage Lines</th><th>Responsible</th><th>Workshop Job Card</th><th>Rectification</th></tr></thead><tbody>
 	{% for x in d.handovers %}
 	<tr>
 		<td>{{ x.handover_date_fmt }}</td><td>{{ x.handover_type or "—" }}</td>
@@ -138,9 +138,9 @@
 	</tr>
 	{% endfor %}
 </tbody></table>
-{% else %}<p class="muted">No handover inspections recorded.</p>{% endif %}
+{% else %}<p class="muted">No Driver Vehicle Handovers recorded.</p>{% endif %}
 
-<h2 class="sec">Driver Maintenance Activities</h2>
+<h2 class="sec">Driver Activity Logs</h2>
 {% if d.activities %}
 <table class="t"><thead><tr><th>Date</th><th>Driver</th><th>Activity</th><th class="right">Odometer</th><th>By</th><th>Preventive</th><th class="right">Cost</th></tr></thead><tbody>
 	{% for a in d.activities %}
@@ -153,7 +153,7 @@
 	{% endfor %}
 	<tr><td colspan="6"><b>Total</b></td><td class="right"><b>{{ money(d.activities | sum(attribute="cost")) }}</b></td></tr>
 </tbody></table>
-{% else %}<p class="muted">No driver maintenance activities recorded.</p>{% endif %}
+{% else %}<p class="muted">No Driver Activity Logs recorded.</p>{% endif %}
 {% endif %}
 
 {# ================================================================ CUSTOMER #}
@@ -168,7 +168,7 @@
 {% if d.is_own_fleet %}
 <div class="stat-row" style="margin-top:10px">
 	<div class="stat"><div class="l">Active Drivers</div><div class="n">{{ d.stats.active_drivers }}</div></div>
-	<div class="stat"><div class="l">Open Handover Issues</div><div class="n">{{ d.stats.open_handover_issues }}</div></div>
+	<div class="stat"><div class="l">Open Driver Vehicle Handover Issues</div><div class="n">{{ d.stats.open_handover_issues }}</div></div>
 	<div class="stat"><div class="l">Needs Improvement</div><div class="n">{{ d.stats.needs_improvement }}</div></div>
 	<div class="stat"><div class="l">Fleet Type</div><div class="n" style="font-size:13px">Own Fleet</div></div>
 </div>
@@ -197,7 +197,7 @@
 </div>
 
 <h2 class="sec">Driver Performance Leaderboard</h2>
-<table class="t"><thead><tr><th>Driver</th><th class="right">Score</th><th>Grade</th><th class="right">KM</th><th class="right">New Damages</th><th class="right">Preventive</th><th class="right">Adherence</th><th class="right">Cost / km</th><th class="right">Cost</th></tr></thead><tbody>
+<table class="t"><thead><tr><th>Driver</th><th class="right">Score</th><th>Grade</th><th class="right">KM</th><th class="right">New Vehicle Damage Lines</th><th class="right">Preventive</th><th class="right">Adherence</th><th class="right">Cost / km</th><th class="right">Cost</th></tr></thead><tbody>
 	{% for r in d.kpi.rows %}
 	<tr>
 		<td><b>{{ r.driver_name }}</b></td>
@@ -216,7 +216,7 @@
 
 {# ================================================================ HANDOVER #}
 {% elif mode == "handover" %}
-<h2 class="sec">Handover Details</h2>
+<h2 class="sec">Driver Vehicle Handover Details</h2>
 <div class="kv">
 	<div><div class="k">Vehicle</div><div class="v">{{ h_meta.model }}</div></div>
 	<div><div class="k">Plate</div><div class="v">{{ h_meta.plate }}</div></div>
@@ -251,7 +251,7 @@
 {%- if h.tyre_condition and h.tyre_condition != "—" %}{% set _ = readings.append(("Tyre Condition", h.tyre_condition)) %}{% endif -%}
 
 {% if readings or ticked or legacy %}
-<h2 class="sec">Condition Checklist</h2>
+<h2 class="sec">Handover Checklist Responses</h2>
 <div class="kv">
 	{% for k, v in readings %}
 	<div><div class="k">{{ k }}</div><div class="v">{{ v }}{% if k == "Tyre Condition" and h.tyre_readings %} <span class="muted" style="font-weight:400">(worst of {{ h.tyre_readings | length }})</span>{% endif %}</div></div>
@@ -267,7 +267,7 @@
 
 {%- set attached = h.attachment_items | selectattr("checked") | list -%}
 {% if attached %}
-<h2 class="sec">Attachments</h2>
+<h2 class="sec">Handover Attachment Items</h2>
 <div class="kv">
 	{% for a in attached %}
 	<div><div class="k">{{ a.item }}{% if a.qty %} &times;{{ a.qty }}{% endif %}</div>
@@ -279,7 +279,7 @@
 {% endif %}
 
 {% if h.tyre_readings %}
-<h2 class="sec">Tyre Condition &amp; Tread ({{ h.tyre_readings | length }})</h2>
+<h2 class="sec">Handover Tyre Readings ({{ h.tyre_readings | length }})</h2>
 <table class="t"><thead><tr><th style="width:18%">Tyre Position</th><th style="width:13%">Condition</th><th style="width:12%">Tread Depth</th><th style="width:24%">Remark</th><th style="width:15%">Responsible</th><th>Photo</th></tr></thead><tbody>
 	{% for t in h.tyre_readings %}
 	<tr>
@@ -295,7 +295,7 @@
 {% endif %}
 
 {% if h.area_inspections %}
-<h2 class="sec">Vehicle Unit Condition &amp; Photo Record ({{ h.area_inspections | length }})</h2>
+<h2 class="sec">Handover Area Inspections ({{ h.area_inspections | length }})</h2>
 <table class="t"><thead><tr><th style="width:21%">Inspection Area</th><th style="width:15%">Condition</th><th style="width:29%">Remark</th><th style="width:16%">Responsible</th><th>Photo</th></tr></thead><tbody>
 	{% for a in h.area_inspections %}
 	<tr>
@@ -338,7 +338,7 @@
 {#- The open damage ledger as of this handover: what it found and what it
     carried from earlier ones. Each line names who answers for it and the
     handover it was first found at, which is what the receipt is signed for. -#}
-<h2 class="sec">Recorded Vehicle Condition ({{ h.damages | length }} damages)</h2>
+<h2 class="sec">Recorded Vehicle Condition ({{ h.damages | length }} Vehicle Damage Lines)</h2>
 {% if h.damages %}
 <table class="t"><thead><tr><th>#</th><th>Area</th><th>Damage Type</th><th>Severity</th><th>Description</th><th>Responsible</th><th>First Found</th></tr></thead><tbody>
 	{% for x in h.damages %}
@@ -346,20 +346,20 @@
 		<td>{{ loop.index }}</td><td><b>{{ x.area }}</b></td><td>{{ x.damage_type }}</td>
 		<td>{{ sevpill(x.severity) }}</td><td>{{ x.description or "—" }}</td>
 		<td>{% if x.responsible %}{{ x.responsible }}{% else %}<span class="muted">—</span>{% endif %}</td>
-		<td>{% if x.is_existing %}{{ x.origin_handover }}{% else %}<b>This handover</b>{% endif %}{% if x.job_card %} · JC {{ x.job_card }}{% endif %}</td>
+		<td>{% if x.is_existing %}{{ x.origin_handover }}{% else %}<b>This Driver Vehicle Handover</b>{% endif %}{% if x.job_card %} · JC {{ x.job_card }}{% endif %}</td>
 	</tr>
 	{% endfor %}
 </tbody></table>
-{% else %}<p class="muted">No damages — vehicle recorded clean.</p>{% endif %}
+{% else %}<p class="muted">No Vehicle Damage Lines — vehicle recorded clean.</p>{% endif %}
 
 {%- set found = (h.new_damages | length) + (h.comparison_damages | length) -%}
-<h2 class="sec">Comparison With Previous Handover {% if h.previous_handover %}({{ h.previous_handover }}){% endif %}{% if found %} — {{ found }} damage{{ "" if found == 1 else "s" }}{% endif %}</h2>
+<h2 class="sec">Comparison With Previous Driver Vehicle Handover {% if h.previous_handover %}({{ h.previous_handover }}){% endif %}{% if found %} — {{ found }} Vehicle Damage Line{{ "" if found == 1 else "s" }}{% endif %}</h2>
 {% if h.new_damages %}
 <table class="t"><thead><tr><th>#</th><th>Area</th><th>Damage Type</th><th>Severity</th><th>Finding</th><th>Responsible</th></tr></thead><tbody>
 	{% for x in h.new_damages %}
 	<tr class="newdmg">
 		<td>{{ loop.index }}</td><td><b>{{ x.area }}</b></td><td>{{ x.damage_type }}</td><td>{{ sevpill(x.severity) }}</td>
-		<td>{% if x.previous_severity %}Worsened — was {{ x.previous_severity }}{% else %}New since previous handover{% endif %}</td>
+		<td>{% if x.previous_severity %}Worsened — was {{ x.previous_severity }}{% else %}New since previous Driver Vehicle Handover{% endif %}</td>
 		<td>{% if x.responsible %}{{ x.responsible }}{% else %}<span class="muted">—</span>{% endif %}</td>
 	</tr>
 	{% endfor %}
@@ -367,13 +367,13 @@
 <div class="kv" style="margin-top:10px">
 	<div><div class="k">Responsible Driver</div><div class="v" style="color:#c01643">{{ h.responsible_driver or "—" }}</div></div>
 	<div><div class="k">Rectification</div><div class="v">{{ rectpill(h.rectification_status) }}</div></div>
-	{% if h.rectification_job_card %}<div><div class="k">Repair Job Card</div><div class="v">{{ h.rectification_job_card }}</div></div>{% endif %}
+	{% if h.rectification_job_card %}<div><div class="k">Repair Workshop Job Card</div><div class="v">{{ h.rectification_job_card }}</div></div>{% endif %}
 	{% if h.rectification_notes %}<div style="grid-column:span 2"><div class="k">Notes</div><div class="v">{{ h.rectification_notes }}</div></div>{% endif %}
 </div>
 {% elif not h.comparison_damages and h.previous_handover %}
-<p class="muted">No new damage — vehicle condition matches the previous handover record.</p>
+<p class="muted">No new Vehicle Damage Lines — vehicle condition matches the previous Driver Vehicle Handover.</p>
 {% elif not h.comparison_damages %}
-<p class="muted">First handover for this vehicle — nothing to compare against.</p>
+<p class="muted">First Driver Vehicle Handover for this vehicle — nothing to compare against.</p>
 {% endif %}
 
 {#- Damage the inspector found by putting the two sets of photographs side by
@@ -383,7 +383,7 @@
 {% if h.comparison_damages %}
 <p class="muted" style="margin:10px 0 6px;font-size:11px">
 	Found on photograph comparison against
-	{% if h.previous_handover %}{{ h.previous_handover }}{% else %}the previous handover{% endif %}:
+	{% if h.previous_handover %}{{ h.previous_handover }}{% else %}the previous Driver Vehicle Handover{% endif %}:
 </p>
 <table class="t"><thead><tr><th>#</th><th>Area</th><th>Damage Type</th><th>Severity</th><th>Description</th></tr></thead><tbody>
 	{% for x in h.comparison_damages %}
@@ -468,7 +468,7 @@
 <div class="stat-row">
 	<div class="stat"><div class="l">Overall Score</div><div class="n">{{ c.overall_score if c.overall_score is not none else "—" }} {{ gradepill(c.grade) }}</div></div>
 	<div class="stat"><div class="l">Distance</div><div class="n">{{ num(c.total_km) }} km</div></div>
-	<div class="stat"><div class="l">New Damages</div><div class="n">{{ c.new_damage_count }}{% if c.severe_damage_count %} <span class="pill pill--red">{{ c.severe_damage_count }} severe</span>{% endif %}</div></div>
+	<div class="stat"><div class="l">New Vehicle Damage Lines</div><div class="n">{{ c.new_damage_count }}{% if c.severe_damage_count %} <span class="pill pill--red">{{ c.severe_damage_count }} severe</span>{% endif %}</div></div>
 	<div class="stat"><div class="l">Maintenance Cost</div><div class="n">{{ money(c.maintenance_cost) }}</div></div>
 </div>
 
@@ -482,9 +482,9 @@
 	<tr><td><b>Overall Vehicle Care</b></td><td>10%</td><td class="right">{{ c.care_score if c.care_score is not none else "—" }}</td><td>Handover condition + rectification closure</td></tr>
 </tbody></table>
 
-<h2 class="sec">Monthly Trend</h2>
+<h2 class="sec">Driver Performance Snapshots</h2>
 {% if s.trend %}
-<table class="t"><thead><tr><th>Month</th><th class="right">Score</th><th>Grade</th><th class="right">KM</th><th class="right">New Damages</th><th class="right">Cost</th></tr></thead><tbody>
+<table class="t"><thead><tr><th>Month</th><th class="right">Score</th><th>Grade</th><th class="right">KM</th><th class="right">New Vehicle Damage Lines</th><th class="right">Cost</th></tr></thead><tbody>
 	{% for t in s.trend %}
 	<tr>
 		<td>{{ t.label }}</td>
@@ -496,7 +496,7 @@
 	</tr>
 	{% endfor %}
 </tbody></table>
-{% else %}<p class="muted">No monthly snapshots yet — the trend fills in as the monthly job runs.</p>{% endif %}
+{% else %}<p class="muted">No Driver Performance Snapshots yet — the trend fills in as the monthly job runs.</p>{% endif %}
 
 <div class="sigs sigs--marked">
 	<div class="sig-slot">
