@@ -24,10 +24,10 @@ _DEFAULT_ICON = "fa-wrench"
 
 def get_context(context):
 	require_login(context)
-	context.title = "Choose Job Type"
+	context.title = "Choose Jobcard Type"
 	context.page_icon = "fa-layer-group"
 	context.subtitle = "Select the type of service or repair"
-	context.breadcrumb = "Job Card"
+	context.breadcrumb = "Workshop Job Card"
 	context.job_types = _job_types()
 	return context
 
@@ -51,7 +51,7 @@ def _job_types():
 				"label": label,
 				"icon": row.get("icon") or _ICONS.get((label or "").strip().lower(), _DEFAULT_ICON),
 				"sub": row.get("description")
-				or ("%d service%s configured" % (n, "" if n == 1 else "s") if n else "No services configured yet"),
+				or ("%d Job Type Service%s configured" % (n, "" if n == 1 else "s") if n else "No Job Type Services configured yet"),
 			}
 		)
 	return types

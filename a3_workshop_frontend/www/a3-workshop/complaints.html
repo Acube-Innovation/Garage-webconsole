@@ -15,30 +15,30 @@
 {%- set s = board.summary -%}
 
 <div class="toolbar">
-	<div class="section-title" style="margin:0">Complaints on Job Cards</div>
+	<div class="section-title" style="margin:0">Workshop Job Card Complaints on Workshop Job Cards</div>
 	<div class="toolbar__right">
 		<a class="btn btn--outline" href="/a3-workshop/workshop-print?complaints=register" target="_blank" rel="noopener"><i class="fa-solid fa-print"></i> Print Register</a>
-		<a class="btn btn--primary" href="/a3-workshop/job-card/new"><i class="fa-solid fa-plus"></i> Add Complaint on Job Card</a>
+		<a class="btn btn--primary" href="/a3-workshop/job-card/new"><i class="fa-solid fa-plus"></i> Add Workshop Job Card Complaint on Workshop Job Card</a>
 	</div>
 </div>
 
 <div class="tc-stats">
-	<div class="stat-card stat-card--sm"><div class="label">Complaints Recorded</div><div class="value">{{ s.total }}</div><div class="sub">On {{ s.job_cards }} job card{{ "" if s.job_cards == 1 else "s" }}</div></div>
-	<div class="stat-card stat-card--sm stat-card--navy"><div class="label">Still Open</div><div class="value">{{ s.open }}</div><div class="sub">Job card not closed</div></div>
+	<div class="stat-card stat-card--sm"><div class="label">Workshop Job Card Complaints Recorded</div><div class="value">{{ s.total }}</div><div class="sub">On {{ s.job_cards }} Workshop Job Card{{ "" if s.job_cards == 1 else "s" }}</div></div>
+	<div class="stat-card stat-card--sm stat-card--navy"><div class="label">Still Open</div><div class="value">{{ s.open }}</div><div class="sub">Workshop Job Card not closed</div></div>
 	<div class="stat-card stat-card--sm"><div class="label">Critical / High</div><div class="value">{{ s.critical }}</div><div class="sub">Open &amp; severe</div></div>
-	<div class="stat-card stat-card--sm stat-card--purple"><div class="label">Closed Out</div><div class="value">{{ s.closed }}</div><div class="sub">Job card completed</div></div>
+	<div class="stat-card stat-card--sm stat-card--purple"><div class="label">Closed Out</div><div class="value">{{ s.closed }}</div><div class="sub">Workshop Job Card completed</div></div>
 </div>
 
 {%- if board.rows %}
 <div class="toolbar" style="margin-top:14px">
 	<div class="row" style="gap:10px;flex-wrap:wrap">
-		<input type="search" id="cp-search" placeholder="Search complaint, customer, vehicle…" style="min-width:260px">
+		<input type="search" id="cp-search" placeholder="Search Workshop Job Card Complaint, customer, vehicle…" style="min-width:260px">
 		<select id="cp-severity">
 			<option value="">All severities</option>
 			{%- for sev in board.severities %}<option>{{ sev }}</option>{%- endfor %}
 		</select>
 		<select id="cp-status">
-			<option value="">All job card statuses</option>
+			<option value="">All Workshop Job Card statuses</option>
 			{%- for st in board.statuses %}<option>{{ st }}</option>{%- endfor %}
 		</select>
 	</div>
@@ -66,8 +66,8 @@
 				<div class="row" style="gap:8px">{{ badge(c.severity, c.severity_variant) }}{{ badge(c.status, c.status_variant) }}</div>
 				{%- if c.job_card %}
 				<div class="row" style="gap:8px">
-					<a class="btn btn--outline btn--sm" href="/a3-workshop/job-card/detail?id={{ c.job_card }}"><i class="fa-solid fa-eye"></i> View Card</a>
-					<a class="btn btn--primary btn--sm" href="/a3-workshop/job-card/new?id={{ c.job_card }}"><i class="fa-solid fa-pen"></i> Edit Complaint</a>
+					<a class="btn btn--outline btn--sm" href="/a3-workshop/job-card/detail?id={{ c.job_card }}"><i class="fa-solid fa-eye"></i> View Workshop Job Card</a>
+					<a class="btn btn--primary btn--sm" href="/a3-workshop/job-card/new?id={{ c.job_card }}"><i class="fa-solid fa-pen"></i> Edit Workshop Job Card Complaint</a>
 				</div>
 				{%- endif %}
 			</div>
@@ -76,9 +76,9 @@
 	{%- else %}
 	<div class="card"><div class="card__body">
 		<div class="empty" style="padding:32px">
-			No complaints recorded yet.<br>
-			<span class="muted">Complaints are captured on a job card, in its <b>Complaints / Check-Up</b> tab.</span><br>
-			<a href="/a3-workshop/job-card/new" style="color:var(--red);font-weight:600">Create a job card</a>
+			No Workshop Job Card Complaints recorded yet.<br>
+			<span class="muted">Workshop Job Card Complaints are captured on a Workshop Job Card, in its <b>Workshop Job Card Complaints</b> tab.</span><br>
+			<a href="/a3-workshop/job-card/new" style="color:var(--red);font-weight:600">Create a Workshop Job Card</a>
 			or <a href="/a3-workshop/job-cards" style="color:var(--red);font-weight:600">open an existing one</a> to record one.
 		</div>
 	</div></div>
@@ -86,7 +86,7 @@
 </div>
 
 {%- if board.rows %}
-<div class="empty" id="cp-none" style="padding:24px;display:none">No complaints match this filter.</div>
+<div class="empty" id="cp-none" style="padding:24px;display:none">No Workshop Job Card Complaints match this filter.</div>
 {%- endif %}
 
 {% raw %}
@@ -112,7 +112,7 @@
 			row.style.display = ok ? "" : "none";
 			if (ok) shown += 1;
 		});
-		countEl.textContent = shown + " of " + rows.length + " complaint" + (rows.length === 1 ? "" : "s");
+		countEl.textContent = shown + " of " + rows.length + " Workshop Job Card Complaint" + (rows.length === 1 ? "" : "s");
 		noneEl.style.display = shown ? "none" : "";
 	}
 

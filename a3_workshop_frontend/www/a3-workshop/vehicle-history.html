@@ -74,7 +74,7 @@
 		<div id="vh-rankings" class="vh-rank-grid"></div>
 		<div style="overflow-x:auto"><table class="table" id="vh-kpi-table">
 			<thead><tr>
-				<th>Driver</th><th>Score</th><th>Grade</th><th>KM</th><th>New Damages</th>
+				<th>Driver</th><th>Score</th><th>Grade</th><th>KM</th><th>New Vehicle Damage Lines</th>
 				<th>Preventive</th><th>Cost / km</th><th></th>
 			</tr></thead>
 			<tbody></tbody>
@@ -100,7 +100,7 @@
 						This is an attachment — trailer, bed or box, not a motor vehicle</label>
 				</div>
 				<div class="field" data-kind="attachment" style="display:none">
-					<label>Attachment Type <span class="req">*</span></label>
+					<label>Handover Attachment Item <span class="req">*</span></label>
 					<select name="attachment_type"><option value="">Select</option>
 					{%- for a in attachment_types %}<option>{{ a }}</option>{% endfor %}
 					</select>
@@ -262,7 +262,7 @@
 			? '<a class="vh-jc-count" href="/a3-workshop/vehicle-history-detail?vehicle=' + encodeURIComponent(v.name) +
 			  '#handovers">' + v.job_cards + "</a>"
 			: '<span class="muted">0</span>';
-		return '<div class="list-row__col"><div class="k">Job Cards</div><div style="font-weight:600">' + cards + "</div></div>" +
+		return '<div class="list-row__col"><div class="k">Workshop Job Cards</div><div style="font-weight:600">' + cards + "</div></div>" +
 			'<div class="list-row__col"><div class="k">Rectification</div><div>' +
 			(cls ? '<span class="badge ' + cls + '">' + esc(v.rectification) + "</span>" : '<span class="muted">—</span>') +
 			"</div></div>";
@@ -400,7 +400,7 @@
 		tiles += statcard("Vehicles", s.vehicles || 0, "");
 		tiles += statcard("Distance", (s.total_km_12m || 0).toLocaleString() + " km", "stat-card--navy", "Last 12 months");
 		tiles += statcard("Service Visits", s.service_visits || 0, "stat-card--purple", "All time");
-		tiles += statcard("Open Handover Issues", s.open_handover_issues || 0, "");
+		tiles += statcard("Open Driver Vehicle Handover Issues", s.open_handover_issues || 0, "");
 		tiles += statcard("Maintenance Cost", money(s.maintenance_cost), "stat-card--navy", "All time");
 		if (d.is_own_fleet) {
 			tiles += statcard("Active Drivers", s.active_drivers || 0, "stat-card--purple");
@@ -502,7 +502,7 @@
 		document.getElementById("vh-rankings").innerHTML =
 			rank("Most Efficient Driver", r.most_efficient, function (x) { return "Score " + x.overall_score; }) +
 			rank("Best-Maintained Vehicles", r.best_maintained, function (x) { return "Condition " + x.condition_score; }) +
-			rank("Least Maintenance Issues", r.least_issues, function (x) { return x.new_damage_count + " new damages"; }) +
+			rank("Least Maintenance Issues", r.least_issues, function (x) { return x.new_damage_count + " new Vehicle Damage Lines"; }) +
 			'<div class="vh-rank"><div class="k">Needs Improvement</div><div class="v">' +
 			(needs.length ? esc(needs.map(function (x) { return x.driver_name || x.driver; }).join(", ")) : "None") +
 			'</div><div class="s">' + (needs.length ? "Score below threshold" : "All drivers on track") + "</div></div>";
@@ -720,7 +720,7 @@
 		var plate = val("plate");
 		var model = attachment ? val("attachment_model") : val("model");
 		if (!plate) { alert("Plate Number is required."); return; }
-		if (attachment && !val("attachment_type")) { alert("Please choose an Attachment Type."); return; }
+		if (attachment && !val("attachment_type")) { alert("Please choose a Handover Attachment Item."); return; }
 		if (!attachment && !model) { alert("Please fill the required fields: Plate Number and Make / Model."); return; }
 		var original = regSave.innerHTML;
 		regSave.disabled = true;
@@ -774,11 +774,11 @@
 					"</div>" +
 					'<div class="row-between" style="margin-top:16px"><span class="muted">Overall (last 12 months)</span><b style="font-size:18px">' +
 					(c.overall_score == null ? "—" : c.overall_score) + " " + gradeBadge(c.grade) + "</b></div>" +
-					'<div class="row-between" style="margin-top:6px"><span class="muted">Distance / Damages / Cost</span><span>' +
+					'<div class="row-between" style="margin-top:6px"><span class="muted">Distance / Vehicle Damage Lines / Cost</span><span>' +
 					(c.total_km || 0).toLocaleString() + " km · " + (c.new_damage_count || 0) + " · " + money(c.maintenance_cost) + "</span></div>";
 				if (d.trend && d.trend.length) {
-					html += '<div class="vd-section-title" style="font-size:12px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin:20px 0 12px">Monthly Trend</div>';
-					html += '<div style="overflow-x:auto"><table class="table"><thead><tr><th>Month</th><th>Score</th><th>Grade</th><th>KM</th><th>Damages</th></tr></thead><tbody>' +
+					html += '<div class="vd-section-title" style="font-size:12px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin:20px 0 12px">Driver Performance Snapshots</div>';
+					html += '<div style="overflow-x:auto"><table class="table"><thead><tr><th>Month</th><th>Score</th><th>Grade</th><th>KM</th><th>Vehicle Damage Lines</th></tr></thead><tbody>' +
 						d.trend.map(function (t) {
 							return "<tr><td>" + esc(t.label) + "</td><td>" + (t.overall_score == null ? "—" : t.overall_score) +
 								"</td><td>" + gradeBadge(t.grade) + "</td><td>" + (t.total_km || 0).toLocaleString() +

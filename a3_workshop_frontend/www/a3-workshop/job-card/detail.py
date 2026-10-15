@@ -16,7 +16,7 @@ _PAGE_NAME = "detail"
 def get_context(context):
 	require_login(context)
 	context.page_icon = "fa-clipboard-check"
-	context.breadcrumb = "Job Card"
+	context.breadcrumb = "Workshop Job Card"
 
 	# One read-only call assembles the page from the saved Workshop Job Card and its
 	# child tables (garagedesk.api.front_office.get_job_card_detail): service rows and
@@ -67,18 +67,18 @@ def get_context(context):
 	context.draft = 1 if (card and card.get("draft")) else 0
 
 	if context.draft:
-		context.title = "New Job Card"
+		context.title = "New Workshop Job Card"
 		context.subtitle = " · ".join(
 			[x for x in (card["customer_name"], card["vehicle_label"]) if x]
 		)
 	elif card:
-		context.title = "Job Card " + card["name"]
+		context.title = "Workshop Job Card " + card["name"]
 		context.subtitle = " · ".join(
 			[x for x in (card["customer_name"], card["vehicle_label"]) if x]
 		)
 	else:
-		context.title = "Job Card"
-		context.subtitle = "Job card not found"
+		context.title = "Workshop Job Card"
+		context.subtitle = "Workshop Job Card not found"
 	return context
 
 

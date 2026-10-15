@@ -9,14 +9,14 @@
 {%- endmacro -%}
 
 {% block doc_title -%}
-{%- if mode == "jobcard" %}Job Card
+{%- if mode == "jobcard" %}Workshop Job Card
 {%- elif mode == "invoice" %}Tax Invoice
 {%- elif mode == "receipt" %}Payment Receipt
 {%- elif mode == "statement" %}Customer Account Statement
 {%- elif mode == "dayplan" %}Daily Planner — Day Sheet
 {%- elif mode == "workorder" %}Work Order Traveler
-{%- elif mode == "complaints" %}Complaints Register
-{%- elif mode == "calls" %}Telecalling — Call List
+{%- elif mode == "complaints" %}Workshop Job Card Complaint Register
+{%- elif mode == "calls" %}Telecalling — Call Log List
 {%- else %}Print{% endif -%}
 {%- endblock %}
 
@@ -27,8 +27,8 @@
 {%- elif mode == "statement" %}{{ st.customer }}{% if st.mobile != "—" %} · {{ st.mobile }}{% endif %}
 {%- elif mode == "dayplan" %}{{ day }} · {{ total_tasks }} open task(s)
 {%- elif mode == "workorder" %}{{ wo.name }} · {{ wo.item }}
-{%- elif mode == "complaints" %}{{ complaint_rows | length }} recorded complaint(s)
-{%- elif mode == "calls" %}{{ day }} · {{ call_rows | length }} call(s)
+{%- elif mode == "complaints" %}{{ complaint_rows | length }} recorded Workshop Job Card Complaint(s)
+{%- elif mode == "calls" %}{{ day }} · {{ call_rows | length }} Call Log(s)
 {%- endif -%}
 {%- endblock %}
 
@@ -39,7 +39,7 @@
 
 {# ================================================================ JOB CARD #}
 {% elif mode == "jobcard" %}
-<h2 class="sec">Job Details</h2>
+<h2 class="sec">Workshop Job Card Details</h2>
 <div class="kv">
 	<div><div class="k">Customer</div><div class="v">{{ jc.customer }}</div></div>
 	<div><div class="k">Mobile</div><div class="v">{{ jc.mobile }}</div></div>
@@ -64,7 +64,7 @@
 </div>
 
 {% if jc.complaints %}
-<h2 class="sec">Customer Complaints</h2>
+<h2 class="sec">Workshop Job Card Complaints</h2>
 <table class="t"><thead><tr><th>#</th><th>Complaint</th><th>Severity</th><th>Notes</th></tr></thead><tbody>
 	{% for c in jc.complaints %}
 	<tr><td>{{ loop.index }}</td><td>{{ c.complaint }}</td><td>{{ statuspill(c.severity) }}</td><td>{{ c.notes }}</td></tr>
@@ -72,14 +72,14 @@
 </tbody></table>
 {% endif %}
 
-<h2 class="sec">Services / Work Items</h2>
+<h2 class="sec">Workshop Job Card Services</h2>
 {% if jc.services %}
-<table class="t"><thead><tr><th>#</th><th>Job Type</th><th>Service</th><th>Technician</th><th class="right">Hours</th></tr></thead><tbody>
+<table class="t"><thead><tr><th>#</th><th>Jobcard Type</th><th>Job Type Service</th><th>Technician</th><th class="right">Hours</th></tr></thead><tbody>
 	{% for s in jc.services %}
 	<tr><td>{{ loop.index }}</td><td>{{ s.jobtype }}</td><td><b>{{ s.service }}</b></td><td>{{ s.technician }}</td><td class="right">{{ s.hours or "—" }}</td></tr>
 	{% endfor %}
 </tbody></table>
-{% else %}<p class="muted">No service lines.</p>{% endif %}
+{% else %}<p class="muted">No Workshop Job Card Services.</p>{% endif %}
 {% if jc.billing_total %}
 <p class="right" style="margin-top:8px"><b>Billing Total: {{ money0(jc.billing_total) }}</b></p>
 {% endif %}
@@ -195,15 +195,15 @@
 <p style="margin-top:8px"><span class="muted">Vehicles:</span> {% for v in st.vehicles %}{{ v.label }} ({{ v.plate }}){{ " · " if not loop.last }}{% endfor %}</p>
 {% endif %}
 
-<h2 class="sec">Job Cards ({{ st.job_cards | length }})</h2>
+<h2 class="sec">Workshop Job Cards ({{ st.job_cards | length }})</h2>
 {% if st.job_cards %}
-<table class="t"><thead><tr><th>Job Card</th><th>Date</th><th>Vehicle</th><th>Status</th><th class="right">Amount</th></tr></thead><tbody>
+<table class="t"><thead><tr><th>Workshop Job Card</th><th>Date</th><th>Vehicle</th><th>Status</th><th class="right">Amount</th></tr></thead><tbody>
 	{% for j in st.job_cards %}
 	<tr><td>{{ j.name }}</td><td>{{ j.date }}</td><td>{{ j.vehicle_label }}</td><td>{{ statuspill(j.status) }}</td><td class="right">{{ money0(j.billing_total) }}</td></tr>
 	{% endfor %}
 	<tr><td colspan="4"><b>Total</b></td><td class="right"><b>{{ money0(st.jc_total) }}</b></td></tr>
 </tbody></table>
-{% else %}<p class="muted">No job cards.</p>{% endif %}
+{% else %}<p class="muted">No Workshop Job Cards.</p>{% endif %}
 
 <h2 class="sec">Invoices ({{ st.invoices | length }})</h2>
 {% if st.invoices %}
@@ -276,7 +276,7 @@
 </tbody></table>
 {% else %}<p class="muted">No operations.</p>{% endif %}
 
-<h2 class="sec">Stage History</h2>
+<h2 class="sec">Workshop Work Order Stage Log</h2>
 {% if wo.history %}
 <table class="t"><thead><tr><th>Stage</th><th>From</th><th>When</th><th>By</th><th class="right">Hrs</th><th>Notes</th></tr></thead><tbody>
 	{% for h in wo.history %}
@@ -294,13 +294,13 @@
 {# ================================================================ COMPLAINTS #}
 {% elif mode == "complaints" %}
 {% if complaint_rows %}
-<table class="t"><thead><tr><th>#</th><th>Date</th><th>Job Card</th><th>Customer</th><th>Vehicle</th><th>Complaint</th><th>Severity</th><th>Technician</th><th>JC Status</th></tr></thead><tbody>
+<table class="t"><thead><tr><th>#</th><th>Date</th><th>Workshop Job Card</th><th>Customer</th><th>Vehicle</th><th>Complaint</th><th>Severity</th><th>Technician</th><th>JC Status</th></tr></thead><tbody>
 	{% for c in complaint_rows %}
 	<tr><td>{{ loop.index }}</td><td>{{ c.date }}</td><td>{{ c.job_card }}</td><td>{{ c.customer }}</td><td>{{ c.vehicle }}</td>
 		<td><b>{{ c.complaint }}</b></td><td>{{ statuspill(c.severity) }}</td><td>{{ c.technician }}</td><td>{{ statuspill(c.jc_status) }}</td></tr>
 	{% endfor %}
 </tbody></table>
-{% else %}<p class="muted">No complaints recorded on job cards yet.</p>{% endif %}
+{% else %}<p class="muted">No Workshop Job Card Complaints recorded yet.</p>{% endif %}
 
 {# ================================================================ CALLS #}
 {% elif mode == "calls" %}
@@ -313,7 +313,7 @@
 </div>
 {% endif %}
 
-<h2 class="sec">Calls</h2>
+<h2 class="sec">Call Logs</h2>
 {% if call_rows %}
 <table class="t"><thead><tr><th>Time</th><th>Customer</th><th>Mobile</th><th>Dir</th><th>Purpose</th><th>Outcome</th><th>By</th><th>Notes</th></tr></thead><tbody>
 	{% for c in call_rows %}
@@ -321,7 +321,7 @@
 		<td>{{ c.purpose or "—" }}</td><td>{{ c.outcome or "—" }}</td><td>{{ c.telecaller or "—" }}</td><td>{{ (c.call_notes or "")[:80] }}</td></tr>
 	{% endfor %}
 </tbody></table>
-{% else %}<p class="muted">No calls for this day.</p>{% endif %}
+{% else %}<p class="muted">No Call Logs for this day.</p>{% endif %}
 {% endif %}
 
 {% endblock %}

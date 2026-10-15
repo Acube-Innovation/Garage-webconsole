@@ -17,7 +17,7 @@
 		{%- endif %}
 	</div>
 	<div class="toolbar__right">
-		<a class="btn btn--outline btn--sm" href="/a3-workshop/job-cards"><i class="fa-solid fa-clipboard-list"></i> Job Cards</a>
+		<a class="btn btn--outline btn--sm" href="/a3-workshop/job-cards"><i class="fa-solid fa-clipboard-list"></i> Workshop Job Cards</a>
 	</div>
 </div>
 
@@ -34,9 +34,9 @@
 <div class="tb-pane is-active" id="pane-work">
 
 <div class="tc-stats">
-	{{ statcard("Open Tasks", totals.tasks, "stat-card--sm", "Assigned service lines") }}
-	{{ statcard("Job Cards", totals.job_cards, "stat-card--sm", "Cards on the floor") }}
-	{{ statcard("Hours Assigned", totals.hours, "stat-card--sm", "From service lines") }}
+	{{ statcard("Open Tasks", totals.tasks, "stat-card--sm", "Assigned Workshop Job Card Services") }}
+	{{ statcard("Workshop Job Cards", totals.job_cards, "stat-card--sm", "Cards on the floor") }}
+	{{ statcard("Hours Assigned", totals.hours, "stat-card--sm", "From Workshop Job Card Services") }}
 	{%- if me %}
 	{{ statcard("Avg. Progress", totals.avg ~ "%", "stat-card--sm", totals.done ~ " of " ~ totals.tracked ~ " at 100%") }}
 	{%- else %}
@@ -51,7 +51,7 @@
 <div class="filter-bar" id="tb-bar">
 	<div class="filter-bar__search">
 		<i class="fa-solid fa-magnifying-glass"></i>
-		<input id="tb-search" placeholder="Search job card, vehicle, customer…" autocomplete="off" aria-label="Search assignments">
+		<input id="tb-search" placeholder="Search Workshop Job Card, vehicle, customer…" autocomplete="off" aria-label="Search assignments">
 	</div>
 	<div class="filter-bar__group" data-filter-key="state" role="group" aria-label="Filter by progress">
 		<button type="button" class="chip" data-val="all">All</button>
@@ -105,7 +105,7 @@
 					{%- endif %}
 
 					<div class="row-between" style="margin-top:12px">
-						<a class="btn btn--outline btn--sm" href="/a3-workshop/job-card/detail?id={{ t.job_card }}"><i class="fa-solid fa-eye"></i> Job Card</a>
+						<a class="btn btn--outline btn--sm" href="/a3-workshop/job-card/detail?id={{ t.job_card }}"><i class="fa-solid fa-eye"></i> Workshop Job Card</a>
 						{%- if can_update and t.tracked %}
 						<span style="display:inline-flex;gap:6px;align-items:center" data-task="{{ t.task }}">
 							<select class="tb-progress" style="padding:6px 8px;border-radius:9px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:12px">
@@ -129,9 +129,9 @@
 <div class="card"><div class="card__body">
 	<div class="empty">
 		<i class="fa-solid fa-screwdriver-wrench" style="font-size:30px;display:block;margin-bottom:12px"></i>
-		<b>No open job-card tasks{% if me %} assigned to you{% endif %}.</b>
-		<div style="margin-top:6px">A card appears here as soon as a Workshop Job Card service line is assigned to a technician.</div>
-		<a class="btn btn--outline btn--sm" style="margin-top:14px" href="/a3-workshop/job-card/new"><i class="fa-solid fa-plus"></i> Create Job Card</a>
+		<b>No open Workshop Job Card tasks{% if me %} assigned to you{% endif %}.</b>
+		<div style="margin-top:6px">A card appears here as soon as a Workshop Job Card Service is assigned to a technician.</div>
+		<a class="btn btn--outline btn--sm" style="margin-top:14px" href="/a3-workshop/job-card/new"><i class="fa-solid fa-plus"></i> Create Workshop Job Card</a>
 	</div>
 </div></div>
 {%- endif %}
@@ -279,9 +279,9 @@
 					</select>
 				</div>
 				<div class="field">
-					<label>Kit (optional)</label>
+					<label>Tool Kit Template (optional)</label>
 					<select id="tl-i-kit">
-						<option value="">No kit — pick tools by hand</option>
+						<option value="">No Tool Kit Template — pick tools by hand</option>
 						{%- for k in tool_kits %}
 						<option value="{{ k.name }}">{{ k.name }}{% if k.grade %} ({{ k.grade }}){% endif %}</option>
 						{%- endfor %}
@@ -307,7 +307,7 @@
 		<div class="modal__foot">
 			<button type="button" class="btn btn--ghost btn--sm" data-close>Cancel</button>
 			<button type="button" class="btn btn--primary btn--sm" id="tl-i-submit"><i class="fa-solid fa-check"></i> Issue &amp; Sign</button>
-			<a class="btn btn--outline btn--sm" id="tl-i-print" style="display:none" target="_blank" rel="noopener" href="#"><i class="fa-solid fa-file-signature"></i> Print Declaration</a>
+			<a class="btn btn--outline btn--sm" id="tl-i-print" style="display:none" target="_blank" rel="noopener" href="#"><i class="fa-solid fa-file-signature"></i> Print Tool Custody</a>
 			<button type="button" class="btn btn--primary btn--sm" id="tl-i-done" style="display:none">Done</button>
 		</div>
 	</div>
@@ -352,7 +352,7 @@
 		<div class="modal__foot">
 			<button type="button" class="btn btn--ghost btn--sm" data-close>Cancel</button>
 			<button type="button" class="btn btn--primary btn--sm" id="tl-r-submit"><i class="fa-solid fa-check"></i> Confirm</button>
-			<a class="btn btn--outline btn--sm" id="tl-r-print" style="display:none" target="_blank" rel="noopener" href="#"><i class="fa-solid fa-file-signature"></i> Print Declaration</a>
+			<a class="btn btn--outline btn--sm" id="tl-r-print" style="display:none" target="_blank" rel="noopener" href="#"><i class="fa-solid fa-file-signature"></i> Print Tool Custody</a>
 			<button type="button" class="btn btn--primary btn--sm" id="tl-r-done" style="display:none">Done</button>
 		</div>
 	</div>
@@ -593,7 +593,7 @@
 		document.getElementById("tl-i-kit").addEventListener("change", function () {
 			var kit = this.value;
 			if (!kit) { preselect = {}; loadAvailable(iSearch.value.trim()); return; }
-			iMsg.textContent = "Resolving kit…";
+			iMsg.textContent = "Resolving Tool Kit Template…";
 			callMethod("garagedesk.api.tool_custody.get_kit_serials", { kit_template: kit })
 				.then(function (res) {
 					preselect = {};
@@ -606,11 +606,11 @@
 									return esc(s.item_name || s.item_code) + " (" + s.found + " of " + s.wanted + ")";
 								}).join(", ") + "</span>";
 						} else {
-							iMsg.textContent = "Kit resolved — " + (res.serials || []).length + " tools pre-selected.";
+							iMsg.textContent = "Tool Kit Template resolved — " + (res.serials || []).length + " tools pre-selected.";
 						}
 					});
 				})
-				.catch(function (err) { iMsg.textContent = "Could not resolve kit: " + err.message; });
+				.catch(function (err) { iMsg.textContent = "Could not resolve Tool Kit Template: " + err.message; });
 		});
 
 		document.getElementById("tl-i-submit").addEventListener("click", function () {
@@ -636,7 +636,7 @@
 				// Deliberately no auto-reload and no auto-popup: the counter still has
 				// to print the declaration and get it signed, and a popup opened after
 				// an async call gets blocked. Show the link, let them close when done.
-				iMsg.innerHTML = 'Issued — <b>' + esc(res.name) + '</b> · ' + res.count +
+				iMsg.innerHTML = 'Issued — Tool Custody <b>' + esc(res.name) + '</b> · ' + res.count +
 					' tool(s). Print the declaration for signature.';
 				showDone("tl-i", "/a3-workshop/tool-declaration?custody=" + encodeURIComponent(res.name));
 			}).catch(function (err) {
@@ -757,7 +757,7 @@
 					technician: rTech, serials: serials, conditions: conditions, acknowledged_by: ack });
 
 			call.then(function (res) {
-				rMsg.innerHTML = (transfer ? "Transferred" : "Returned") + ' — <b>' + esc(res.name) +
+				rMsg.innerHTML = (transfer ? "Transferred" : "Returned") + ' — Tool Custody <b>' + esc(res.name) +
 					'</b> · ' + res.count + " tool(s). Print the declaration for signature.";
 				showDone("tl-r", "/a3-workshop/tool-declaration?custody=" + encodeURIComponent(res.name));
 			}).catch(function (err) {

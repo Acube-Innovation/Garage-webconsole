@@ -1,7 +1,7 @@
 {% extends "templates/workshop_base.html" %}
 {% from "templates/macros/workshop.html" import typecard %}
 {%- macro stepper(active) -%}
-{%- set steps = ["Job Type","Details","Complaints","Tasks","Estimate"] -%}
+{%- set steps = ["Jobcard Type","Details","Workshop Job Card Complaints","Workshop Job Card Services","Estimate"] -%}
 <div class="card"><div class="stepper">
 	{%- for s in steps %}
 	{%- set n = loop.index %}
@@ -27,7 +27,7 @@
 </div>
 {%- else %}
 <div class="card" style="margin-top:18px"><div class="card__body">
-	<div class="empty">No job card types configured yet — add a Jobcard Type before raising job cards.</div>
+	<div class="empty">No Jobcard Types configured yet — add a Jobcard Type before raising Workshop Job Cards.</div>
 </div></div>
 {%- endif %}
 {% endblock %}

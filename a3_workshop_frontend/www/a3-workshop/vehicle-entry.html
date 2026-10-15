@@ -15,7 +15,7 @@
 				This is an attachment — trailer, bed or box, not a motor vehicle</label>
 		</div>
 		<div class="field" data-kind="attachment" style="display:none">
-			<label>Attachment Type <span class="req">*</span></label>
+			<label>Handover Attachment Item <span class="req">*</span></label>
 			<select name="attachment_type"><option value="">Select</option>
 			{%- for a in attachment_types %}<option>{{ a }}</option>{% endfor %}
 			</select>
@@ -78,7 +78,7 @@
 	<span></span>
 	<div class="row" style="display:flex;gap:10px">
 		<button type="button" class="btn btn--outline" id="save-vehicle"><i class="fa-solid fa-floppy-disk"></i> Save</button>
-		<a class="btn btn--primary" href="/a3-workshop/job-card/type-selection">Save &amp; Create Job Card <i class="fa-solid fa-arrow-right"></i></a>
+		<a class="btn btn--primary" href="/a3-workshop/job-card/type-selection">Save &amp; Create Workshop Job Card <i class="fa-solid fa-arrow-right"></i></a>
 	</div>
 </div>
 
@@ -356,7 +356,7 @@
 		}
 		if (attachment && !val("attachment_type")) {
 			markInvalid("attachment_type", true);
-			alert("Please choose an Attachment Type — trailer, bed, box and so on.");
+			alert("Please choose a Handover Attachment Item — trailer, bed, box and so on.");
 			return;
 		}
 		// The hidden values are only set by picking (or creating) from the list, so

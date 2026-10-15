@@ -12,7 +12,7 @@
 		<div class="card__body">
 			<div id="dir-default">
 				<div class="field--inline" style="margin-bottom:12px">
-					<div class="field"><input id="dir-search" placeholder="Job Card / phone…"></div>
+					<div class="field"><input id="dir-search" placeholder="Workshop Job Card / phone…"></div>
 					<button type="button" class="btn btn--primary btn--icon" title="Search"><i class="fa-solid fa-magnifying-glass"></i></button>
 				</div>
 				<div class="dir-list" id="dir-list"></div>
@@ -74,9 +74,9 @@
 						</div>
 					</div>
 					<div class="fieldset-title" style="display:flex;align-items:center;gap:8px">
-						Appointment
+						Workshop Appointment
 						<label style="display:flex;align-items:center;gap:8px;margin:0 0 0 auto;font-weight:600;cursor:pointer">
-							<input type="checkbox" id="o_add_appointment"> Add appointment
+							<input type="checkbox" id="o_add_appointment"> Add Workshop Appointment
 						</label>
 					</div>
 					<div id="opp-appointment-fields" style="display:none">
@@ -88,7 +88,7 @@
 				</form>
 				<div class="modal__foot" style="padding:16px 0 0;border:none">
 					<button type="button" class="btn btn--outline" id="save-opportunity"><i class="fa-solid fa-floppy-disk"></i> Save</button>
-					<button type="button" class="btn btn--primary" id="save-opportunity-jc">Save &amp; Job Card <i class="fa-solid fa-arrow-right"></i></button>
+					<button type="button" class="btn btn--primary" id="save-opportunity-jc">Save &amp; Workshop Job Card <i class="fa-solid fa-arrow-right"></i></button>
 				</div>
 			</div>
 
@@ -204,13 +204,13 @@
 	// The LHS sections. `cols` is the column order the server's row cells arrive in
 	// (see garagedesk.api.front_office.get_customer_360) — keep the two in step.
 	var SECTIONS = [
-		{ key: "jobcard", label: "Job Cards", icon: "fa-clipboard-list", cols: ["Job Card", "Date", "Vehicle", "Service", "Status", "Amount"] },
+		{ key: "jobcard", label: "Workshop Job Cards", icon: "fa-clipboard-list", cols: ["Workshop Job Card", "Date", "Vehicle", "Job Type Service", "Status", "Amount"] },
 		{ key: "order", label: "Orders", icon: "fa-cart-shopping", cols: ["Order No", "Date", "Items", "Total", "Status"] },
 		{ key: "invoice", label: "Invoices", icon: "fa-file-invoice-dollar", cols: ["Invoice", "Date", "Amount", "Paid", "Balance", "Status"] },
 		{ key: "payment", label: "Payments", icon: "fa-money-bill-wave", cols: ["Receipt", "Date", "Mode", "Amount", "Ref"] },
 		{ key: "vehicles", label: "Vehicles", icon: "fa-car", cols: ["Plate", "Make / Model", "Chassis", "Driver", "Odometer", "Fuel", "Handover"] },
-		{ key: "calls", label: "Calls", icon: "fa-phone", cols: ["Date", "Type", "Purpose", "Outcome", "By"] },
-		{ key: "complaints", label: "Complaints", icon: "fa-triangle-exclamation", cols: ["Date", "Complaint", "Severity", "Status"] }
+		{ key: "calls", label: "Call Logs", icon: "fa-phone", cols: ["Date", "Type", "Purpose", "Outcome", "By"] },
+		{ key: "complaints", label: "Workshop Job Card Complaints", icon: "fa-triangle-exclamation", cols: ["Date", "Complaint", "Severity", "Status"] }
 	];
 
 	// The selected customer's live 360 payload: { key: { rows: [[cell, …], …] } }.
@@ -388,7 +388,7 @@
 		// customer off the query string -- the same hand-off Save & Job Card
 		// already makes from this page.
 		var addActions = {
-			jobcard: { title: "New job card", href: function () {
+			jobcard: { title: "New Workshop Job Card", href: function () {
 				var p = new URLSearchParams();
 				p.set("customer", current.id); p.set("customer_name", current.name);
 				if (current.phone) p.set("mobile", current.phone);
@@ -436,7 +436,7 @@
 				if (s.cols[i] === "Handover") {
 					return "<td>" + (cell
 						? '<a class="btn btn--navy btn--sm" href="/a3-workshop/vehicle-history-handover?vehicle=' +
-						  encodeURIComponent(cell) + '"><i class="fa-solid fa-right-left"></i> Handover</a>'
+						  encodeURIComponent(cell) + '"><i class="fa-solid fa-right-left"></i> Driver Vehicle Handover</a>'
 						: '<span class="muted" style="font-size:12px">—</span>') + "</td>";
 				}
 				return "<td>" + esc(cell) + "</td>";
@@ -451,7 +451,7 @@
 		// so the field keeps focus.
 		var SEARCH_HINTS = {
 			vehicles: s.cols.slice(0, 3).join(", ").toLowerCase(),
-			jobcard: "job card, vehicle, status",
+			jobcard: "workshop job card, vehicle, status",
 			complaints: "complaint, severity, status"
 		};
 		var searchable = SEARCH_HINTS.hasOwnProperty(key);
@@ -810,7 +810,7 @@
 		var addAppt = !!(oAddApptChk && oAddApptChk.checked);
 		if (addAppt) {
 			if (!val("appt_date")) {
-				alert("Appointment: please choose an appointment date.");
+				alert("Workshop Appointment: please choose an appointment date.");
 				return Promise.reject();
 			}
 			var now = new Date();
@@ -844,7 +844,7 @@
 			// left-hand directory honest about who exists.
 			loadCustomers();
 			if (res && res.appointment_error) {
-				alert("Enquiry saved, but the appointment could not be booked: " + res.appointment_error);
+				alert("Enquiry saved, but the Workshop Appointment could not be booked: " + res.appointment_error);
 			}
 			return res;
 		});

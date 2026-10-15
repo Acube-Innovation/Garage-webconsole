@@ -200,7 +200,7 @@ def _assigned_work(employee):
 				"customer": jc.get("customer_name") or "",
 				"vehicle": jc.get("vehicle_label") or "",
 				"label": (
-					labels.get(r.service) or r.description or r.jobtype or r.service or "Service"
+					labels.get(r.service) or r.description or r.jobtype or r.service or "Job Type Service"
 				),
 				"hours": hours,
 				# Progress + task status come from the linked ERPNext Task.

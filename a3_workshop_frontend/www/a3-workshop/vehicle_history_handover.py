@@ -31,7 +31,7 @@ def get_context(context):
 	context.vehicle = vehicle
 	context.handover = handover
 	context.readonly = 1 if handover else 0
-	context.title = "Handover Record" if handover else "Vehicle Handover"
+	context.title = "Driver Vehicle Handover"
 	context.subtitle = (
 		handover if handover else "Driver handover & condition checklist"
 	)
