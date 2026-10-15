@@ -32,10 +32,10 @@ _DONE_JC = ("Completed", "Closed")
 
 def get_context(context):
 	require_login(context)
-	context.title = "Job Cards"
+	context.title = "Workshop Job Cards"
 	context.page_icon = "fa-clipboard-list"
-	context.subtitle = "All job cards"
-	context.breadcrumb = "Job Cards"
+	context.subtitle = "All Workshop Job Cards"
+	context.breadcrumb = "Workshop Job Cards"
 
 	# ?status= filters server-side; the options are the doctype's own Select
 	# options, so the control can never offer a state the data cannot hold.
@@ -74,7 +74,7 @@ def get_context(context):
 	# is what the list is claiming to be a window onto.
 	context.page_count = context.total
 	context.page_count_label = (
-		"matching" if (context.status or context.search) else "job cards"
+		"matching" if (context.status or context.search) else "Workshop Job Cards"
 	)
 	return context
 

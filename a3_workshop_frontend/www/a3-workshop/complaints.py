@@ -6,10 +6,10 @@ no_cache = 1
 
 def get_context(context):
 	require_login(context)
-	context.title = "Complaints"
+	context.title = "Workshop Job Card Complaints"
 	context.page_icon = "fa-triangle-exclamation"
-	context.subtitle = "Complaints recorded on job cards"
-	context.breadcrumb = "Complaints"
+	context.subtitle = "Workshop Job Card Complaints recorded on Workshop Job Cards"
+	context.breadcrumb = "Workshop Job Card Complaints"
 
 	# One read-only call assembles the page (garagedesk.api.complaints) from the
 	# Workshop Job Card Complaint child rows — the same query the printed
@@ -18,5 +18,5 @@ def get_context(context):
 
 	context.board = get_complaint_board()
 	context.page_count = (context.board.get("summary") or {}).get("total") or 0
-	context.page_count_label = "complaints"
+	context.page_count_label = "Workshop Job Card Complaints"
 	return context

@@ -4,7 +4,7 @@
 {% block page_content %}
 
 <div class="toolbar">
-	<a class="btn btn--primary" href="/a3-workshop/job-card/new"><i class="fa-solid fa-plus"></i> Create Job Card</a>
+	<a class="btn btn--primary" href="/a3-workshop/job-card/new"><i class="fa-solid fa-plus"></i> Create Workshop Job Card</a>
 	<div class="toolbar__right">
 		<!-- Both controls are real server-side filters and share one form, so a
 		     search and a status can be applied together. The status options are the
@@ -14,7 +14,7 @@
 		<form method="get" class="jc-filter">
 			<div class="filter-bar__search" style="flex:0 0 240px">
 				<i class="fa-solid fa-magnifying-glass"></i>
-				<input name="q" value="{{ search or '' }}" placeholder="Search job card, customer, plate, phone…" autocomplete="off" aria-label="Search job cards">
+				<input name="q" value="{{ search or '' }}" placeholder="Search Workshop Job Card, customer, plate, phone…" autocomplete="off" aria-label="Search Workshop Job Cards">
 			</div>
 			<select name="status" aria-label="Filter by status">
 				<option value="">All statuses</option>
@@ -50,7 +50,7 @@
 	<!-- LEFT (70%) — job cards list -->
 	<div class="list-rows" id="jc-list" data-can-update="{{ 1 if can_update else 0 }}">
 		{%- if rows %}
-		<div class="muted jc-count">Showing {{ range_from }}–{{ range_to }} of {{ total }} job card{{ "" if total == 1 else "s" }}{% if status %} with status “{{ status }}”{% endif %}{% if search %} matching “{{ search }}”{% endif %}.</div>
+		<div class="muted jc-count">Showing {{ range_from }}–{{ range_to }} of {{ total }} Workshop Job Card{{ "" if total == 1 else "s" }}{% if status %} with status “{{ status }}”{% endif %}{% if search %} matching “{{ search }}”{% endif %}.</div>
 		{%- endif %}
 		{%- for r in rows %}
 		<div class="list-row" data-no="{{ r.no }}" data-next="{{ r.next_status }}">
@@ -99,10 +99,10 @@
 						<i class="fa-solid {{ 'fa-rotate-left' if r.done else 'fa-check' }}"></i>
 					</button>
 					{%- endif %}
-					<a class="btn btn--outline btn--icon" href="/a3-workshop/job-card/detail?id={{ r.no|urlencode }}" title="View Card"><i class="fa-solid fa-eye"></i></a>
+					<a class="btn btn--outline btn--icon" href="/a3-workshop/job-card/detail?id={{ r.no|urlencode }}" title="View Workshop Job Card"><i class="fa-solid fa-eye"></i></a>
 				</div>
 				<div class="row" style="justify-content:flex-end">
-					<a class="btn btn--outline btn--icon" href="/a3-workshop/workshop-print?jobcard={{ r.no|urlencode }}" target="_blank" rel="noopener" title="Print Job Card"><i class="fa-solid fa-print"></i></a>
+					<a class="btn btn--outline btn--icon" href="/a3-workshop/workshop-print?jobcard={{ r.no|urlencode }}" target="_blank" rel="noopener" title="Print Workshop Job Card"><i class="fa-solid fa-print"></i></a>
 					<a class="btn btn--outline btn--icon" href="/a3-workshop/job-card/new?id={{ r.no|urlencode }}" title="Edit"><i class="fa-solid fa-pen"></i></a>
 				</div>
 				<div class="jc-msg muted" aria-live="polite"></div>
@@ -112,17 +112,17 @@
 		<div class="card"><div class="card__body">
 			<div class="empty">
 				{%- if search %}
-				<div style="font-weight:700;color:var(--text)">No job cards match “{{ search }}”{% if status %} with status “{{ status }}”{% endif %}</div>
-				<div style="margin-top:6px">Searches cover the job card number, the customer, the vehicle plate and the phone on the card.</div>
+				<div style="font-weight:700;color:var(--text)">No Workshop Job Cards match “{{ search }}”{% if status %} with status “{{ status }}”{% endif %}</div>
+				<div style="margin-top:6px">Searches cover the Workshop Job Card number, the customer, the vehicle plate and the phone on the Workshop Job Card.</div>
 				<a class="btn btn--outline btn--sm" style="margin-top:16px" href="/a3-workshop/job-cards"><i class="fa-solid fa-xmark"></i> Clear filters</a>
 				{%- elif status %}
-				<div style="font-weight:700;color:var(--text)">No job cards with status “{{ status }}”</div>
+				<div style="font-weight:700;color:var(--text)">No Workshop Job Cards with status “{{ status }}”</div>
 				<div style="margin-top:6px">Nothing on the board is in that state right now.</div>
 				<a class="btn btn--outline btn--sm" style="margin-top:16px" href="/a3-workshop/job-cards"><i class="fa-solid fa-xmark"></i> Clear filter</a>
 				{%- else %}
-				<div style="font-weight:700;color:var(--text)">No job cards yet</div>
-				<div style="margin-top:6px">Cards appear here as soon as the first vehicle is booked in.</div>
-				<a class="btn btn--primary btn--sm" style="margin-top:16px" href="/a3-workshop/job-card/new"><i class="fa-solid fa-plus"></i> Create Job Card</a>
+				<div style="font-weight:700;color:var(--text)">No Workshop Job Cards yet</div>
+				<div style="margin-top:6px">Workshop Job Cards appear here as soon as the first vehicle is booked in.</div>
+				<a class="btn btn--primary btn--sm" style="margin-top:16px" href="/a3-workshop/job-card/new"><i class="fa-solid fa-plus"></i> Create Workshop Job Card</a>
 				{%- endif %}
 			</div>
 		</div></div>
@@ -150,10 +150,10 @@
 						</div>
 					</div>
 					{%- else %}
-					<div class="emp-empty">No job cards are assigned to a service advisor yet.</div>
+					<div class="emp-empty">No Workshop Job Cards are assigned to a service advisor yet.</div>
 					{%- endfor %}
 				</div>
-				<div class="muted" style="font-size:12px;margin-top:10px">Counts cover every job card, not just this page. Estimated hours are the service-line hours on cards still open.</div>
+				<div class="muted" style="font-size:12px;margin-top:10px">Counts cover every Workshop Job Card, not just this page. Estimated hours are the Workshop Job Card Service hours on Workshop Job Cards still open.</div>
 			</div>
 		</div>
 	</aside>
