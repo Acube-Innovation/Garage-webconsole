@@ -31,6 +31,12 @@
 	<div class="card__body" id="jc-done-msg"></div>
 </div>
 
+<!-- Shown when the card's Sales Invoice is submitted: the card is final and
+     every step is read-only (server side: garagedesk/workshop/job_card_lock.py). -->
+<div class="card" id="jc-locked" style="display:none;margin-bottom:14px;border-color:var(--green)">
+	<div class="card__body" id="jc-locked-msg"></div>
+</div>
+
 <!-- progress tabs -->
 <div class="card"><div class="stepper" id="wizard-stepper">
 	{%- for s in steps %}{%- set n = loop.index %}
@@ -63,7 +69,11 @@
 			<input type="hidden" name="handover"></div>
 		{{ field("Booking Date","booking_date",type="date",required=True) }}
 		{{ field("Promised Delivery","delivery",type="date") }}
+		{#- Each offers only the Employees whose User holds that role (Service Advisor /
+		    Supervisor). The Supervisor is reminded daily, while the card's tasks run,
+		    to update their status and OT. -#}
 		{{ field("Service Advisor","advisor",type="select") }}
+		{{ field("Supervisor","supervisor",type="select") }}
 	</form></div></div>
 </section>
 
@@ -331,8 +341,9 @@
 	<div class="card"><div class="card__head"><h3>Cart</h3><span class="muted">From the Workshop Job Card Services Labor Time Standards — edit, remove or add items</span></div>
 			<div class="card__body">
 				<div id="cart-wrap"><table class="table editable" id="cart-table"><thead><tr>
-					<th style="width:80px">Type</th><th style="width:24%">Item</th><th>Description</th>
-					<th style="width:90px">Qty / Hrs</th><th style="width:110px">Rate</th><th style="width:120px;text-align:right">Amount</th><th style="width:40px"></th>
+					<th style="width:80px">Type</th><th style="width:20%">Item</th><th>Description</th>
+					<th style="width:86px">Qty / Hrs</th><th style="width:100px">Rate</th><th style="width:110px;text-align:right">Amount</th>
+					<th style="width:150px">VAT</th><th style="width:100px;text-align:right">VAT Amount</th><th style="width:120px;text-align:right">Total</th><th style="width:40px"></th>
 				</tr></thead><tbody id="cart"></tbody></table></div>
 				<div class="empty" id="cart-empty">Cart is empty — add Labor Time Standard components in Workshop Job Card Services, or add an item below.</div>
 				<div class="cart-add">
@@ -345,13 +356,16 @@
 				<div class="totals">
 					<div class="row-between"><span class="muted">Subtotal</span><span id="t-sub">{{ currency }} 0.00</span></div>
 					{%- if tax_rate %}
-					<div class="row-between"><span class="muted">{{ tax_label }} ({{ tax_rate_display }}%)</span><span id="t-vat">{{ currency }} 0.00</span></div>
+					<div class="row-between"><span class="muted">VAT <span style="font-size:12px">(per line above)</span></span><span id="t-vat">{{ currency }} 0.00</span></div>
 					{%- else %}
 					<div class="row-between"><span class="muted" style="font-size:12px">No sales tax template configured — totals exclude tax.</span></div>
 					{%- endif %}
 					<div class="row-between grand"><span>Total Amount</span><span id="t-grand">{{ currency }} 0.00</span></div>
 				</div>
-				<button type="button" class="btn btn--primary" id="create-quotation" style="width:100%;justify-content:center;margin-top:14px"><i class="fa-solid fa-file-invoice-dollar"></i> Create / Update Quotation</button>
+				<div class="row" style="gap:10px;margin-top:14px">
+					<button type="button" class="btn btn--primary" id="create-quotation" style="flex:1;justify-content:center"><i class="fa-solid fa-file-invoice-dollar"></i> Create / Update Quotation</button>
+					<button type="button" class="btn btn--outline" id="quotation-pdf" title="Save the cart to the quotation and download its PDF"><i class="fa-solid fa-file-pdf"></i> Download PDF</button>
+				</div>
 				<div id="quotation-result" class="muted" style="font-size:12px;margin-top:8px"></div>
 			</div>
 	</div>
@@ -360,7 +374,7 @@
 <!-- STEP 6 — Task Preview: a Task per kit labour line, grouped under its service's
      Task, with hours, dates and every employee working it (the first is the lead). -->
 <section class="wizard-tab" data-tab="6" style="margin-top:18px">
-	<div class="card"><div class="card__head"><h3>Task Preview</h3>
+	<div class="card"><div class="card__head"><h3>Task Preview <span class="tp-card" id="tp-card"></span></h3>
 		<div class="row" style="gap:8px;align-items:center">
 			<span class="muted" id="tp-count"></span>
 			<select id="tp-assign-all" class="tp-toolbar-sel"><option value="">+ Assign employee to all tasks…</option></select>
@@ -369,13 +383,49 @@
 			<table class="table editable" id="tp-table"><thead><tr>
 				<th style="width:26%">Task</th><th style="width:13%">Labor Item</th><th style="width:70px">Skill</th>
 				<th style="width:80px">Hrs</th><th style="width:140px">Start</th><th style="width:140px">End</th>
-				<th style="width:24%">Assigned Employees <span style="font-weight:400;text-transform:none">(★ lead)</span></th><th style="width:140px">Status</th>
+				<th style="width:24%">Assigned Employees <span style="font-weight:400;text-transform:none">(★ lead)</span></th><th style="width:140px">Work Status</th>
+				<th style="width:84px">OT</th>
 			</tr></thead><tbody id="tp-body"></tbody></table>
 			<div class="empty" id="tp-empty">No tasks yet — add Job Type Services and their Labor Time Kit Labor in Workshop Job Card Services; the tasks are created when the Workshop Job Card is saved.</div>
 		</div>
 	</div>
 </section>
+<!-- OT popup — opened from a Task Preview row's OT button. Saved onto the
+     employee's Workshop Employee OT for that month (one record per employee per month). -->
+<div class="modal-overlay" id="ot-modal" role="dialog" aria-modal="true" aria-labelledby="ot-modal-title">
+	<div class="modal" style="max-width:620px">
+		<div class="modal__head">
+			<div><h3 id="ot-modal-title">Overtime</h3><div class="sub" id="ot-modal-sub">—</div></div>
+			<button type="button" class="modal__close" data-ot-close aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+		</div>
+		<div class="modal__body stack">
+			<div class="ot-grid">
+				<div class="field"><label>Date <span class="req">*</span></label><input id="ot-date" type="date"></div>
+				<div class="field"><label>Employee <span class="req">*</span></label><select id="ot-employee"></select></div>
+				<div class="field"><label>OT Hours <span class="req">*</span></label><input id="ot-hours" type="number" min="0.25" max="24" step="0.25" placeholder="0"></div>
+			</div>
+			<div class="field"><label>Remarks</label><input id="ot-remarks" type="text" autocomplete="off" placeholder="Optional"></div>
+			<div class="svc-modal-err" id="ot-err" hidden></div>
+			<div>
+				<h4 class="kit-title" style="margin-top:6px">OT on this task</h4>
+				<table class="table" id="ot-table"><thead><tr>
+					<th style="width:120px">Date</th><th>Employee</th><th style="width:80px">Hours</th><th>Remarks</th><th style="width:40px"></th>
+				</tr></thead><tbody id="ot-body"></tbody></table>
+				<div class="empty" id="ot-empty">No OT recorded on this task yet.</div>
+			</div>
+		</div>
+		<div class="modal__foot">
+			<button type="button" class="btn btn--outline btn--sm" data-ot-close>Close</button>
+			<button type="button" class="btn btn--primary btn--sm" id="ot-save"><i class="fa-solid fa-floppy-disk"></i> Save OT</button>
+		</div>
+	</div>
+</div>
 <style>
+	.ot-grid { display:grid; grid-template-columns:1fr 1.4fr 110px; gap:12px; }
+	@media (max-width:640px) { .ot-grid { grid-template-columns:1fr; } }
+	#ot-table td { padding:6px 8px; vertical-align:middle; }
+	.tp-ot { white-space:nowrap; }
+	.tp-ot b { color:var(--red,#ec2e5d); }
 	#tp-table td { padding:6px 8px; vertical-align:middle; }
 	#tp-table input, #tp-table select { width:100%; box-sizing:border-box; }
 	#tp-table tr.tp-group td { background:var(--bg,#f1f4f8); font-weight:700; }
@@ -387,7 +437,7 @@
 		background:#eef4ff; color:#1b4fd6; white-space:nowrap; }
 	.tp-status.is-Completed { background:#ecfdf3; color:#15803d; }
 	.tp-status.is-Cancelled { background:#f1f4f8; color:#7a8598; }
-	.tp-status.is-Working { background:#f3e8ff; color:#7e22ce; }
+	.tp-status.is-Working, .tp-status.is-In-Progress { background:#f3e8ff; color:#7e22ce; }
 	.tp-status.is-Overdue { background:#fee2e2; color:#b91c1c; }
 	/* Employee multi-select: a button showing who is on the task, opening a
 	   checkbox list (search on top, ★ marks the lead). */
@@ -417,12 +467,15 @@
 	.tp-ms__foot [data-ms-done] { color:var(--red,#ec2e5d); }
 	#tp-table select.tp-st { font-weight:700; font-size:12px; border-radius:999px; padding:4px 8px; }
 	#tp-table select.tp-st.is-Completed { background:#ecfdf3; color:#15803d; border-color:#bbf7d0; }
-	#tp-table select.tp-st.is-Working { background:#f3e8ff; color:#7e22ce; border-color:#e9d5ff; }
+	#tp-table select.tp-st.is-Working, #tp-table select.tp-st.is-In-Progress { background:#f3e8ff; color:#7e22ce; border-color:#e9d5ff; }
 	#tp-table select.tp-st.is-Pending-Review { background:#fff7e6; color:#b45309; border-color:#fde68a; }
 	#tp-table select.tp-st.is-Overdue { background:#fee2e2; color:#b91c1c; border-color:#fecaca; }
 	#tp-table select.tp-st.is-Cancelled { background:#f1f4f8; color:#7a8598; }
 	#tp-table select.tp-st.is-Open { background:#eef4ff; color:#1b4fd6; border-color:#cfe0ff; }
 	.tp-toolbar-sel { min-width:240px; }
+	/* Which card and vehicle these tasks are for -- a Supervisor arriving from the
+	   daily reminder lands here without passing Customer Details. */
+	.tp-card { font-size:14px; font-weight:600; color:var(--navy,#1d2b4f); margin-left:4px; }
 	.tp-none { color:var(--muted,#7a8598); font-size:12px; }
 </style>
 
@@ -481,6 +534,12 @@
 
 <!-- STEP 8 — Billing (LHS completed tasks, RHS editable kit billing tables) -->
 <section class="wizard-tab" data-tab="8" style="margin-top:18px">
+	{#- Shown instead of the billing tables until every task is Completed and every
+	    QC check point has passed (workshop.billing_block_reason). -#}
+	<div id="billing-locked" class="card" style="display:none"><div class="card__body">
+		<div class="empty"><i class="fa-solid fa-lock" style="color:var(--red)"></i> <b>Billing is not open yet.</b>
+			<div id="billing-locked-why" style="margin-top:6px"></div>
+			<button type="button" class="btn btn--outline btn--sm" id="billing-go-qc" style="margin-top:10px"><i class="fa-solid fa-clipboard-check"></i> Go to QC</button></div></div></div>
 	<div id="billing-need-save" class="card" style="display:none"><div class="card__body">
 		<div class="empty">Save the Workshop Job Card first — billing appears once the card exists and its tasks are completed.</div></div></div>
 	<div id="billing-body" class="split">
@@ -526,7 +585,7 @@
 				</div>
 				<div class="row" style="gap:10px;margin-top:12px">
 					<button type="button" class="btn btn--ghost" id="bill-save"><i class="fa-solid fa-floppy-disk"></i> Save Billing</button>
-					<button type="button" class="btn btn--primary" id="bill-create-so" style="flex:1;justify-content:center"><i class="fa-solid fa-file-invoice-dollar"></i> Create Sales Order</button>
+					<button type="button" class="btn btn--primary" id="bill-create-si" style="flex:1;justify-content:center"><i class="fa-solid fa-file-invoice-dollar"></i> Create / Update Sales Invoice</button>
 				</div>
 				<div id="bill-so-result" class="muted" style="font-size:12px;margin-top:8px"></div>
 			</div>
@@ -542,6 +601,7 @@
 	#cart-table td { padding:5px 8px; vertical-align:middle; }
 	#cart-table input { width:100%; box-sizing:border-box; }
 	#cart-table .amt { text-align:right; font-weight:700; white-space:nowrap; }
+	#cart-table select.cart-vat { width:100%; min-width:130px; font-size:12px; }
 	.cart-kind { display:inline-block; font-size:11px; font-weight:700; border-radius:5px; padding:2px 7px;
 		background:#eef4ff; color:#1b4fd6; }
 	.cart-kind.is-part { background:#ecfdf3; color:#15803d; }
@@ -559,6 +619,9 @@
 	   Previous / Save Draft / Next always sit at the page end instead of below a
 	   long step (Readings with its drawing and photos ran well past the fold). */
 	.wizard-tab.is-active { overflow-y:auto; overscroll-behavior:contain; padding:2px 4px 2px 2px; }
+	/* Invoiced card: nothing to draw on or pick */
+	body.jc-locked #car-canvas, body.jc-locked .jobtype-box, body.jc-locked .jc-labor-code { pointer-events:none; }
+	body.jc-locked .wizard-tab .btn:disabled, body.jc-locked .wizard-tab .icon-del:disabled { display:none; }
 </style>
 
 <!-- nav -->
@@ -575,6 +638,8 @@
 // read from the company's Sales Taxes and Charges Template (0 = no template, no tax row).
 window.WS_CURRENCY = {{ (currency or "") | tojson }};
 window.WS_TAX_RATE = {{ tax_rate or 0 }};
+// The VAT options a cart line can be put on (Item Tax Templates) and the default one.
+window.WS_VAT = {{ (vat_options or {}) | tojson }};
 </script>
 {% raw %}
 <script>
@@ -584,7 +649,9 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 	// The canvas can only be sized once its tab is on screen, so the step that
 	// holds it is named rather than written as a number in three places.
 	var READINGS_STEP = 2;
+	var SERVICES_STEP = 4;
 	var isEditing = false; // true when the wizard was opened on an existing card (?id=)
+	var isLocked = false;  // the card's Sales Invoice is submitted: view only
 	var steps = document.querySelectorAll('#wizard-stepper .step');
 	var lines = document.querySelectorAll('#wizard-stepper .step__line');
 	var tabs = document.querySelectorAll('.wizard-tab');
@@ -603,6 +670,8 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 		nextBtn.innerHTML = cur === TOTAL
 			? '<i class="fa-solid fa-check"></i> ' + (isEditing ? 'Update Workshop Job Card' : 'Create Workshop Job Card')
 			: 'Next <i class="fa-solid fa-arrow-right"></i>';
+		// Read-only card: Next only moves between steps, and the last one has none.
+		if (isLocked) nextBtn.style.visibility = cur === TOTAL ? 'hidden' : 'visible';
 		fitTab();
 		// Step numbers, not document order: Readings is step 2 (see the stepper).
 		if (cur === READINGS_STEP) sizeCanvas();
@@ -627,13 +696,52 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 	}
 	window.addEventListener('resize', fitTab);
 	function goTo(n) {
-		cur = Math.max(1, Math.min(TOTAL, n)); render();
+		var leaving = cur;
+		cur = Math.max(1, Math.min(TOTAL, n));
+		// Done choosing Jobcard Types once the step is left (Next or the stepper):
+		// from then on the list shows just the chosen ones.
+		if (leaving === SERVICES_STEP && cur !== SERVICES_STEP && selected.length) { jtCollapsed = true; renderJobTypeList(); }
+		render();
 		var tab = document.querySelector('.wizard-tab.is-active');
 		if (tab) tab.scrollTop = 0;
 		window.scrollTo({ top: 0, behavior: 'smooth' });
 	}
 	steps.forEach(function (s) { s.addEventListener('click', function () { goTo(+s.dataset.goto); }); });
 	prevBtn.addEventListener('click', function () { goTo(cur - 1); });
+
+	// ---- Read-only once invoiced ---------------------------------------
+	// Every control in every step is disabled -- including rows drawn later
+	// (a MutationObserver re-applies it) -- except what only reads: printing,
+	// the PDF, Refresh and the step buttons. The server refuses any change
+	// regardless (job_card_lock.assert_editable); this is so nothing looks editable.
+	var LOCK_ALLOWED = '#quotation-pdf, [data-si-print], #bill-refresh, #billing-go-qc';
+	var LOCK_BLOCKED = '.jobtype-box, .jc-labor-code, .car-wrap, [data-rm], [data-brm], [data-ot], .tp-ms, .qc-res';
+	function disableControls(root) {
+		root.querySelectorAll('input, select, textarea, button').forEach(function (el) {
+			if (!el.matches(LOCK_ALLOWED)) el.disabled = true;
+		});
+	}
+	function lockCard(si) {
+		if (isLocked) return;
+		isLocked = true;
+		document.body.classList.add('jc-locked');
+		document.getElementById('jc-locked-msg').innerHTML =
+			'<i class="fa-solid fa-lock" style="color:var(--green)"></i> Invoiced — Sales Invoice <b>' + esc(si) +
+			'</b> is submitted. This Workshop Job Card is final and read-only; cancel the invoice to change it.';
+		document.getElementById('jc-locked').style.display = '';
+		document.getElementById('wiz-save').style.display = 'none';
+		var tabs = document.querySelectorAll('.wizard-tab');
+		tabs.forEach(disableControls);
+		var mo = new MutationObserver(function () { tabs.forEach(disableControls); });
+		tabs.forEach(function (t) { mo.observe(t, { childList: true, subtree: true }); });
+		fitTab();
+	}
+	// Belt and braces for the clickable things that are not form controls.
+	document.addEventListener('click', function (e) {
+		if (!isLocked || !e.target.closest('.wizard-tab')) return;
+		if (e.target.closest(LOCK_ALLOWED)) return;
+		if (e.target.closest(LOCK_BLOCKED)) { e.preventDefault(); e.stopPropagation(); }
+	}, true);
 
 	// ---- Backend wiring: options, prefill, save-as-draft ----------------
 	function callMethod(method, args) {
@@ -736,7 +844,10 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 			o = o || {};
 			JOBCARD_TYPES = o.jobcard_types || [];
 			JOB_SERVICES = o.job_type_services || [];
-			EMPLOYEES = o.service_advisors || [];
+			// Every active employee: who tasks can be assigned to.
+			EMPLOYEES = o.employees || [];
+			ADVISORS = o.service_advisors || [];
+			SUPERVISORS = o.supervisors || [];
 			UOMS = o.uoms || [];
 			PART_GROUPS = o.part_groups || [];
 			SUPPLIERS = o.suppliers || [];
@@ -747,19 +858,35 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 				if (s.operation_name && !LTS_BY_SERVICE[s.operation_name]) LTS_BY_SERVICE[s.operation_name] = s.name;
 				LTS_LABEL[s.name] = s.standard_code || s.name;
 			});
-			var sel = document.querySelector('select[name="advisor"]');
-			if (sel) {
-				sel.innerHTML = '<option value="">Select advisor</option>' +
-					EMPLOYEES.map(function (e) {
-						return '<option value="' + e.name + '">' + (e.employee_name || e.name) + '</option>';
-					}).join("");
-			}
+			fillEmployeeSelect('advisor', ADVISORS, 'Select advisor');
+			fillEmployeeSelect('supervisor', SUPERVISORS, 'Select supervisor');
 			// Job type picked on the Choose Job Type step (?type=) starts selected here.
 			var preType = qparam("type");
 			if (preType && selected.indexOf(preType) < 0 &&
 				JOBCARD_TYPES.some(function (t) { return t.name === preType; })) selected.push(preType);
 			renderJobTypeList();
 		}).catch(function () {});
+	}
+	function fillEmployeeSelect(name, list, placeholder) {
+		var sel = document.querySelector('select[name="' + name + '"]');
+		if (!sel) return;
+		sel.innerHTML = '<option value="">' + placeholder + '</option>' +
+			list.map(function (e) {
+				return '<option value="' + escAttr(e.name) + '">' + esc(e.employee_name || e.name) + '</option>';
+			}).join("");
+	}
+	// A saved card may name someone who has since lost the role (or never had it);
+	// they stay shown rather than the box silently going blank and the save
+	// clearing them.
+	function setEmployeeSelect(name, value) {
+		var sel = document.querySelector('select[name="' + name + '"]');
+		if (!sel) return;
+		if (value && !Array.prototype.some.call(sel.options, function (o) { return o.value === value; })) {
+			var opt = document.createElement('option');
+			opt.value = value; opt.textContent = empName(value);
+			sel.appendChild(opt);
+		}
+		sel.value = value || "";
 	}
 	// Prefill Customer / Vehicle / Mobile when arriving from a lead's "Save & Job Card".
 	function prefillFromUrl() {
@@ -772,6 +899,7 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 
 	// ---- Customer + Vehicle autocomplete (Customer Details tab) ---------
 	var customerVehicles = []; // vehicles of the currently selected customer
+	var vehiclePlate = "";     // plate of the picked vehicle, for the Task Preview heading
 	function loadCustomerVehicles(customerId) {
 		customerVehicles = [];
 		if (!customerId) return Promise.resolve();
@@ -892,6 +1020,7 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 		}
 		if (wantV && wantV !== haveV) {
 			setVal("vehicle_id", wantV);
+			vehiclePlate = ""; // the handover's label already carries the plate
 			setVal("vehicle", r.vehicle_label || wantV);
 		}
 		return true;
@@ -978,6 +1107,8 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 		return rows.map(function (v) { return { label: v.title || v.name, sub: v.plate ? ("Plate: " + v.plate) : "", value: v.name }; });
 	}, function (it) {
 		setVal("vehicle_id", it.value);
+		var picked = customerVehicles.filter(function (v) { return v.name === it.value; })[0];
+		vehiclePlate = picked ? (picked.plate || "") : "";
 	});
 	// The three fields Customer Details marks with an asterisk. Nothing enforced
 	// them, so Next or Save Draft on an untouched form wrote a job card with no
@@ -1013,6 +1144,7 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 			booking_date: val("booking_date"),
 			promised_delivery: val("delivery"),
 			service_advisor: val("advisor"),
+			supervisor: val("supervisor"),
 			services: gatherServices(),
 			complaints: gatherComplaints(),
 			readings: gatherReadings(),
@@ -1061,7 +1193,10 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 	// swallows the rejection a missing required field raises — it has already
 	// been reported and the advisor sent to the field.
 	function noop() {}
-	nextBtn.addEventListener('click', function () { saveJobCard(true).catch(noop); });
+	nextBtn.addEventListener('click', function () {
+		if (isLocked) { if (cur < TOTAL) goTo(cur + 1); return; }
+		saveJobCard(true).catch(noop);
+	});
 	document.getElementById('wiz-save').addEventListener('click', function () { saveJobCard(false).catch(noop); });
 
 	// Options first (so advisor / service / technician dropdowns exist), then either
@@ -1082,6 +1217,10 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 		// with today's: nobody knows when it was really booked, so the advisor is
 		// asked for it instead (see missingRequired).
 		if (!qparam("id") && !val("booking_date")) setVal("booking_date", todayISO());
+		// ?step=N opens that step -- the Supervisor's daily reminder links to
+		// Task Preview (?id=…&step=6) so status and OT can be updated straight away.
+		var step = parseInt(qparam("step"), 10);
+		if (jobCardName && step > 1 && step <= TOTAL) { if (step === TASKS_STEP) cardJustSaved = true; goTo(step); }
 	});
 
 	// yyyy-mm-dd — what an <input type="date"> takes, in local time. toISOString
@@ -1100,6 +1239,7 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 			// Tab 1 — Customer Details
 			setVal("customer_id", jc.customer); setVal("customer", jc.customer_name);
 			setVal("vehicle_id", jc.vehicle); setVal("vehicle", jc.vehicle_label);
+			vehiclePlate = jc.vehicle_plate || "";
 			setVal("mobile", jc.mobile_no);
 			// A card raised from a handover keeps a pointer to it. Show it, so
 			// re-opening the card says which inspection it repairs rather than
@@ -1114,7 +1254,8 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 				setVal("handover_label", jc.handover);
 			}
 			setVal("booking_date", jc.booking_date); setVal("delivery", jc.promised_delivery);
-			var adv = document.querySelector('select[name="advisor"]'); if (adv) adv.value = jc.service_advisor || "";
+			setEmployeeSelect('advisor', jc.service_advisor);
+			setEmployeeSelect('supervisor', jc.supervisor);
 			if (jc.customer) loadCustomerVehicles(jc.customer);
 			// Tab 2 / 3 — service + complaint rows (+ kit components)
 			(jc.services || []).forEach(function (s) { addServiceRow(s); });
@@ -1137,13 +1278,17 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 				cart = jc.estimate.map(function (e) {
 					return { kind: e.kind || 'part', item: e.item || '', item_name: e.item_name || '', description: e.description || '',
 						qty: parseFloat(e.qty) || 0, rate: parseFloat(e.rate) || 0, uom: e.uom || '',
+						vat_template: e.vat_template || '',
 						src: (e.kind === 'sublet' || kitItemSet[e.item]) ? 'kit' : 'manual' };
 				});
 				cartKitSig = kitSig();
 				renderCart();
 			}
 			if (jc.quotation_name) renderQuotationState(jc.quotation_name, jc.quotation_docstatus, jc.quotation_total);
-			isEditing = true; render();
+			isEditing = true;
+			if (jc.invoiced) lockCard(jc.invoiced);
+			jtCollapsed = selected.length > 0; renderJobTypeList();
+			render();
 		}).catch(function (err) {
 			alert("Could not load Workshop Job Card: " + (err && err.message ? err.message : err));
 		});
@@ -1161,10 +1306,14 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 
 	// ---- Service Jobs: LHS = Jobcard Type, RHS = service rows -----------
 	var JOBCARD_TYPES = [], JOB_SERVICES = [], EMPLOYEES = [], UOMS = [], PART_GROUPS = [];
+	var ADVISORS = [], SUPERVISORS = []; // Employees whose User holds that role
 	var SUPPLIERS = [], SKILLS = [];
 	var LABOR_STANDARDS = [], LTS_BY_SERVICE = {}, LTS_LABEL = {}; // service -> Labor Time Standard
 	var kitLabor = [], kitParts = [], kitSublet = []; // kit lines picked from the popup
 	var selected = []; // selected Jobcard Type names
+	// False while the Jobcard Types are still being chosen (every type listed);
+	// true once the Services step has been left, or on a saved card that has some.
+	var jtCollapsed = false;
 	var jdBody = document.getElementById('job-detail-body');
 	var jdEmpty = document.getElementById('job-detail-empty');
 	var jtList = document.getElementById('jobtype-list');
@@ -1180,9 +1329,12 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 	// keeps the count for the same reason.
 	function renderJobTypeList() {
 		var q = (jtSearch.value || '').trim().toLowerCase();
-		// Only the ticked types are listed; the others turn up when searched for.
+		// While choosing, every type is listed. Once chosen (see jtCollapsed) only
+		// the ticked ones stay; the others turn up when searched for.
+		var collapsed = jtCollapsed && selected.length;
 		var shown = JOBCARD_TYPES.filter(function (t) {
-			return (q && jobTypeMatches(t, q)) || selected.indexOf(t.name) >= 0;
+			if (q) return jobTypeMatches(t, q) || selected.indexOf(t.name) >= 0;
+			return !collapsed || selected.indexOf(t.name) >= 0;
 		});
 		jtList.innerHTML = shown.map(function (t) {
 			var on = selected.indexOf(t.name) >= 0;
@@ -2274,11 +2426,36 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 		var kitItems = {};
 		kit.forEach(function (l) { if (l.item) kitItems[l.item] = 1; });
 		var manual = cart.filter(function (l) { return l.src === 'manual' && !(l.item && kitItems[l.item]); });
+		// A VAT % changed on a kit line survives the rebuild.
+		kit.forEach(function (k) {
+			var was = cart.filter(function (l) { return l.src === 'kit' && l.kind === k.kind && l.item === k.item && l.description === k.description; })[0];
+			if (was && was.vat_template) k.vat_template = was.vat_template;
+		});
 		cart = kit.concat(manual);
 		cartKitSig = sig;
 		renderCart();
 	}
 	var KIND_LABEL = { labor: 'Labor', part: 'Part', sublet: 'Sublet' };
+	// VAT per line: the Item Tax Template picked on the line (UAE VAT 5%, VAT Zero,
+	// Excise ...), else the default one. The Quotation taxes each line by the same
+	// template (front_office._apply_line_vat), so the lines add up to the VAT total
+	// below and to the PDF.
+	var VAT = window.WS_VAT || {}, VAT_OPTS = VAT.options || [];
+	function vatOpt(name) { return VAT_OPTS.filter(function (o) { return o.name === name; })[0]; }
+	function lineVatTemplate(l) { return (l.vat_template && vatOpt(l.vat_template)) ? l.vat_template : (VAT.default || ''); }
+	function lineNet(l) { return (l.qty || 0) * (l.rate || 0); }
+	function lineVatPct(l) { var o = vatOpt(lineVatTemplate(l)); return o ? (+o.rate || 0) : 0; }
+	function lineVat(l) { return Math.round(lineNet(l) * lineVatPct(l)) / 100; }
+	function vatSelect(l) {
+		if (!VAT_OPTS.length) return '<span class="muted">—</span>';
+		var cur = lineVatTemplate(l);
+		return '<select data-f="vat_template" class="cart-vat" title="VAT for this line">' +
+			(cur ? '' : '<option value="">No VAT</option>') +
+			VAT_OPTS.map(function (o) {
+				return '<option value="' + escAttr(o.name) + '"' + (o.name === cur ? ' selected' : '') + '>' +
+					esc(o.label) + ' (' + (+o.rate) + '%)</option>';
+			}).join('') + '</select>';
+	}
 	function renderCart() {
 		cartEmpty.style.display = cart.length ? 'none' : 'block';
 		document.getElementById('cart-table').style.display = cart.length ? '' : 'none';
@@ -2291,17 +2468,21 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 				'<td><input data-f="description" value="' + escAttr(l.description || '') + '" placeholder="Description"></td>' +
 				'<td><input data-f="qty" type="number" min="0" step="any" value="' + (l.qty || 0) + '"></td>' +
 				'<td><input data-f="rate" type="number" min="0" step="0.01" value="' + (l.rate || 0) + '"></td>' +
-				'<td class="amt">' + money((l.qty || 0) * (l.rate || 0)) + '</td>' +
+				'<td class="amt line-net">' + money(lineNet(l)) + '</td>' +
+				'<td>' + vatSelect(l) + '</td>' +
+				'<td class="amt line-vat">' + money(lineVat(l)) + '</td>' +
+				'<td class="amt line-total">' + money(lineNet(l) + lineVat(l)) + '</td>' +
 				'<td><button type="button" class="icon-del" data-rm title="Remove"><i class="fa-solid fa-trash"></i></button></td></tr>';
 		}).join('');
 		renderCartTotals();
 	}
 	function renderCartTotals() {
-		var sub = cart.reduce(function (s, l) { return s + (l.qty || 0) * (l.rate || 0); }, 0);
+		var sub = cart.reduce(function (s, l) { return s + lineNet(l); }, 0);
+		var vat = cart.reduce(function (s, l) { return s + lineVat(l); }, 0);
 		var vatEl = document.getElementById('t-vat'); // absent when no tax rate is configured
 		document.getElementById('t-sub').textContent = money(sub);
-		if (vatEl) vatEl.textContent = money(sub * TAX_RATE / 100);
-		document.getElementById('t-grand').textContent = money(sub * (1 + TAX_RATE / 100));
+		if (vatEl) vatEl.textContent = money(vat);
+		document.getElementById('t-grand').textContent = money(sub + vat);
 	}
 	cartEl.addEventListener('click', function (e) {
 		if (!e.target.closest('[data-rm]')) return;
@@ -2312,8 +2493,10 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 	cartEl.addEventListener('input', function (e) {
 		var f = e.target.dataset.f; if (!f) return;
 		var tr = e.target.closest('tr'), l = cart[+tr.dataset.i];
-		l[f] = f === 'description' ? e.target.value : (parseFloat(e.target.value) || 0);
-		tr.querySelector('.amt').textContent = money((l.qty || 0) * (l.rate || 0));
+		l[f] = (f === 'description' || f === 'vat_template') ? e.target.value : (parseFloat(e.target.value) || 0);
+		tr.querySelector('.line-net').textContent = money(lineNet(l));
+		tr.querySelector('.line-vat').textContent = money(lineVat(l));
+		tr.querySelector('.line-total').textContent = money(lineNet(l) + lineVat(l));
 		renderCartTotals();
 	});
 	// "Add item" — any sellable Item; a labour Item is added as labour.
@@ -2345,41 +2528,50 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 		window.open('/api/method/garagedesk.api.front_office.download_transaction_pdf?doctype=' +
 			encodeURIComponent(doctype) + '&name=' + encodeURIComponent(name), '_blank');
 	}
-	// Note (left) + Submit / Open-PDF button (right) for the quotation. The Open-PDF
-	// button only appears once the quotation is submitted (docstatus 1).
+	// The quotation's note (left) and Download PDF (right). The quotation stays a
+	// draft -- the PDF prints from the draft, so there is nothing to submit here.
+	var quote = { name: null, docstatus: null };
 	function renderQuotationState(name, docstatus, total) {
 		var out = document.getElementById('quotation-result');
+		quote = { name: name || null, docstatus: docstatus };
 		if (!name) { out.innerHTML = ''; return; }
-		var note = 'Quotation <b>' + esc(name) + '</b>' + (total != null ? ' — Total ' + money(total) : '') +
-			' <a href="/app/quotation/' + encodeURIComponent(name) + '" target="_blank">Open</a>';
-		var btn = (docstatus === 1)
-			? '<button type="button" class="btn btn--primary btn--sm" data-q-pdf><i class="fa-solid fa-file-pdf"></i> Open PDF</button>'
-			: '<button type="button" class="btn btn--outline btn--sm" data-q-submit><i class="fa-solid fa-check"></i> Submit</button>';
-		out.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px">' +
-			'<span>' + note + '</span>' + btn + '</div>';
-		var sb = out.querySelector('[data-q-submit]');
-		if (sb) sb.addEventListener('click', function () {
-			sb.disabled = true; sb.innerHTML = 'Submitting…';
-			callMethod('garagedesk.api.front_office.submit_quotation', { name: name })
-				.then(function (r) { renderQuotationState(name, r.docstatus, total); })
-				.catch(function (err) { sb.disabled = false; alert('Could not submit: ' + (err && err.message ? err.message : err)); });
-		});
-		var pb = out.querySelector('[data-q-pdf]');
-		if (pb) pb.addEventListener('click', function () { openPdf('Quotation', name); });
+		out.innerHTML = '<span>Quotation <b>' + esc(name) + '</b>' + (total != null ? ' — Total ' + money(total) : '') +
+			' <a href="/app/quotation/' + encodeURIComponent(name) + '" target="_blank">Open</a></span>';
 	}
-	// Create / Update the Quotation from the cart.
-	document.getElementById('create-quotation').addEventListener('click', function () {
-		var btn = this, out = document.getElementById('quotation-result');
-		var lines = cart.map(function (l) {
-			return { kind: l.kind, item: l.item, qty: l.qty, rate: l.rate, description: l.description, uom: l.uom };
+	function cartLines() {
+		return cart.map(function (l) {
+			return { kind: l.kind, item: l.item, qty: l.qty, rate: l.rate, description: l.description, uom: l.uom,
+				vat_template: lineVatTemplate(l) || null };
 		});
-		if (!lines.length) { alert('Add at least one item to the estimate.'); return; }
-		if (!jobCardName) { alert('Save the Workshop Job Card first (it needs a customer).'); return; }
-		btn.disabled = true; out.textContent = 'Creating quotation…';
-		callMethod("garagedesk.api.front_office.create_quotation", { job_card: jobCardName, items: lines })
-			.then(function (r) { renderQuotationState(r.name, r.docstatus, r.grand_total); })
-			.catch(function (err) { out.textContent = 'Could not create quotation: ' + (err && err.message ? err.message : err); })
-			.then(function () { btn.disabled = false; });
+	}
+	// Write the cart to the (draft) Quotation. Resolves with the quotation.
+	function saveQuotation() {
+		var out = document.getElementById('quotation-result');
+		var lines = cartLines();
+		if (!lines.length) { alert('Add at least one item to the estimate.'); return Promise.reject(new Error('empty cart')); }
+		if (!jobCardName) { alert('Save the Workshop Job Card first (it needs a customer).'); return Promise.reject(new Error('unsaved card')); }
+		out.textContent = 'Saving quotation…';
+		return callMethod("garagedesk.api.front_office.create_quotation", { job_card: jobCardName, items: lines })
+			.then(function (r) { renderQuotationState(r.name, r.docstatus, r.grand_total); return r; })
+			.catch(function (err) { out.textContent = 'Could not save quotation: ' + (err && err.message ? err.message : err); throw err; });
+	}
+	document.getElementById('create-quotation').addEventListener('click', function () {
+		var btn = this; btn.disabled = true;
+		saveQuotation().catch(function () {}).then(function () { btn.disabled = false; });
+	});
+	// Saves the cart first, so the PDF is what is on screen. The tab is opened
+	// before the save -- a window opened after an await is blocked as a popup.
+	document.getElementById('quotation-pdf').addEventListener('click', function () {
+		var btn = this, win = window.open('', '_blank');
+		if (win) win.document.write('<p style="font-family:sans-serif">Preparing the quotation PDF…</p>');
+		btn.disabled = true;
+		// A submitted quotation (and a locked card) is printed as it stands.
+		var ready = (isLocked || quote.docstatus === 1) && quote.name
+			? Promise.resolve({ name: quote.name }) : saveQuotation();
+		ready.then(function (r) {
+			var url = '/api/method/garagedesk.api.front_office.download_transaction_pdf?doctype=Quotation&name=' + encodeURIComponent(r.name);
+			if (win) win.location = url; else window.location = url;
+		}).catch(function () { if (win) win.close(); }).then(function () { btn.disabled = false; });
 	});
 
 	// ---- Task Preview: the card's Tasks, with several employees on each ----------
@@ -2396,8 +2588,8 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 	var cardJustSaved = false;
 	function loadTaskPreview() {
 		var saved = cardJustSaved; cardJustSaved = false;
-		if (!saved && !missingRequired().length) {
-			tpList.innerHTML = '<tr><td colspan="8" class="tp-none">Saving the Workshop Job Card…</td></tr>'; tpEmpty.style.display = 'none';
+		if (!saved && !isLocked && !missingRequired().length) {
+			tpList.innerHTML = '<tr><td colspan="9" class="tp-none">Saving the Workshop Job Card…</td></tr>'; tpEmpty.style.display = 'none';
 			saveJobCard(false).then(fetchTaskPreview).catch(function () { tpDirty = false; fetchTaskPreview(); });
 			return;
 		}
@@ -2405,10 +2597,10 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 	}
 	function fetchTaskPreview() {
 		if (!jobCardName) { tpTasks = []; renderTaskPreview(); return; }
-		tpList.innerHTML = '<tr><td colspan="8" class="tp-none">Loading…</td></tr>'; tpEmpty.style.display = 'none';
+		tpList.innerHTML = '<tr><td colspan="9" class="tp-none">Loading…</td></tr>'; tpEmpty.style.display = 'none';
 		callMethod('garagedesk.api.job_card_steps.get_job_card_tasks', { job_card: jobCardName })
 			.then(function (rows) { tpTasks = rows || []; renderTaskPreview(); })
-			.catch(function () { tpList.innerHTML = '<tr><td colspan="8" class="tp-none">Could not load the tasks.</td></tr>'; });
+			.catch(function () { tpList.innerHTML = '<tr><td colspan="9" class="tp-none">Could not load the tasks.</td></tr>'; });
 	}
 	function empOptions(exclude, placeholder) {
 		return '<option value="">' + placeholder + '</option>' + EMPLOYEES.filter(function (e) {
@@ -2417,7 +2609,6 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 			return '<option value="' + escAttr(e.name) + '">' + esc(e.employee_name || e.name) + '</option>';
 		}).join('');
 	}
-	var TASK_STATUSES = ['Open', 'Working', 'Pending Review', 'Overdue', 'Completed', 'Cancelled'];
 	var tpOpen = -1; // the task whose employee list is open
 	function tpEmpSummary(t) {
 		if (!t.employees.length) return '<span class="tp-ms__txt tp-ms__ph">Select employees</span>';
@@ -2463,10 +2654,20 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 			? work.length + ' task' + (work.length === 1 ? '' : 's') + (unassigned ? ' · ' + unassigned + ' unassigned' : ' · all assigned')
 			: '';
 	}
+	// Work Status: what the floor reports -- Open, In Progress, Completed -- over
+	// the Task's own status. Overdue (set by ERPNext once the end date passes) reads
+	// as Open, Pending Review as In Progress. Completing a task is what moves it
+	// and its kit onto Billing (garagedesk.workshop.task_billing).
+	var WORK_STATUS = { 'Open': 'Open', 'In Progress': 'Working', 'Completed': 'Completed' };
+	function workStatus(st) {
+		return st === 'Completed' ? 'Completed' : st === 'Cancelled' ? 'Cancelled'
+			: (st === 'Working' || st === 'Pending Review') ? 'In Progress' : 'Open';
+	}
 	function tpStatusSelect(t) {
-		var list = TASK_STATUSES.indexOf(t.status) < 0 && t.status ? TASK_STATUSES.concat([t.status]) : TASK_STATUSES;
-		return '<select class="tp-st is-' + escAttr((t.status || 'Open').replace(/ /g, '-')) + '" data-f="status">' + list.map(function (st) {
-			return '<option' + (st === (t.status || 'Open') ? ' selected' : '') + '>' + esc(st) + '</option>';
+		var ws = workStatus(t.status);
+		if (ws === 'Cancelled') return '<span class="tp-status is-Cancelled">Cancelled</span>';
+		return '<select class="tp-st is-' + ws.replace(/ /g, '-') + '" data-f="work_status">' + Object.keys(WORK_STATUS).map(function (w) {
+			return '<option' + (w === ws ? ' selected' : '') + '>' + esc(w) + '</option>';
 		}).join('') + '</select>';
 	}
 	function tpTaskLink(t) {
@@ -2474,7 +2675,17 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 	}
 	// A service Task with labour sub-tasks is a heading row (the work and the people
 	// are on its sub-tasks); one without any is a task row of its own.
+	// "(JC-… : VOLVO FH TRUCK, DXB O 24625)" beside the heading; the plate is left
+	// off when the vehicle's label already shows it.
+	function renderTaskPreviewCard() {
+		var el = document.getElementById('tp-card');
+		var label = val("vehicle"), plate = vehiclePlate;
+		if (plate && label.indexOf(plate) >= 0) plate = "";
+		var veh = [label, plate].filter(Boolean).join(', ');
+		el.textContent = jobCardName ? '(' + jobCardName + (veh ? ' : ' + veh : '') + ')' : '';
+	}
 	function renderTaskPreview() {
+		renderTaskPreviewCard();
 		tpEmpty.style.display = tpTasks.length ? 'none' : 'block';
 		document.getElementById('tp-table').style.display = tpTasks.length ? '' : 'none';
 		tpCount();
@@ -2486,7 +2697,7 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 				return '<tr class="tp-group" data-i="' + i + '"><td colspan="3">' + esc(t.service_name || t.subject) +
 					'<span class="tp-sub">' + tpTaskLink(t) + (t.jobtype ? ' · ' + esc(t.jobtype) : '') + ' · ' + kids.length + ' labor task' + (kids.length === 1 ? '' : 's') + '</span></td>' +
 					'<td>' + hrs + '</td><td colspan="3" class="tp-none" style="font-weight:500">Completes when its labor tasks are done</td>' +
-					'<td><span class="tp-status is-' + escAttr(t.status) + '">' + esc(t.status || 'Open') + '</span></td></tr>';
+					'<td><span class="tp-status is-' + escAttr(workStatus(t.status).replace(/ /g, '-')) + '">' + esc(workStatus(t.status)) + '</span></td><td></td></tr>';
 			}
 			var dis = '';
 			return '<tr class="' + (t.parent_task ? 'tp-child' : '') + '" data-i="' + i + '">' +
@@ -2498,7 +2709,9 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 				'<td><input type="date" data-f="exp_start_date" value="' + escAttr(t.exp_start_date || '') + '"' + dis + '></td>' +
 				'<td><input type="date" data-f="exp_end_date" value="' + escAttr(t.exp_end_date || '') + '"' + dis + '></td>' +
 				'<td>' + tpEmpCell(t, i) + '</td>' +
-				'<td>' + tpStatusSelect(t) + '</td></tr>';
+				'<td>' + tpStatusSelect(t) + '</td>' +
+				'<td><button type="button" class="btn btn--outline btn--sm tp-ot" data-ot="' + i + '" title="Record overtime on this task">' +
+					'<i class="fa-solid fa-clock"></i> OT' + (t.ot_hours ? ' <b>' + t.ot_hours + 'h</b>' : '') + '</button></td></tr>';
 		}).join('');
 		tpPlacePanel();
 	}
@@ -2550,9 +2763,15 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 		}
 		var tr = e.target.closest('tr[data-i]'); if (!tr) return;
 		var t2 = tpTasks[+tr.dataset.i], f = e.target.dataset.f; if (!f) return;
-		t2[f] = f === 'expected_time' ? (parseFloat(e.target.value) || 0) : e.target.value;
 		tpDirty = true;
-		if (f === 'status') e.target.className = 'tp-st is-' + e.target.value.replace(/ /g, '-');
+		if (f === 'work_status') {
+			// Picking the Work Status it already shows keeps the Task's own status
+			// (an Overdue task left at Open stays Overdue).
+			if (workStatus(t2.status) !== e.target.value) t2.status = WORK_STATUS[e.target.value];
+			e.target.className = 'tp-st is-' + e.target.value.replace(/ /g, '-');
+			return;
+		}
+		t2[f] = f === 'expected_time' ? (parseFloat(e.target.value) || 0) : e.target.value;
 		if (f === 'expected_time' && t2.parent_task) renderTaskPreview(); // the heading's total
 	});
 	// A click anywhere else closes the open list.
@@ -2597,6 +2816,81 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 			})
 		}).then(function (rows) { tpTasks = rows || []; tpDirty = false; renderTaskPreview(); });
 	}
+
+	// ---- OT: a Task Preview row's overtime, per assigned employee ----------
+	var otModal = document.getElementById('ot-modal'), otTask = null;
+	function otErr(msg) { var el = document.getElementById('ot-err'); el.textContent = msg || ''; el.hidden = !msg; }
+	// callMethod rejects with Frappe's raw _server_messages; show the message in it.
+	function otMsg(err) {
+		var m = err && err.message ? err.message : String(err);
+		try { return JSON.parse(JSON.parse(m)[0]).message || m; } catch (e) { return m; }
+	}
+	function otRender(d) {
+		var emp = document.getElementById('ot-employee'), keep = emp.value;
+		emp.innerHTML = d.employees.length
+			? d.employees.map(function (e) { return '<option value="' + escAttr(e.name) + '">' + esc(e.employee_name) + '</option>'; }).join('')
+			: '<option value="">No employees assigned to this task</option>';
+		if (keep && d.employees.some(function (e) { return e.name === keep; })) emp.value = keep;
+		document.getElementById('ot-modal-sub').textContent = d.task + ' · ' + (d.subject || '') +
+			(d.exp_start_date ? ' · ' + d.exp_start_date + (d.exp_end_date ? ' → ' + d.exp_end_date : '') : '');
+		document.getElementById('ot-body').innerHTML = d.entries.map(function (r) {
+			return '<tr><td>' + esc(r.ot_date) + '</td><td>' + esc(r.employee_name) + '</td><td>' + r.ot_hours + '</td>' +
+				'<td>' + esc(r.remarks || '') + '</td>' +
+				'<td><button type="button" class="btn btn--ghost btn--sm" data-ot-del="' + escAttr(r.name) + '" title="Remove"><i class="fa-solid fa-trash"></i></button></td></tr>';
+		}).join('');
+		document.getElementById('ot-empty').style.display = d.entries.length ? 'none' : 'block';
+		document.getElementById('ot-table').style.display = d.entries.length ? '' : 'none';
+		// Keep the row's button total in step with what is now saved.
+		var total = d.entries.reduce(function (s, r) { return s + (parseFloat(r.ot_hours) || 0); }, 0);
+		tpTasks.forEach(function (t) { if (t.task === d.task) t.ot_hours = Math.round(total * 100) / 100; });
+		renderTaskPreview();
+	}
+	function otOpen(t) {
+		// OT can only go to who the server has on the task, so unsaved changes to
+		// the employees are written first.
+		otErr(''); otTask = t;
+		document.getElementById('ot-date').value = todayISO();
+		document.getElementById('ot-hours').value = '';
+		document.getElementById('ot-remarks').value = '';
+		document.getElementById('ot-employee').value = '';
+		document.getElementById('ot-body').innerHTML = '';
+		otModal.classList.add('is-open');
+		saveTaskPreview().then(function () {
+			return callMethod('garagedesk.api.workshop_supervision.get_task_ot', { job_card: jobCardName, task: t.task });
+		}).then(otRender).catch(function (err) { otErr('Could not load OT: ' + otMsg(err)); });
+	}
+	function otClose() { otModal.classList.remove('is-open'); otTask = null; }
+	tpList.addEventListener('click', function (e) {
+		var b = e.target.closest('[data-ot]'); if (!b) return;
+		var t = tpTasks[+b.dataset.ot]; if (t) otOpen(t);
+	});
+	otModal.addEventListener('click', function (e) {
+		if (e.target.closest('[data-ot-close]') || e.target === otModal) { otClose(); return; }
+		var del = e.target.closest('[data-ot-del]');
+		if (del && otTask && confirm('Remove this OT entry?')) {
+			callMethod('garagedesk.api.workshop_supervision.delete_task_ot', { job_card: jobCardName, task: otTask.task, entry: del.dataset.otDel })
+				.then(otRender).catch(function (err) { otErr(otMsg(err)); });
+		}
+	});
+	document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && otModal.classList.contains('is-open')) otClose(); });
+	document.getElementById('ot-save').addEventListener('click', function () {
+		if (!otTask) return;
+		var emp = document.getElementById('ot-employee').value, date = document.getElementById('ot-date').value;
+		var hrs = parseFloat(document.getElementById('ot-hours').value);
+		if (!emp) return otErr('Assign an employee to this task first, then record their OT.');
+		if (!date) return otErr('Pick the OT date.');
+		if (!(hrs > 0) || hrs > 24) return otErr('Enter OT hours between 0 and 24.');
+		otErr('');
+		var btn = this; btn.disabled = true;
+		callMethod('garagedesk.api.workshop_supervision.save_task_ot', {
+			job_card: jobCardName, task: otTask.task, employee: emp, ot_date: date, ot_hours: hrs,
+			remarks: document.getElementById('ot-remarks').value
+		}).then(function (d) {
+			document.getElementById('ot-hours').value = ''; document.getElementById('ot-remarks').value = '';
+			otRender(d);
+		}).catch(function (err) { otErr(otMsg(err)); })
+		  .then(function () { btn.disabled = false; });
+	});
 
 	// ---- QC: check points from a Workshop QC Checklist ----------------------
 	var qc = { items: [], checklist: '', loaded: false }, qcDirty = false;
@@ -2913,50 +3207,68 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 			};
 		}).filter(function (r) { return (r.service_description || '').trim(); });
 	}
-	function renderSoState(so, docstatus) {
-		var btn = document.getElementById('bill-create-so');
-		btn.dataset.so = so || '';
-		btn.innerHTML = so
-			? '<i class="fa-solid fa-up-right-from-square"></i> View Sales Order'
-			: '<i class="fa-solid fa-file-invoice-dollar"></i> Create Sales Order';
-		// Note (left) + Submit / Open-PDF (right). Open PDF only when submitted (docstatus 1).
+	// The card's Sales Invoice: note (left), Submit while it is a draft, and Print.
+	function renderSiState(si, docstatus) {
+		var btn = document.getElementById('bill-create-si');
 		var out = document.getElementById('bill-so-result');
-		if (!so) { out.innerHTML = ''; return; }
-		var note = 'Sales Order <b>' + esc(so) + '</b> <a href="/app/sales-order/' + encodeURIComponent(so) + '" target="_blank">Open</a>';
-		var b2 = (docstatus === 1)
-			? '<button type="button" class="btn btn--primary btn--sm" data-so-pdf><i class="fa-solid fa-file-pdf"></i> Open PDF</button>'
-			: '<button type="button" class="btn btn--outline btn--sm" data-so-submit><i class="fa-solid fa-check"></i> Submit</button>';
-		out.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px">' +
-			'<span>' + note + '</span>' + b2 + '</div>';
-		var sb = out.querySelector('[data-so-submit]');
+		btn.style.display = docstatus === 1 ? 'none' : '';  // a submitted invoice is final
+		if (!si) { out.innerHTML = ''; return; }
+		var state = docstatus === 1 ? 'Submitted' : docstatus === 2 ? 'Cancelled' : 'Draft';
+		out.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">' +
+			'<span>Sales Invoice <b>' + esc(si) + '</b> · ' + state +
+			' <a href="/app/sales-invoice/' + encodeURIComponent(si) + '" target="_blank">Open</a></span>' +
+			'<span class="row" style="gap:8px">' +
+			(docstatus === 0 ? '<button type="button" class="btn btn--primary btn--sm" data-si-submit><i class="fa-solid fa-check"></i> Submit</button>' : '') +
+			'<button type="button" class="btn btn--outline btn--sm" data-si-print><i class="fa-solid fa-print"></i> Print</button>' +
+			'</span></div>';
+		var sb = out.querySelector('[data-si-submit]');
 		if (sb) sb.addEventListener('click', function () {
+			if (!confirm('Submit Sales Invoice ' + si + '? A submitted invoice cannot be edited.')) return;
 			sb.disabled = true; sb.innerHTML = 'Submitting…';
-			callMethod('garagedesk.api.workshop.submit_sales_order', { name: so })
-				.then(function (r) { renderSoState(so, r.docstatus); })
-				.catch(function (err) { sb.disabled = false; alert('Could not submit: ' + (err && err.message ? err.message : err)); });
+			// The lines on screen go to the draft first, so what is submitted is what is shown.
+			saveBilling().then(function () {
+				return callMethod('garagedesk.api.workshop.create_sales_invoice_from_job_card', { job_card: jobCardName });
+			}).then(function () {
+				return callMethod('garagedesk.api.workshop.submit_job_card_sales_invoice', { job_card: jobCardName });
+			}).then(function (r) { renderSiState(r.sales_invoice, r.docstatus); })
+			  .catch(function (err) { sb.disabled = false; sb.innerHTML = '<i class="fa-solid fa-check"></i> Submit'; alert('Could not submit: ' + errText(err)); });
 		});
-		var pb = out.querySelector('[data-so-pdf]');
-		if (pb) pb.addEventListener('click', function () { openPdf('Sales Order', so); });
+		var pb = out.querySelector('[data-si-print]');
+		if (pb) pb.addEventListener('click', function () { openPdf('Sales Invoice', si); });
+	}
+	function errText(err) {
+		var m = err && err.message ? err.message : String(err);
+		try { return JSON.parse(JSON.parse(m)[0]).message || m; } catch (e) { return m; }
 	}
 	function loadBillingData() {
 		var needSave = document.getElementById('billing-need-save');
 		var body = document.getElementById('billing-body');
-		if (!jobCardName) { needSave.style.display = ''; body.style.display = 'none'; return; }
-		needSave.style.display = 'none'; body.style.display = '';
+		var locked = document.getElementById('billing-locked');
+		if (!jobCardName) { needSave.style.display = ''; body.style.display = 'none'; locked.style.display = 'none'; return; }
+		needSave.style.display = 'none';
 		if (billLoaded) return;
 		billLoaded = true;
 		if (!BILL_ITEMS.length) {
 			callMethod("garagedesk.api.front_office.get_estimate_items", { services: gatherServices().map(function (r) { return r.service; }).filter(Boolean) })
 				.then(function (o) { o = o || {}; BILL_ITEMS = (o.mapped || []).concat(o.others || []); }).catch(function () { });
 		}
-		callMethod("garagedesk.api.front_office.get_job_card_billing", { name: jobCardName }).then(function (b) {
+		// Unsaved QC results or Work Status changes are written first: reaching
+		// Billing by the stepper does not save, and billing is judged on what is saved.
+		saveTaskPreview().then(saveQc).catch(function () {}).then(function () {
+			return callMethod("garagedesk.api.front_office.get_job_card_billing", { name: jobCardName });
+		}).then(function (b) {
 			b = b || {};
+			// Not billable yet: say why, and show no billing at all.
+			locked.style.display = b.billing_blocked ? '' : 'none';
+			body.style.display = b.billing_blocked ? 'none' : '';
+			document.getElementById('billing-locked-why').textContent = b.billing_blocked || '';
+			if (b.billing_blocked) { billLoaded = false; return; }
 			renderBillingTasks(b.billing_tasks || []);
 			billLaborBody.innerHTML = ''; billPartsBody.innerHTML = ''; billSubletBody.innerHTML = '';
 			(b.billing_kit_labor || []).forEach(addBillLabor);
 			(b.billing_kit_parts || []).forEach(addBillPart);
 			(b.billing_kit_sublet || []).forEach(addBillSublet);
-			toggleBillEmpties(); renderBillTotal(); renderSoState(b.sales_order, b.sales_order_docstatus);
+			toggleBillEmpties(); renderBillTotal(); renderSiState(b.sales_invoice, b.sales_invoice_docstatus);
 		}).catch(function (err) {
 			document.getElementById('bill-so-result').textContent = 'Could not load billing: ' + (err && err.message ? err.message : err);
 		});
@@ -2995,23 +3307,17 @@ window.WS_TAX_RATE = {{ tax_rate or 0 }};
 		saveBilling().then(function () { out.textContent = 'Billing saved.'; })
 			.catch(function (err) { out.textContent = 'Could not save billing: ' + (err && err.message ? err.message : err); });
 	});
-	document.getElementById('bill-create-so').addEventListener('click', function () {
+	document.getElementById('billing-go-qc').addEventListener('click', function () { goTo(QC_STEP); });
+	document.getElementById('bill-create-si').addEventListener('click', function () {
 		var btn = this, out = document.getElementById('bill-so-result');
-		if (btn.dataset.so) { window.open('/app/sales-order/' + encodeURIComponent(btn.dataset.so), '_blank'); return; }
 		if (!jobCardName) { alert('Save the Workshop Job Card first (it needs a customer).'); return; }
 		btn.disabled = true; out.textContent = 'Saving billing…';
 		saveBilling().then(function () {
-			out.textContent = 'Creating sales order…';
-			return callMethod("garagedesk.api.workshop.create_sales_order_from_job_card", { job_card: jobCardName });
-		}).then(function (r) {
-			var so = r.sales_order;
-			out.innerHTML = 'Sales Order <b>' + esc(so) + '</b> created' +
-				(r.grand_total != null ? (' — Total ' + money(r.grand_total)) : '') +
-				'. <a href="/app/sales-order/' + encodeURIComponent(so) + '" target="_blank">Open</a>';
-			renderSoState(so, r.docstatus);
-		}).catch(function (err) {
-			out.textContent = 'Could not create sales order: ' + (err && err.message ? err.message : err);
-		}).then(function () { btn.disabled = false; });
+			out.textContent = 'Saving sales invoice…';
+			return callMethod("garagedesk.api.workshop.create_sales_invoice_from_job_card", { job_card: jobCardName });
+		}).then(function (r) { renderSiState(r.sales_invoice, r.docstatus); })
+		  .catch(function (err) { out.textContent = 'Could not save the sales invoice: ' + errText(err); })
+		  .then(function () { btn.disabled = false; });
 	});
 
 	render();

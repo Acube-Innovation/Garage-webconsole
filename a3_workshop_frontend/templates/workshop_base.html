@@ -304,12 +304,15 @@
 				    DebugUndefined, which would print the tag source verbatim. -#}
 				{%- set has_count = (page_count is defined and page_count is not none) -%}
 				<div class="workshop-topbar__aside">
+					<div class="ws-aside-row">
+					{%- if frappe.session.user != "Guest" %}{% include "templates/includes/notification_bell.html" %}{% endif %}
 					<span class="workshop-count{% if not has_count %} is-empty{% endif %}" data-page-count
 					      title="Total records available on this page">
 						<i class="fa-solid fa-layer-group"></i>
 						<b data-page-count-value>{{ "{:,}".format(page_count) if has_count else "" }}</b>
 						<span data-page-count-label>{{ page_count_label if page_count_label is defined and page_count_label else "total" }}</span>
 					</span>
+					</div>
 					<div class="workshop-breadcrumb">
 						<a href="/a3-workshop">Home</a>{% if breadcrumb %}<span class="sep">›</span><b>{{ breadcrumb }}</b>{% endif %}
 					</div>

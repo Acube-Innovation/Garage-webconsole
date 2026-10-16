@@ -21,6 +21,10 @@ def get_context(context):
 	context.tax_label = tax["label"] if tax else ""
 	context.tax_rate = tax["rate"] if tax else 0
 	context.tax_rate_display = ("%g" % tax["rate"]) if tax else ""  # 5.0 -> "5", 7.5 -> "7.5"
+	# Per-line VAT in the Estimate cart: the company's Item Tax Templates to pick
+	# from, and the one each line starts on.
+	from garagedesk.api.front_office import vat_options
+	context.vat_options = vat_options(company)
 	return context
 
 
