@@ -1,0 +1,103 @@
+{#- The signed-in user's Notification Logs -- the same ones the Desk bell shows --
+    so a reminder (e.g. a Supervisor's daily "Task update due") can be seen and
+    opened without leaving the workshop pages. Clicking one marks it read and goes
+    to its link, else to the document it names. -#}
+<div class="ws-bell" data-ws-bell>
+	<button type="button" class="ws-bell__btn" data-ws-bell-toggle title="Notifications" aria-label="Notifications">
+		<i class="fa-solid fa-bell"></i><span class="ws-bell__n" data-ws-bell-n hidden></span>
+	</button>
+	<div class="ws-bell__panel" data-ws-bell-panel hidden>
+		<div class="ws-bell__head"><b>Notifications</b><button type="button" data-ws-bell-all>Mark all read</button></div>
+		<div class="ws-bell__list" data-ws-bell-list><div class="ws-bell__none">Loading…</div></div>
+	</div>
+</div>
+<style>
+	.ws-aside-row { display:flex; align-items:center; gap:10px; }
+	.ws-bell { position:relative; }
+	.ws-bell__btn { position:relative; width:34px; height:34px; border-radius:999px; border:1px solid var(--border,#e9eaee);
+		background:#fff; color:var(--navy,#1d2b4f); cursor:pointer; display:flex; align-items:center; justify-content:center; }
+	.ws-bell__btn:hover { background:var(--red-soft,#fde7ee); color:var(--red,#ec2e5d); }
+	.ws-bell__n { position:absolute; top:-4px; right:-4px; min-width:18px; height:18px; padding:0 5px; border-radius:999px;
+		background:var(--red,#ec2e5d); color:#fff; font-size:10.5px; font-weight:800; line-height:18px; text-align:center; }
+	.ws-bell__panel { position:absolute; right:0; top:calc(100% + 6px); z-index:1100; width:360px; max-width:calc(100vw - 32px);
+		background:#fff; border:1px solid var(--border,#e9eaee); border-radius:12px; box-shadow:0 12px 32px rgba(0,0,0,.16); }
+	.ws-bell__head { display:flex; justify-content:space-between; align-items:center; padding:10px 14px; border-bottom:1px solid var(--border,#e9eaee); font-size:13px; }
+	.ws-bell__head button { border:0; background:transparent; color:var(--red,#ec2e5d); font-size:12px; font-weight:600; cursor:pointer; }
+	.ws-bell__list { max-height:380px; overflow:auto; }
+	.ws-bell__item { display:block; padding:10px 14px; border-bottom:1px solid var(--border,#f0f1f4); color:inherit; text-decoration:none; font-size:12.5px; }
+	.ws-bell__item:hover { background:#f6f8fb; }
+	.ws-bell__item.is-unread { background:#fff7f9; }
+	.ws-bell__item.is-unread .ws-bell__subj::before { content:""; display:inline-block; width:7px; height:7px; border-radius:50%;
+		background:var(--red,#ec2e5d); margin-right:6px; vertical-align:middle; }
+	.ws-bell__subj { font-weight:700; color:var(--text,#1f2433); }
+	.ws-bell__time { color:var(--muted,#7a8598); font-size:11px; margin-top:3px; }
+	.ws-bell__none { padding:16px 14px; color:var(--muted,#7a8598); font-size:12.5px; text-align:center; }
+</style>
+<script>
+(function () {
+	var root = document.querySelector("[data-ws-bell]");
+	if (!root) { return; }
+	var panel = root.querySelector("[data-ws-bell-panel]"), list = root.querySelector("[data-ws-bell-list]");
+	var badge = root.querySelector("[data-ws-bell-n]");
+	var token = {{ (csrf_token if csrf_token is defined and csrf_token else "") | tojson }};
+	var logs = [];
+	function csrf() { return window.csrf_token || token || ""; }
+	function call(method, args, post) {
+		var url = "/api/method/" + method;
+		var opts = { headers: { "Accept": "application/json" }, credentials: "same-origin" };
+		if (post) {
+			opts.method = "POST";
+			opts.headers["Content-Type"] = "application/json";
+			opts.headers["X-Frappe-CSRF-Token"] = csrf();
+			opts.body = JSON.stringify(args || {});
+		} else if (args) {
+			url += "?" + new URLSearchParams(args).toString();
+		}
+		return fetch(url, opts).then(function (r) { return r.ok ? r.json() : Promise.reject(r.statusText); })
+			.then(function (d) { return d.message; });
+	}
+	function esc(s) { var d = document.createElement("div"); d.textContent = s == null ? "" : s; return d.innerHTML; }
+	function strip(s) { var d = document.createElement("div"); d.innerHTML = s || ""; return d.textContent || ""; }
+	function href(n) {
+		if (n.link) { return n.link; }
+		if (n.document_type && n.document_name) {
+			return "/app/" + n.document_type.toLowerCase().replace(/ /g, "-") + "/" + encodeURIComponent(n.document_name);
+		}
+		return "/app/notification-log/" + encodeURIComponent(n.name);
+	}
+	function render() {
+		var unread = logs.filter(function (n) { return !n.read; }).length;
+		badge.hidden = !unread;
+		badge.textContent = unread > 99 ? "99+" : unread;
+		list.innerHTML = logs.length ? logs.map(function (n, i) {
+			return '<a class="ws-bell__item' + (n.read ? "" : " is-unread") + '" href="' + esc(href(n)) + '" data-i="' + i + '">' +
+				'<div class="ws-bell__subj">' + esc(strip(n.subject)) + "</div>" +
+				'<div class="ws-bell__time">' + esc(n.creation ? String(n.creation).slice(0, 16) : "") + "</div></a>";
+		}).join("") : '<div class="ws-bell__none">No notifications.</div>';
+	}
+	function load() {
+		// Own notifications only -- see garagedesk.utils.notifications.get_my_notifications.
+		return call("garagedesk.utils.notifications.get_my_notifications", { limit: 20 })
+			.then(function (m) { logs = m || []; render(); })
+			.catch(function () {});
+	}
+	root.querySelector("[data-ws-bell-toggle]").addEventListener("click", function () {
+		panel.hidden = !panel.hidden;
+		if (!panel.hidden) { load(); }
+	});
+	document.addEventListener("mousedown", function (e) { if (!root.contains(e.target)) { panel.hidden = true; } });
+	list.addEventListener("click", function (e) {
+		var a = e.target.closest("[data-i]"); if (!a) { return; }
+		var n = logs[+a.dataset.i]; if (!n || n.read) { return; }
+		// Mark read before leaving; navigate either way.
+		e.preventDefault();
+		call("frappe.desk.doctype.notification_log.notification_log.mark_as_read", { docname: n.name }, true)
+			.catch(function () {}).then(function () { window.location.href = a.getAttribute("href"); });
+	});
+	root.querySelector("[data-ws-bell-all]").addEventListener("click", function () {
+		call("frappe.desk.doctype.notification_log.notification_log.mark_all_as_read", {}, true).then(load).catch(function () {});
+	});
+	load();
+	setInterval(load, 60000);
+})();
+</script>

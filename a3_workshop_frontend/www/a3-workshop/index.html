@@ -5,7 +5,9 @@
 
 {% block page_content %}
 {%- set fullname = (frappe.db.get_value("User", frappe.session.user, "full_name") if frappe.session.user != "Guest" else "User") or "User" -%}
-<div class="dashboard-actions" style="display:flex; justify-content:flex-end; margin-bottom:4px">
+<div class="dashboard-actions" style="display:flex; justify-content:flex-end; align-items:center; gap:10px; margin-bottom:4px">
+	{#- The dashboard has no topbar, so the notification bell sits here instead. -#}
+	{%- if frappe.session.user != "Guest" %}{% include "templates/includes/notification_bell.html" %}{% endif %}
 	<a class="btn btn--icon btn--navy" href="/app/home" title="Go to Desk">
 		<i class="fa-solid fa-table-columns"></i>
 	</a>
