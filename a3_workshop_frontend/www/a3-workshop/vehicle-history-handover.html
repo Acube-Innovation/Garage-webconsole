@@ -492,6 +492,29 @@
 		border-color:var(--amber,#d98324); background:#fffaf2; }
 	.ho-area-tbl td.rem input.is-wanted::placeholder,
 	.ho-view-tbl td.rem input.is-wanted::placeholder { color:var(--amber,#d98324); }
+	/* A newly damaged row needs a close-up of the damage, separate from the
+	   Photo column's shot of the whole section: a camera sits inside the end of
+	   its description box, amber until the damage is photographed. */
+	.ho-rem-wrap { position:relative; display:block; }
+	.ho-rem-wrap.has-cam input { padding-right:38px; }
+	.ho-rem-cam { display:none; position:absolute; right:5px; top:50%; transform:translateY(-50%);
+		width:28px; height:24px; border:none; border-radius:6px; background:transparent;
+		color:var(--amber,#d98324); cursor:pointer; font-size:13px; }
+	.ho-rem-wrap.has-cam .ho-rem-cam { display:block; }
+	.ho-rem-cam:hover { background:var(--red-soft); color:var(--red); }
+	.ho-rem-cam.is-done { color:var(--green,#2e9e5b); }
+	.ho-rem-cam.is-error { color:var(--red); box-shadow:0 0 0 3px var(--red-soft); }
+	.ho-rem-cam img { width:22px; height:22px; object-fit:cover; border-radius:5px; display:block;
+		border:1px solid var(--green,#2e9e5b); }
+	/* The damage photo's own widget only holds the shot; the camera drives it.
+	   On a filed handover it is shown at the end of the box instead. */
+	.ho-rem-host { display:none; }
+	.ho-rem-wrap.has-ro-shot .ho-rem-host { display:inline-flex; position:absolute; right:5px; top:50%;
+		transform:translateY(-50%); }
+	.ho-rem-wrap.has-ro-shot input { padding-right:42px; }
+	.ho-rem-host .ho-ph-strip img { width:24px; height:24px; }
+	.ho-area-tbl td.rem input.is-error, .ho-view-tbl td.rem input.is-error {
+		border-color:var(--red) !important; box-shadow:0 0 0 3px var(--red-soft); }
 
 	/* The attachment's own remark sits in the tick row's wrapper rather than in a
 	   table, so it carries its own label. */
@@ -1386,6 +1409,17 @@
 			// A shot read back out of the draft: same as a fresh capture, but it
 			// keeps the id its blob is already stored under.
 			restore: function (file, id) { add(file, id); },
+			// Camera / Upload chooser anchored on any button, e.g. the camera
+			// inside a damaged row's description box.
+			menu: function (anchor) {
+				if (RO) return;
+				openPhotoMenu(anchor, {
+					camera: function () {
+						openCamera(add, { once: !multi, sub: opts.title || "Capture photo" });
+					},
+					upload: function () { picker.click(); },
+				});
+			},
 		};
 		photoWidgets.push(w);
 
@@ -1441,6 +1475,7 @@
 			wrap.className = "ho-ph-ui";
 			wrap.innerHTML = body;
 			host.appendChild(wrap);
+			if (w.onChange) w.onChange();
 		}
 
 		host.addEventListener("click", function (e) {
@@ -1716,15 +1751,106 @@
 		return "is-ok";
 	}
 
-	// A row that reports a fault with no remark is a handover that says something
-	// is wrong without saying what, so the box asks for it rather than waiting to
-	// be noticed. It stays a hint -- an inspector can still save without one.
+	// A row that reports a new fault has to say what is wrong and show it: the
+	// remark becomes the damage description and the photo its evidence, so both
+	// are required before the handover saves (damageGap). Damage carried from an
+	// earlier handover was recorded there, so nothing new is asked of it.
 	function syncRemarkHint(row) {
-		var wanted = !!WANTS_REMARK[row.condition];
+		var wanted = needsEvidence(row);
 		row.remark.classList.toggle("is-wanted", wanted && !row.remark.value.trim());
+		if (row.remark.value.trim()) row.remark.classList.remove("is-error");
 		row.remark.placeholder = wanted
-			? "What is wrong? This is the damage description"
+			? "Add description and photo of damage"
 			: "Optional note";
+		syncDamagePhoto(row);
+	}
+	// Tyres raise a damage line only when Damaged (Worn is wear), so that is the
+	// verdict their evidence is required on; Requires Attention does not exist there.
+	function needsEvidence(row) { return !!WANTS_REMARK[row.condition] && !row.carried; }
+
+	// The description box with the damage photo at its end: a camera that is
+	// shown on a new fault, amber until photographed, then the shot itself. The
+	// damage photo is its own slot (the row's damage_photo), apart from the
+	// Photo column's picture of the whole section.
+	function remarkCamera(tdRem, remark) {
+		var wrap = document.createElement("span");
+		wrap.className = "ho-rem-wrap";
+		wrap.appendChild(remark);
+		var host = document.createElement("span");
+		host.className = "ho-ph ho-rem-host";
+		wrap.appendChild(host);
+		var cam = null;
+		if (!RO) {
+			cam = document.createElement("button");
+			cam.type = "button";
+			cam.className = "ho-rem-cam";
+			wrap.appendChild(cam);
+		}
+		tdRem.appendChild(wrap);
+		return { cam: cam, host: host };
+	}
+	// The damage photo's widget, routed like the row's own photo but onto its
+	// damage_photo slot.
+	function damageWidget(row, route, title) {
+		var r = { slot: "damage" };
+		for (var k in route) if (route.hasOwnProperty(k)) r[k] = route[k];
+		row.dmgWidget = photoWidget(row.dmgHost, r, { title: title + " — damage photo" });
+		if (RO) {
+			row.dmgWidget.onChange = function () {
+				row.dmgHost.parentNode.classList.toggle("has-ro-shot", !!row.dmgWidget.shots().length);
+			};
+			return;
+		}
+		row.cam.addEventListener("click", function () {
+			// Already photographed: open it, where it can be retaken or removed.
+			var strip = row.dmgWidget.shots().length && row.dmgHost.querySelector('[data-act="open"]');
+			if (strip) { strip.click(); return; }
+			row.dmgWidget.menu(row.cam);
+		});
+		row.dmgWidget.onChange = function () { syncDamagePhoto(row); };
+		syncDamagePhoto(row);
+	}
+	function syncDamagePhoto(row) {
+		var cam = row.cam;
+		if (RO || !cam || !row.dmgWidget) return;
+		var shots = row.dmgWidget.shots();
+		// A damage photo already taken stays reachable even if the verdict changes.
+		cam.parentNode.classList.toggle("has-cam", needsEvidence(row) || !!shots.length);
+		cam.classList.toggle("is-done", !!shots.length);
+		if (shots.length) cam.classList.remove("is-error");
+		cam.innerHTML = shots.length
+			? '<img src="' + shots[0].url + '" alt="">'
+			: '<i class="fa-solid fa-camera"></i>';
+		cam.title = shots.length ? "Damage photo — click to view, retake or remove"
+			: "Capture or upload a photo of the damage";
+	}
+
+	// What stops the save: the first row reporting a fault without its remark,
+	// or (unless carried from an earlier handover) without its photo.
+	function damageGap() {
+		var rows = walkRows.map(function (r) {
+			return { row: r, name: r.value(), tr: r.tr };
+		});
+		Object.keys(viewPanels).forEach(function (k) {
+			var p = viewPanels[k];
+			if (!panelIsOnHandover(p)) return;
+			p.rows.forEach(function (r) {
+				rows.push({ row: r, name: p.label + " — " + r.view(), tr: r.seg.closest("tr"), panel: p });
+			});
+		});
+		for (var i = 0; i < rows.length; i++) {
+			var x = rows[i], r = x.row;
+			if (!x.name || !needsEvidence(r)) continue;
+			if (!r.remark.value.trim()) {
+				return { el: r.remark, focus: r.remark, panel: x.panel, msg: '"' + x.name + '" is marked ' + r.condition +
+					" — describe the damage in its remark." };
+			}
+			if (!r.dmgWidget.shots().length) {
+				return { el: r.cam, focus: r.cam, panel: x.panel, msg: '"' + x.name + '" is marked ' + r.condition +
+					" — capture or upload a photo of the damage with the camera in its remark." };
+			}
+		}
+		return null;
 	}
 
 	// kind: "area" -- a body panel or the interior; "tyre" -- one position, which
@@ -1770,7 +1896,7 @@
 		remark.placeholder = RO ? "—" : "Optional note";
 		remark.readOnly = RO;
 		remark.setAttribute("aria-label", (label || "Row") + " remark");
-		tdRem.appendChild(remark);
+		var rc = remarkCamera(tdRem, remark);
 
 		var resp = responsibleCell(label || (isTyre ? "Tyre" : "Area"));
 		// Carries the driver from the moment the row exists, so the column reads
@@ -1824,6 +1950,8 @@
 			remark: remark,
 			resp: resp,
 			tr: tr,
+			cam: rc.cam,
+			dmgHost: rc.host,
 		};
 		row.value = function () {
 			return row.name ? row.name.value.trim() : row.label;
@@ -1834,6 +1962,10 @@
 			isTyre ? { target: "tyre_row", position: row.value }
 			       : { target: "area_row", area: row.value },
 			{ title: (label || (isTyre ? "Tyre" : "Inspection area")) + " photo" });
+		damageWidget(row,
+			isTyre ? { target: "tyre_row", position: row.value }
+			       : { target: "area_row", area: row.value },
+			label || (isTyre ? "Tyre" : "Inspection area"));
 
 		if (RO) {
 			paintCondition(row);
@@ -1915,6 +2047,7 @@
 				row.resp.set(seed.responsible_party, seed.responsible_driver,
 					seed.responsible_driver_name);
 			}
+			row.carried = true;
 			paintCondition(row);
 			row.tr.classList.add("ho-prev-row");
 			originTag(row.tr.querySelector("td.area"), seed.origin_handover);
@@ -1997,6 +2130,7 @@
 			if (v.responsible_party) {
 				row.resp.set(v.responsible_party, v.responsible_driver, v.responsible_driver_name);
 			}
+			row.carried = true;
 			paintCondition(row);
 			var tr = row.seg.closest("tr");
 			if (tr) {
@@ -2015,16 +2149,21 @@
 	// the driver as a suggestion, and a suggestion is not evidence the row was
 	// looked at -- testing the label would save a row for every panel on the
 	// vehicle whether or not anyone assessed it.
+	// Either photo keeps the row, so the upload has somewhere to land.
+	function hasShots(r) {
+		return !!(r.widget.shots().length || (r.dmgWidget && r.dmgWidget.shots().length));
+	}
+
 	function collectAreas() {
 		return areaRows().filter(function (r) {
 			return r.value() && (r.condition || r.remark.value.trim() ||
-				r.resp.answered() || r.widget.shots().length);
+				r.resp.answered() || hasShots(r));
 		}).map(function (r) {
 			var out = {
 				area: r.value(),
 				condition: r.condition,
 				remark: r.remark.value.trim(),
-				has_photo: r.widget.shots().length ? 1 : 0,
+				has_photo: hasShots(r) ? 1 : 0,
 			};
 			var resp = r.resp.value();
 			out.responsible_party = resp.responsible_party;
@@ -2036,14 +2175,14 @@
 	function collectTyres() {
 		return tyreRows().filter(function (r) {
 			return r.value() && (r.condition || r.depth.value !== "" ||
-				r.remark.value.trim() || r.resp.answered() || r.widget.shots().length);
+				r.remark.value.trim() || r.resp.answered() || hasShots(r));
 		}).map(function (r) {
 			var out = {
 				position: r.value(),
 				condition: r.condition,
 				tread_depth_mm: r.depth.value === "" ? null : Number(r.depth.value),
 				remark: r.remark.value.trim(),
-				has_photo: r.widget.shots().length ? 1 : 0,
+				has_photo: hasShots(r) ? 1 : 0,
 			};
 			var resp = r.resp.value();
 			out.responsible_party = resp.responsible_party;
@@ -2159,7 +2298,7 @@
 		remark.placeholder = RO ? "—" : "Optional note";
 		remark.readOnly = RO;
 		remark.setAttribute("aria-label", p.label + " " + (vw || "view") + " remark");
-		tdRem.appendChild(remark);
+		var rc = remarkCamera(tdRem, remark);
 
 		var resp = responsibleCell(p.label + " " + (vw || "view"));
 		// Same as the walk-round: the attachment views ask the same question and
@@ -2180,13 +2319,16 @@
 		p.body.appendChild(tr);
 
 		var row = { name: nameInput, label: vw || "", condition: "", remark: remark,
-		            resp: resp, seg: seg };
+		            resp: resp, seg: seg, cam: rc.cam, dmgHost: rc.host };
 		row.view = function () {
 			return row.name ? row.name.value.trim() : row.label;
 		};
 		row.widget = photoWidget(host,
 			{ target: "attachment_view", item: p.item, unit_no: p.unit_no, view: row.view },
 			{ title: p.label + " — " + (vw || "view") });
+		damageWidget(row,
+			{ target: "attachment_view", item: p.item, unit_no: p.unit_no, view: row.view },
+			p.label + " — " + (vw || "view"));
 
 		if (RO) {
 			paintCondition(row);
@@ -2228,7 +2370,7 @@
 				var resp = r.resp.value();
 				// `answered`, not the value: the driver is suggested on every view,
 				// and a suggestion must not make an unassessed view look assessed.
-				if (!r.condition && !remark && !r.resp.answered() && !r.widget.shots().length) return;
+				if (!r.condition && !remark && !r.resp.answered() && !hasShots(r)) return;
 				out.push({
 					attachment_item: p.item,
 					unit_no: p.unit_no,
@@ -2237,7 +2379,7 @@
 					remark: remark,
 					responsible_party: resp.responsible_party,
 					responsible_driver: resp.responsible_driver,
-					has_photo: r.widget.shots().length ? 1 : 0,
+					has_photo: hasShots(r) ? 1 : 0,
 				});
 			});
 		});
@@ -2618,6 +2760,19 @@
 		if (chk.missing) { alert('Please enter a value for the checklist item "' + chk.missing + '".'); return; }
 		var att = collectTicks(attBox);
 		if (att.missing) { alert('Please enter a value for the attachment "' + att.missing + '".'); return; }
+		// Every fault needs its description and its photo -- on an Issue too, as
+		// that is exactly what an Issue is reporting.
+		var gap = damageGap();
+		if (gap) {
+			if (gap.panel) gap.panel.el.classList.add("is-open");
+			if (gap.el) {
+				gap.el.classList.add("is-error");
+				gap.el.scrollIntoView({ block: "center", behavior: "smooth" });
+				setTimeout(function () { try { gap.focus.focus({ preventScroll: true }); } catch (e) {} }, 300);
+			}
+			alert(gap.msg);
+			return;
+		}
 		// Validated — now let the inspector look at the evidence before it commits.
 		pending = { odo: odo, chk: chk, att: att };
 		renderConfirm();
@@ -2832,13 +2987,14 @@
 			walk: walkRows.map(function (r) {
 				return { kind: r.kind, label: r.value(), custom: !r.fixed, condition: r.condition,
 				         remark: r.remark.value, depth: r.depth ? r.depth.value : "",
-				         resp: respState(r), photos: shotIds(r.widget) };
+				         resp: respState(r), photos: shotIds(r.widget), dmg_photos: shotIds(r.dmgWidget) };
 			}),
 			views: Object.keys(viewPanels).map(function (k) {
 				var p = viewPanels[k];
 				return { item: p.item, unit_no: p.unit_no, rows: p.rows.map(function (r) {
 					return { view: r.view(), custom: !!r.name, condition: r.condition,
-					         remark: r.remark.value, resp: respState(r), photos: shotIds(r.widget) };
+					         remark: r.remark.value, resp: respState(r), photos: shotIds(r.widget),
+					         dmg_photos: shotIds(r.dmgWidget) };
 				}) };
 			}),
 		};
@@ -2871,9 +3027,9 @@
 		}
 		var fp = rec.field_photos || {};
 		ids = ids.concat(fp.odometer || [], fp.fuel || []);
-		(rec.walk || []).forEach(function (r) { ids = ids.concat(r.photos || []); });
+		(rec.walk || []).forEach(function (r) { ids = ids.concat(r.photos || [], r.dmg_photos || []); });
 		(rec.views || []).forEach(function (p) {
-			(p.rows || []).forEach(function (r) { ids = ids.concat(r.photos || []); });
+			(p.rows || []).forEach(function (r) { ids = ids.concat(r.photos || [], r.dmg_photos || []); });
 		});
 		return ids;
 	}
@@ -2924,6 +3080,9 @@
 		}
 		(d.photos || []).forEach(function (id) {
 			if (blobs[id]) row.widget.restore(blobs[id], id);
+		});
+		(d.dmg_photos || []).forEach(function (id) {
+			if (blobs[id]) row.dmgWidget.restore(blobs[id], id);
 		});
 		paintCondition(row);
 	}
@@ -3246,6 +3405,7 @@
 		if (row.depth && rec.tread_depth_mm) row.depth.value = rec.tread_depth_mm;
 		setResp(row.resp, rec.responsible);
 		if (rec.photo) row.widget.setRemote([rec.photo]);
+		if (rec.damage_photo) row.dmgWidget.setRemote([rec.damage_photo]);
 		paintCondition(row);
 	}
 
@@ -3307,6 +3467,7 @@
 			if (rec.remark) row.remark.value = rec.remark;
 			setResp(row.resp, rec.responsible);
 			if (rec.photo) row.widget.setRemote([rec.photo]);
+			if (rec.damage_photo) row.dmgWidget.setRemote([rec.damage_photo]);
 			paintCondition(row);
 		});
 	}

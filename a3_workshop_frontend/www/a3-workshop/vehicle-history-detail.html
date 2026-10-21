@@ -217,6 +217,17 @@
 	.vh-cmp-tbl tr.is-locked td { background:var(--bg); }
 	.vh-cmp-tbl tr.is-locked select, .vh-cmp-tbl tr.is-locked input { background:transparent;
 		border-color:transparent; -webkit-appearance:none; appearance:none; color:var(--text); opacity:1; }
+	/* The tick picks which damage the next Workshop Job Card is raised for. */
+	.vh-cmp-tbl td.c-pick, .vh-cmp-tbl th.c-pick { width:30px; text-align:center; padding-left:4px; padding-right:4px; }
+	.vh-cmp-tbl input.c-sel, .vh-cmp-tbl input#vh-sel-all { width:16px; height:16px; padding:0;
+		accent-color:var(--red); cursor:pointer; vertical-align:middle; }
+	.vh-cmp-tbl tr.is-locked td.c-pick i { color:var(--green); font-size:13px; }
+	.vh-cmp-tbl tr.is-picked:not(.is-locked) td { background:var(--red-soft, #fdeef1); }
+	/* The photo the inspector took of this damage on the handover. */
+	.vh-cmp-tbl td.c-photo { width:64px; }
+	.vh-dmg-ph { width:52px; height:39px; object-fit:cover; border-radius:6px;
+		border:1px solid var(--border); display:block; cursor:zoom-in; }
+	.vh-dmg-ph:hover { border-color:var(--red); }
 	.vh-jc-item + .vh-jc-item { margin-top:3px; }
 	.vh-jc-for { font-size:11px; }
 	/* Service jobs: one table, each row naming the damage it repairs. */
@@ -810,20 +821,35 @@
 		tr.dataset.jobCard = d.job_card || "";
 		if (locked) tr.className = "is-locked";
 		tr.innerHTML =
+			'<td class="c-pick">' + (locked
+				? '<i class="fa-solid fa-circle-check" title="Has a Workshop Job Card"></i>'
+				: '<input type="checkbox" class="c-sel" title="Raise the Workshop Job Card for this Vehicle Damage Line"' +
+				  (d.picked ? " checked" : "") + ">") + "</td>" +
 			'<td><select class="c-area"' + dis + ">" + opts(cmpOpts.areas, d.area) + "</select></td>" +
 			'<td><select class="c-type"' + dis + ">" + opts(cmpOpts.damage_types, d.damage_type) + "</select></td>" +
 			'<td><select class="c-sev"' + dis + ">" + opts(cmpOpts.severities, d.severity) + "</select></td>" +
 			'<td><input class="c-desc" placeholder="What you can see" value="' + esc(d.description || "") + '"' + dis + "></td>" +
 			'<td><select class="c-resp"' + dis + ">" + respOptions(key) + "</select></td>" +
+			'<td class="c-photo">' + (d.photo
+				? '<img class="vh-dmg-ph" src="' + escAttr(d.photo) + '" alt="Damage photo" title="Open the photo" data-zoom="' +
+				  escAttr(d.photo) + '">'
+				: '<span class="muted">—</span>') + "</td>" +
 			"<td>" + (locked ? jcLink(d.job_card) : '<span class="muted">—</span>') + "</td>" +
 			'<td style="width:32px">' + (locked ? "" :
 				'<button type="button" class="vh-cmp-rm" title="Remove"><i class="fa-solid fa-xmark"></i></button>') + "</td>";
 		if (!locked) tr.querySelector(".vh-cmp-rm").addEventListener("click", function () { tr.remove(); cmpSync(); });
+		tr.classList.toggle("is-picked", isPicked(tr));
 		tb.appendChild(tr);
 		cmpSync();
 	}
 
 	function rowKey(tr) { return (tr.querySelector(".c-resp") || {}).value || ""; }
+	// Ticked for the next Workshop Job Card. Only an open row can be: a locked
+	// one already has its card.
+	function isPicked(tr) {
+		var c = tr.querySelector(".c-sel");
+		return !!(c && c.checked) && !tr.dataset.jobCard;
+	}
 	function rowFilled(tr) {
 		return !!((tr.querySelector(".c-area") || {}).value && (tr.querySelector(".c-type") || {}).value);
 	}
@@ -858,9 +884,10 @@
 		document.querySelectorAll("#vh-cmp-dmg tr").forEach(function (tr) {
 			if (!rowFilled(tr)) return;
 			var key = rowKey(tr);
-			if (!by[key]) { by[key] = { key: key, total: 0, open: 0 }; groups.push(by[key]); }
+			if (!by[key]) { by[key] = { key: key, total: 0, open: 0, picked: 0 }; groups.push(by[key]); }
 			by[key].total++;
 			if (!tr.dataset.jobCard) by[key].open++;
+			if (isPicked(tr)) by[key].picked++;
 		});
 		return groups.filter(function (g) { return g.key; }).concat(groups.filter(function (g) { return !g.key; }));
 	}
@@ -900,25 +927,39 @@
 	function renderCreateState(groups) {
 		var btn = document.getElementById("vh-cmp-create");
 		var msg = document.getElementById("vh-cmp-msg");
-		var total = 0, open = 0;
-		groups.forEach(function (g) { total += g.total; open += g.open; });
+		var total = 0, open = 0, picked = 0;
+		groups.forEach(function (g) { total += g.total; open += g.open; picked += g.picked; });
 		var sel = cmpFilter === null ? null : groups.filter(function (g) { return g.key === cmpFilter; })[0];
 		// Damage held against nobody has no card of its own, and holds up the
-		// one for all of it until somebody is named.
-		var unassigned = groups.some(function (g) { return !g.key && g.open; });
-		var canAll = cmpFilter === null && open > 0 && !unassigned;
-		var canCreate = canAll || !!(sel && sel.key && sel.open);
+		// one for all of it until somebody is named. Only the ticked rows go on
+		// the card, so only they have to be.
+		var unassigned = groups.some(function (g) { return !g.key && g.picked; });
+		var canAll = cmpFilter === null && picked > 0 && !unassigned;
+		var canCreate = canAll || !!(sel && sel.key && sel.picked);
 
 		btn.style.display = canCreate ? "" : "none";
 		if (canCreate) {
 			btn.innerHTML = '<i class="fa-solid fa-plus"></i> Create Workshop Job Card — ' +
-				(canAll ? "All (" + open + ")" : esc(respLabel(sel.key)) + " (" + sel.open + ")");
+				(canAll ? "Selected (" + picked + ")" : esc(respLabel(sel.key)) + " (" + sel.picked + ")");
+		}
+		var all = document.getElementById("vh-sel-all");
+		if (all) {
+			var shownOpen = dmgRows().filter(function (tr) {
+				return !tr.dataset.jobCard && tr.style.display !== "none" && tr.querySelector(".c-sel");
+			});
+			var shownPicked = shownOpen.filter(isPicked).length;
+			all.disabled = !shownOpen.length;
+			all.checked = !!shownOpen.length && shownPicked === shownOpen.length;
+			all.indeterminate = shownPicked > 0 && shownPicked < shownOpen.length;
 		}
 		// Nothing left to plan once every damage has its card.
 		var sec = document.getElementById("vh-svc-sec");
 		if (sec) sec.style.display = total && !open ? "none" : "";
 		var note = document.getElementById("vh-svc-note");
-		if (note) {
+		if (note && open && !picked) {
+			note.innerHTML = "Tick the Vehicle Damage Lines above that this Workshop Job Card is for — " +
+				"their services are planned here, and the rest stay open for a later Workshop Job Card.";
+		} else if (note) {
 			note.innerHTML = canAll
 				? "One row per Vehicle Damage Line: pick its Jobcard Type, then the Job Type Service. They all go on one " +
 				  "Workshop Job Card — or pick whose damage above for a card of its own."
@@ -931,14 +972,19 @@
 		var state = "";
 		if (total && !open) {
 			state = '<span class="badge badge--success">Rectified</span> Every Vehicle Damage Line on this Driver Vehicle Handover has a Workshop Job Card.';
+		} else if (open && !picked) {
+			state = "Tick the Vehicle Damage Lines to raise a Workshop Job Card for.";
 		} else if (sel && !sel.key && sel.open) {
 			state = "Set who is responsible for these Vehicle Damage Lines to raise their Workshop Job Card.";
 		} else if (sel && !sel.open) {
 			state = "Every Vehicle Damage Line held against " + esc(respLabel(sel.key)) + " has a Workshop Job Card.";
+		} else if (sel && sel.open && !sel.picked) {
+			state = "Tick " + esc(respLabel(sel.key)) + "’s Vehicle Damage Lines to raise their Workshop Job Card.";
 		} else if (open && !sel && unassigned) {
-			state = "Set who is responsible for every Vehicle Damage Line to raise one Workshop Job Card for all of it — or pick a party.";
+			state = "Set who is responsible for every ticked Vehicle Damage Line to raise one Workshop Job Card for them — or pick a party.";
 		} else if (open && !sel) {
-			state = "One Workshop Job Card for all of it — or pick whose damage to raise a card of its own.";
+			state = "One Workshop Job Card for the <b>" + picked + "</b> ticked Vehicle Damage Line" + (picked === 1 ? "" : "s") +
+				(open > picked ? " — the other <b>" + (open - picked) + "</b> stay open" : "") + ".";
 		}
 		msg.innerHTML = [cmpNotice, state].filter(Boolean).join(" ");
 	}
@@ -969,7 +1015,7 @@
 	// The damage a row can be planned against: any without a job card yet.
 	function issueOptions(sel) {
 		return '<option value="">— pick the Vehicle Damage Line —</option>' + dmgRows().filter(function (tr) {
-			return !tr.dataset.jobCard;
+			return !tr.dataset.jobCard && (isPicked(tr) || tr.dataset.ref === sel);
 		}).map(function (tr) {
 			return '<option value="' + escAttr(tr.dataset.ref) + '"' + (tr.dataset.ref === sel ? " selected" : "") +
 				">" + esc(issueLabel(tr)) + "</option>";
@@ -1045,8 +1091,14 @@
 				cleanupKitForStandard(std);
 			}
 		});
+		// An unticked damage's untouched placeholder row goes; one with a plan
+		// typed in stays, hidden, so ticking the damage again brings it back.
+		svcRows().forEach(function (tr) {
+			var dmg = dmgRow(svcIssue(tr));
+			if (dmg && !isPicked(dmg) && !svcPlanned(tr)) tr.remove();
+		});
 		dmgRows().forEach(function (dmg) {
-			if (dmg.dataset.jobCard || !rowFilled(dmg)) return;
+			if (!isPicked(dmg) || !rowFilled(dmg)) return;
 			var planned = svcRows().some(function (tr) { return svcIssue(tr) === dmg.dataset.ref; });
 			if (!planned) addServiceRow({ damage: dmg.dataset.ref }, true);
 		});
@@ -1055,8 +1107,13 @@
 			sel.innerHTML = issueOptions(v);
 			sel.title = v ? sel.options[sel.selectedIndex].text : "";   // the cell cuts it short
 			var dmg = dmgRow(v);
-			tr.style.display = cmpFilter === null || (dmg && rowKey(dmg) === cmpFilter) ? "" : "none";
+			tr.style.display = (!dmg || isPicked(dmg)) &&
+				(cmpFilter === null || (dmg && rowKey(dmg) === cmpFilter)) ? "" : "none";
 		});
+	}
+	function svcPlanned(tr) {
+		return !!((tr.querySelector(".vh-jt-sel") || {}).value || (svcHidden(tr) || {}).value ||
+			((tr.querySelector(".vh-desc") || {}).value || "").trim());
 	}
 	// The rows a Create Job Card would take: those showing under the filter.
 	function shownServiceRows() {
@@ -1317,10 +1374,12 @@
 						  (c.carried_open === 1 ? "it" : "them") + ".</div>"
 						: "") +
 					'<div class="vh-resp-chips" id="vh-resp-chips"></div>' +
-					'<table class="vh-cmp-tbl"><thead><tr><th style="width:17%">Area</th>' +
-					'<th style="width:13%">Damage Type</th><th style="width:11%">Severity</th>' +
-					'<th>Description</th><th style="width:17%">Responsible</th>' +
-					'<th style="width:12%">Workshop Job Card</th><th></th></tr></thead>' +
+					'<table class="vh-cmp-tbl"><thead><tr>' +
+					'<th class="c-pick"><input type="checkbox" id="vh-sel-all" title="Tick every open Vehicle Damage Line showing"></th>' +
+					'<th style="width:15%">Area</th>' +
+					'<th style="width:12%">Damage Type</th><th style="width:10%">Severity</th>' +
+					'<th>Description</th><th style="width:15%">Responsible</th><th class="c-photo">Damage Photo</th>' +
+					'<th style="width:11%">Workshop Job Card</th><th></th></tr></thead>' +
 					'<tbody id="vh-cmp-dmg"></tbody></table></div>';
 
 				// Service Jobs — the repair for each damage, and by whom. A party's
@@ -1338,8 +1397,18 @@
 
 				body.innerHTML = html;
 
+				// A damage the last save already planned a repair for opens ticked;
+				// the rest wait to be picked for a card.
+				var plannedFor = {};
+				(c.services || []).forEach(function (s) {
+					if (s.damage && (s.jobtype || s.service)) plannedFor[s.damage] = 1;
+				});
 				cmpLoading = true;
-				try { (c.damages || []).forEach(cmpAddRow); } finally { cmpLoading = false; }
+				try {
+					(c.damages || []).forEach(function (d) {
+						cmpAddRow(Object.assign({}, d, { picked: !!plannedFor[d.ref] }));
+					});
+				} finally { cmpLoading = false; }
 
 				// The repair planned the last time this was saved, each row against
 				// the damage it was planned for. The damage without a row yet gets an
@@ -1378,12 +1447,16 @@
 			return;
 		}
 		// A damage added while one party is showing is that party's.
-		if (e.target.closest("#vh-dmg-add")) { cmpAddRow({ key: cmpFilter || "" }); return; }
+		if (e.target.closest("#vh-dmg-add")) { cmpAddRow({ key: cmpFilter || "", picked: true }); return; }
 		// Another service for a damage: the first open one of the party showing.
 		if (e.target.closest("#vh-svc-add")) {
 			var first = dmgRows().filter(function (tr) {
-				return !tr.dataset.jobCard && rowFilled(tr) && (cmpFilter === null || rowKey(tr) === cmpFilter);
+				return isPicked(tr) && rowFilled(tr) && (cmpFilter === null || rowKey(tr) === cmpFilter);
 			})[0];
+			if (!first) {
+				vhAlert("No Vehicle Damage Line ticked", "Tick the Vehicle Damage Lines above to plan their Workshop Job Card Services.");
+				return;
+			}
 			addServiceRow({ damage: first ? first.dataset.ref : "" });
 			return;
 		}
@@ -1402,7 +1475,18 @@
 	// renames the issue its service rows show; a service row's issue moves it to
 	// that damage's party.
 	document.getElementById("vh-cmp-body").addEventListener("change", function (e) {
-		if (e.target.matches(".vh-jt-sel")) clearRowService(e.target.closest("tr"));
+		if (e.target.matches("#vh-sel-all")) {
+			var on = e.target.checked;
+			dmgRows().forEach(function (tr) {
+				var c = tr.querySelector(".c-sel");
+				if (c && tr.style.display !== "none") { c.checked = on; tr.classList.toggle("is-picked", isPicked(tr)); }
+			});
+			cmpSync();
+		} else if (e.target.matches(".c-sel")) {
+			var row = e.target.closest("tr");
+			row.classList.toggle("is-picked", isPicked(row));
+			cmpSync();
+		} else if (e.target.matches(".vh-jt-sel")) clearRowService(e.target.closest("tr"));
 		else if (e.target.matches(".c-area, .c-type, .c-desc, .c-resp, .vh-issue")) cmpSync();
 	});
 
@@ -1941,13 +2025,14 @@
 		if (!cmpHandover || cmpFilter === "") return;
 		// No party picked: one card for every open damage, whoever it is held against.
 		var everyone = cmpFilter === null, groups = cmpGroups();
-		var parties = groups.filter(function (g) { return g.open && (everyone || g.key === cmpFilter); });
-		var count = parties.reduce(function (n, g) { return n + g.open; }, 0);
+		var parties = groups.filter(function (g) { return g.picked && (everyone || g.key === cmpFilter); });
+		var count = parties.reduce(function (n, g) { return n + g.picked; }, 0);
 		if (!count) return;
 		var label = everyone
 			? parties.map(function (g) { return respLabel(g.key); }).join(", ")
 			: respLabel(cmpFilter);
 		var services = cmpServiceRows(shownServiceRows());
+		var left = groups.reduce(function (n, g) { return n + g.open; }, 0) - count;
 		if (!services.length) {
 			vhAlert("No Workshop Job Card Services", "Pick the Jobcard Type and Job Type Service for " +
 				(everyone ? "the" : "<b>" + esc(label) + "</b>’s") + " damage first.");
@@ -1961,7 +2046,9 @@
 			html: (everyone
 				? "<p>One Workshop Job Card for all " + damages + " — " + esc(label) + " — with " + jobs + ".</p>"
 				: "<p>A Workshop Job Card for <b>" + esc(label) + "</b>’s " + damages + ", with " + jobs + ".</p>") +
-				'<p class="muted">It is created straight away, with a task for each Workshop Job Card Service.</p>',
+				(left > 0 ? "<p>The other <b>" + left + "</b> Vehicle Damage Line" + (left === 1 ? " stays" : "s stay") +
+				" open for a later Workshop Job Card.</p>" : "") +
+			'<p class="muted">It is created straight away, with a task for each Workshop Job Card Service.</p>',
 			ok: '<i class="fa-solid fa-plus"></i> Create Workshop Job Card'
 		}).then(function (yes) {
 			if (yes) raiseJobCard(btn, everyone);
@@ -1969,6 +2056,10 @@
 	});
 	function raiseJobCard(btn, everyone) {
 		var who = respSplit(cmpFilter || ""), handover = cmpHandover, filter = cmpFilter;
+		// Only the ticked rows of the party showing go on the card.
+		var selected = dmgRows().filter(function (tr) {
+			return isPicked(tr) && rowFilled(tr) && (everyone || rowKey(tr) === filter);
+		}).map(function (tr) { return tr.dataset.ref; });
 		btn.disabled = true;
 		btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Creating…';
 		callMethod("garagedesk.api.handover_comparison.create_job_card_for_responsible", {
@@ -1980,7 +2071,8 @@
 			kit_labor: JSON.stringify(kitLabor),
 			kit_parts: JSON.stringify(kitParts),
 			kit_sublet: JSON.stringify(kitSublet),
-			everyone: everyone ? 1 : 0
+			everyone: everyone ? 1 : 0,
+			selected: JSON.stringify(selected)
 		})
 			.then(function (res) {
 				loadHistory();
