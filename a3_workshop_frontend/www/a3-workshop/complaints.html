@@ -59,7 +59,7 @@
 					{%- if c.job_card %} · <a href="/a3-workshop/job-card/detail?id={{ c.job_card }}" style="color:var(--red);font-weight:700">{{ c.job_card }}</a>{% endif %}
 					· <i class="fa-solid fa-car-side"></i> {{ c.vehicle }}
 					· <i class="fa-regular fa-user"></i> {{ c.technician }}
-					{%- if c.reported_by %} · Reported by {{ c.reported_by }}{% endif %}
+					{%- if c.reported_by %} · Responsible driver: {{ c.reported_by }}{% endif %}
 				</div>
 			</div>
 			<div class="stack" style="align-items:flex-end;gap:8px;flex-shrink:0">

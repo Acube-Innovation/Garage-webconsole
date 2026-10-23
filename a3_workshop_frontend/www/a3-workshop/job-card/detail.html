@@ -174,7 +174,7 @@
 				{%- if draft %}<button type="button" class="btn btn--outline btn--sm jc-add" data-add="complaint" style="display:none"><i class="fa-solid fa-plus"></i> Add</button>{% endif %}</div>
 			<div class="card__body" style="padding:0">
 				<table class="table" id="jc-cmp-table">
-					<thead><tr><th>Complaint</th><th>Reported By</th><th>Technician</th><th>Severity</th>
+					<thead><tr><th>Complaint</th><th>Responsible Driver</th><th>Technician</th><th>Severity</th>
 						{%- if draft %}<th style="width:40px"></th>{% endif %}</tr></thead>
 					<tbody id="jc-cmp-body">
 						{%- for c in card.complaints %}
@@ -602,7 +602,7 @@
 		tr.innerHTML =
 			'<td><input class="jc-cmp" placeholder="Complaint" value="' + esc(c.complaint || "") + '">' +
 				'<input class="jc-notes" style="margin-top:5px" placeholder="Notes" value="' + esc(c.notes || "") + '"></td>' +
-			'<td><input class="jc-rby" placeholder="Reported by" value="' + esc(c.reported_by || "") + '"></td>' +
+			'<td><input class="jc-rby" placeholder="Responsible driver" value="' + esc(c.reported_by || "") + '"></td>' +
 			'<td><select class="jc-ctech">' + options(OPT.employees, c.technician, "name", "employee_name", "— technician —") + "</select></td>" +
 			'<td><select class="jc-sev">' + options(OPT.severities, c.severity) + "</select></td>" +
 			'<td style="width:40px"><button type="button" class="jc-rm" title="Remove"><i class="fa-solid fa-xmark"></i></button></td>';

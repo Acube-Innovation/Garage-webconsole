@@ -47,6 +47,12 @@
 	{%- endfor %}
 </div></div>
 
+<!-- Steps 4–8: which card, vehicle and driver the step is about, so it need not
+     be looked up on Customer Details / Complaints (drawn by renderContext). -->
+<div class="card" id="jc-context" style="display:none;margin-top:14px">
+	<div class="card__body jc-context" id="jc-context-body"></div>
+</div>
+
 <!-- STEP 1 — Customer Details -->
 <section class="wizard-tab is-active" data-tab="1" style="margin-top:18px">
 	<div class="card"><div class="card__head"><h3>Customer Details</h3></div>
@@ -67,6 +73,10 @@
 		<div class="field"><label>Driver Vehicle Handover</label>
 			<input name="handover_label" placeholder="Search Driver Vehicle Handovers…" autocomplete="off">
 			<input type="hidden" name="handover"></div>
+		{#- Shown, not typed: the picked vehicle's plate (setPlate). Placed after the
+		    handover so the two-column grid puts it directly under Vehicle. -#}
+		<div class="field"><label>Plate Number</label>
+			<input name="vehicle_plate" readonly tabindex="-1" placeholder="Filled from the vehicle"></div>
 		{{ field("Booking Date","booking_date",type="date",required=True) }}
 		{{ field("Promised Delivery","delivery",type="date") }}
 		{#- Each offers only the Employees whose User holds that role (Service Advisor /
@@ -275,7 +285,7 @@
 		<button type="button" class="btn btn--primary btn--sm" id="add-complaint"><i class="fa-solid fa-plus"></i> Add Workshop Job Card Complaint</button></div>
 		<div class="card__body" style="padding:0">
 			<table class="table editable"><thead><tr>
-				<th style="width:40px">#</th><th>Complaint</th><th>Reported By</th><th style="width:130px">Severity</th><th>Notes</th><th style="width:40px"></th>
+				<th style="width:40px">#</th><th>Complaint</th><th>Responsible Driver</th><th style="width:130px">Severity</th><th>Notes</th><th style="width:40px"></th>
 			</tr></thead><tbody id="complaint-body"></tbody></table>
 			<div class="empty" id="complaint-empty">No Workshop Job Card Complaints added yet.</div>
 		</div>
@@ -622,6 +632,9 @@
 	/* Invoiced card: nothing to draw on or pick */
 	body.jc-locked #car-canvas, body.jc-locked .jobtype-box, body.jc-locked .jc-labor-code { pointer-events:none; }
 	body.jc-locked .wizard-tab .btn:disabled, body.jc-locked .wizard-tab .icon-del:disabled { display:none; }
+	input[name="vehicle_plate"] { background:var(--bg,#f1f4f8); cursor:default; font-weight:600; }
+	.jc-context { padding:10px 18px; font-size:13.5px; display:flex; flex-wrap:wrap; gap:6px 22px; }
+	.jc-context .muted { margin-right:4px; }
 </style>
 
 <!-- nav -->
@@ -672,6 +685,7 @@ window.WS_VAT = {{ (vat_options or {}) | tojson }};
 			: 'Next <i class="fa-solid fa-arrow-right"></i>';
 		// Read-only card: Next only moves between steps, and the last one has none.
 		if (isLocked) nextBtn.style.visibility = cur === TOTAL ? 'hidden' : 'visible';
+		renderContext();
 		fitTab();
 		// Step numbers, not document order: Readings is step 2 (see the stepper).
 		if (cur === READINGS_STEP) sizeCanvas();
@@ -695,6 +709,19 @@ window.WS_VAT = {{ (vat_options or {}) | tojson }};
 		tab.style.maxHeight = tab.style.minHeight = Math.max(320, avail) + 'px';
 	}
 	window.addEventListener('resize', fitTab);
+	// "Job Card JC-… · Vehicle DXB O 24625 · Responsible Driver …" over steps 4–8.
+	// Before the first save there is no card number yet, so the line waits for it.
+	var CONTEXT_FROM_STEP = SERVICES_STEP;
+	function renderContext() {
+		var box = document.getElementById('jc-context');
+		if (cur < CONTEXT_FROM_STEP || !jobCardName) { box.style.display = 'none'; return; }
+		var drivers = responsibleDrivers();
+		var bit = function (label, v) { return '<span><span class="muted">' + label + '</span><b>' + esc(v || '—') + '</b></span>'; };
+		document.getElementById('jc-context-body').innerHTML =
+			bit('Job Card', jobCardName) + bit('Vehicle', vehiclePlate || val('vehicle')) +
+			bit('Responsible Driver', drivers.join(', '));
+		box.style.display = '';
+	}
 	function goTo(n) {
 		var leaving = cur;
 		cur = Math.max(1, Math.min(TOTAL, n));
@@ -899,12 +926,19 @@ window.WS_VAT = {{ (vat_options or {}) | tojson }};
 
 	// ---- Customer + Vehicle autocomplete (Customer Details tab) ---------
 	var customerVehicles = []; // vehicles of the currently selected customer
-	var vehiclePlate = "";     // plate of the picked vehicle, for the Task Preview heading
+	var vehiclePlate = "";     // plate of the picked vehicle: Plate Number, the step 4–8 line, Task Preview
+	function setPlate(p) { vehiclePlate = p || ""; setVal("vehicle_plate", vehiclePlate); }
 	function loadCustomerVehicles(customerId) {
 		customerVehicles = [];
 		if (!customerId) return Promise.resolve();
 		return callMethod("garagedesk.api.front_office.get_customer_vehicles", { customer: customerId })
-			.then(function (rows) { customerVehicles = rows || []; })
+			.then(function (rows) {
+				customerVehicles = rows || [];
+				// A vehicle that arrived in the URL comes without its plate; the
+				// customer's list has it.
+				var v = customerVehicles.filter(function (x) { return x.name === val("vehicle_id"); })[0];
+				if (v && !vehiclePlate) setPlate(v.plate);
+			})
 			.catch(function () {});
 	}
 	// A row may carry `action` (e.g. the Service cell's "Create …" entry). Such a row is
@@ -1020,7 +1054,7 @@ window.WS_VAT = {{ (vat_options or {}) | tojson }};
 		}
 		if (wantV && wantV !== haveV) {
 			setVal("vehicle_id", wantV);
-			vehiclePlate = ""; // the handover's label already carries the plate
+			setPlate(r.vehicle_plate);
 			setVal("vehicle", r.vehicle_label || wantV);
 		}
 		return true;
@@ -1095,7 +1129,7 @@ window.WS_VAT = {{ (vat_options or {}) | tojson }};
 	}, function (it) {
 		setVal("customer_id", it.value);
 		if (it.sub) setVal("mobile", it.sub);
-		setVal("vehicle", ""); setVal("vehicle_id", "");
+		setVal("vehicle", ""); setVal("vehicle_id", ""); setPlate("");
 		loadCustomerVehicles(it.value);
 	});
 	// Vehicle: suggest from the selected customer's vehicles only.
@@ -1108,7 +1142,7 @@ window.WS_VAT = {{ (vat_options or {}) | tojson }};
 	}, function (it) {
 		setVal("vehicle_id", it.value);
 		var picked = customerVehicles.filter(function (v) { return v.name === it.value; })[0];
-		vehiclePlate = picked ? (picked.plate || "") : "";
+		setPlate(picked ? picked.plate : "");
 	});
 	// The three fields Customer Details marks with an asterisk. Nothing enforced
 	// them, so Next or Save Draft on an untouched form wrote a job card with no
@@ -1239,7 +1273,7 @@ window.WS_VAT = {{ (vat_options or {}) | tojson }};
 			// Tab 1 — Customer Details
 			setVal("customer_id", jc.customer); setVal("customer", jc.customer_name);
 			setVal("vehicle_id", jc.vehicle); setVal("vehicle", jc.vehicle_label);
-			vehiclePlate = jc.vehicle_plate || "";
+			setPlate(jc.vehicle_plate);
 			setVal("mobile", jc.mobile_no);
 			// A card raised from a handover keeps a pointer to it. Show it, so
 			// re-opening the card says which inspection it repairs rather than
@@ -2253,7 +2287,7 @@ window.WS_VAT = {{ (vat_options or {}) | tojson }};
 		tr.innerHTML =
 			'<td>' + (cBody.children.length + 1) + '</td>' +
 			'<td><input class="cmp" placeholder="Complaint" value="' + escAttr(v.complaint || '') + '"></td>' +
-			'<td><input class="rby" placeholder="Reported by" value="' + escAttr(v.reported_by || '') + '"></td>' +
+			'<td><input class="rby" placeholder="Responsible driver" value="' + escAttr(v.reported_by || '') + '"></td>' +
 			'<td><select class="sev">' + sevOptions(v.severity || '') + '</select></td>' +
 			'<td><input class="nts" placeholder="Notes" value="' + escAttr(v.notes || '') + '"></td>' +
 			'<td><button type="button" class="icon-del"><i class="fa-solid fa-trash"></i></button></td>';
@@ -2261,14 +2295,14 @@ window.WS_VAT = {{ (vat_options or {}) | tojson }};
 		cBody.appendChild(tr); toggleEmpty(cBody, cEmpty);
 		attachReporterPicker(tr.querySelector('.rby'));
 	}
-	// Reported By suggests from everybody it is likely to be -- staff and drivers
-	// together (front_office.search_reporters) -- as it is typed. It only
-	// suggests: the field stores a name, and a reporter who is neither (the
-	// customer, a gate inspection) is still typed in by hand.
+	// Responsible Driver (stored in the complaint's `reported_by`) suggests the
+	// active Drivers (front_office.search_reporters, less the staff-only rows) as
+	// it is typed. It only suggests: the field stores a name, and "Company" --
+	// what a handover writes for damage nobody is held to -- is typed by hand.
 	function attachReporterPicker(input) {
 		attachAutocomplete(input, function (q) {
-			return callMethod("garagedesk.api.front_office.search_reporters", { search: q, limit: 12 }).then(function (rows) {
-				return (rows || []).map(function (r) {
+			return callMethod("garagedesk.api.front_office.search_reporters", { search: q, limit: 24 }).then(function (rows) {
+				return (rows || []).filter(function (r) { return (r.roles || "").indexOf("Driver") >= 0; }).slice(0, 12).map(function (r) {
 					// The list is drawn as HTML, so what it shows is escaped; the
 					// name itself rides along untouched for the input to take.
 					return { label: esc(r.name), sub: esc([r.roles, r.detail].filter(Boolean).join(" \u00b7 ")), value: r.name };
@@ -2289,6 +2323,17 @@ window.WS_VAT = {{ (vat_options or {}) | tojson }};
 			});
 		});
 		return rows.filter(function (r) { return r.complaint || r.notes; });
+	}
+	// The drivers named on the complaints, each once, for the step 4–8 line.
+	// "Company" is who answers for damage no driver is held to -- not a driver.
+	function responsibleDrivers() {
+		var seen = {}, out = [];
+		document.querySelectorAll('#complaint-body .rby').forEach(function (el) {
+			var n = el.value.trim(), k = n.toLowerCase();
+			if (!n || k === 'company' || seen[k]) return;
+			seen[k] = 1; out.push(n);
+		});
+		return out;
 	}
 
 	// ---- Readings ranges
@@ -2565,7 +2610,9 @@ window.WS_VAT = {{ (vat_options or {}) | tojson }};
 		var btn = this, win = window.open('', '_blank');
 		if (win) win.document.write('<p style="font-family:sans-serif">Preparing the quotation PDF…</p>');
 		btn.disabled = true;
-		// A submitted quotation (and a locked card) is printed as it stands.
+		// A submitted quotation (and a locked card) is printed as it stands. A
+		// locked card with no quotation yet gets one made from the cart, once --
+		// the server allows that first one so the PDF can still be had.
 		var ready = (isLocked || quote.docstatus === 1) && quote.name
 			? Promise.resolve({ name: quote.name }) : saveQuotation();
 		ready.then(function (r) {
