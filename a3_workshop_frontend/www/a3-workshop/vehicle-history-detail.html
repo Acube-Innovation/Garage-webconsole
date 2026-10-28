@@ -228,6 +228,14 @@
 	.vh-dmg-ph { width:52px; height:39px; object-fit:cover; border-radius:6px;
 		border:1px solid var(--border); display:block; cursor:zoom-in; }
 	.vh-dmg-ph:hover { border-color:var(--red); }
+	.vh-dmg-ph-wrap { position:relative; display:inline-block; }
+	.vh-dmg-ph-rm { position:absolute; top:-6px; right:-6px; width:16px; height:16px; border-radius:50%;
+		border:1px solid var(--border); background:var(--surface,#fff); color:var(--muted); font-size:9px;
+		line-height:14px; padding:0; cursor:pointer; }
+	.vh-dmg-ph-rm:hover { color:var(--red); border-color:var(--red); }
+	.vh-dmg-ph-add { border:1px dashed var(--border); background:none; color:var(--muted); border-radius:6px;
+		width:52px; height:39px; cursor:pointer; }
+	.vh-dmg-ph-add:hover { border-color:var(--red); color:var(--red); }
 	.vh-jc-item + .vh-jc-item { margin-top:3px; }
 	.vh-jc-for { font-size:11px; }
 	/* Service jobs: one table, each row naming the damage it repairs. */
@@ -239,6 +247,66 @@
 		background:#eef4ff; color:#1b4fd6; border:1px solid #cfe0ff; border-radius:6px; padding:3px 8px;
 		cursor:pointer; white-space:nowrap; }
 	.vh-labor-code.is-empty { background:transparent; color:var(--muted); border-style:dashed; font-weight:500; }
+	/* Labor Time Kit off: + Labour / + Part / + Sublet on each service row, its lines
+	   beneath it -- the Create Job Card wizard's look: Labour blue, Part green, Sublet amber. */
+	.row-add { display:flex; gap:4px; flex-wrap:wrap; }
+	.row-add button { --k:var(--muted); display:inline-flex; align-items:center; gap:4px; font-size:11px; font-weight:600;
+		padding:3px 8px; border:1px solid var(--border); border-radius:999px; background:var(--surface);
+		color:var(--k); cursor:pointer; white-space:nowrap; transition:background .12s, border-color .12s; }
+	.row-add button i { font-size:9px; }
+	.row-add button[data-add-line="labor"] { --k:var(--blue); }
+	.row-add button[data-add-line="parts"] { --k:#16a34a; }
+	.row-add button[data-add-line="sublet"] { --k:#d97706; }
+	.row-add button:hover { border-color:var(--k); background:color-mix(in srgb, var(--k) 8%, transparent); }
+	.row-add button .n { min-width:16px; padding:0 4px; border-radius:999px; background:var(--k); color:#fff; font-size:10px; line-height:16px; text-align:center; }
+	.row-add button .n:empty { display:none; }
+	#vh-svc-body tr.has-lines > td { border-bottom-color:transparent; }
+	#vh-svc-body tr.svc-lines > td { padding:0 4px 12px; }
+	.row-lines { background:var(--surface); border:1px solid var(--border); border-left:3px solid var(--navy);
+		border-radius:10px; padding:4px 12px 8px; }
+	.row-lines .rl-grp + .rl-grp { border-top:1px dashed var(--border); }
+	.row-lines .rl-title { display:flex; align-items:center; gap:6px; margin:10px 0 2px; font-size:11px; font-weight:700;
+		letter-spacing:.04em; text-transform:uppercase; color:var(--k); }
+	.row-lines .rl-title .n { color:var(--muted); font-weight:600; letter-spacing:0; }
+	.row-lines .rl-grp[data-g="labor"] { --k:var(--blue); }
+	.row-lines .rl-grp[data-g="parts"] { --k:#16a34a; }
+	.row-lines .rl-grp[data-g="sublet"] { --k:#d97706; }
+	.row-lines table { width:100%; table-layout:fixed; border-collapse:collapse; }
+	.row-lines .table thead th { background:transparent; color:var(--muted); font-size:10px; font-weight:600;
+		letter-spacing:.04em; padding:6px 6px 4px; border-radius:0; border-bottom:1px solid var(--border); }
+	.row-lines .table tbody td { padding:5px 6px; border-bottom:none; }
+	.row-lines .table tbody tr:hover { background:transparent; }
+	.row-lines .table input, .row-lines .table select { width:100%; height:32px; padding:5px 8px; border:1px solid var(--border);
+		background:var(--surface); font-size:12.5px; border-radius:7px; box-sizing:border-box; }
+	.row-lines input[type=number] { -moz-appearance:textfield; appearance:textfield; text-align:right; }
+	.row-lines input[type=number]::-webkit-inner-spin-button, .row-lines input[type=number]::-webkit-outer-spin-button { -webkit-appearance:none; margin:0; }
+	.row-lines .rl-foot { display:flex; justify-content:flex-end; align-items:center; gap:10px; margin-top:8px;
+		padding-top:8px; border-top:1px solid var(--border); }
+	.row-lines .rl-foot .rl-msg { margin-right:auto; font-size:12px; color:var(--red); }
+	/* Saved: the row's lines fold into one line, opened again with Edit. */
+	.row-lines.is-collapsed { display:flex; align-items:center; gap:14px; padding:8px 12px; cursor:pointer; }
+	.row-lines.is-collapsed:hover { background:var(--bg); }
+	.rl-sum { display:flex; flex-wrap:wrap; gap:6px 14px; font-size:12.5px; color:var(--text); flex:1; }
+	.rl-sum .k, .vh-lines-tot .k { font-weight:700; color:var(--k, var(--muted)); }
+	[data-k="labor"] { --k:var(--blue); } [data-k="parts"] { --k:#16a34a; } [data-k="sublet"] { --k:#d97706; }
+	.rl-sum .rl-total { margin-left:auto; font-weight:700; }
+	.rl-saved { font-size:11.5px; color:#16a34a; white-space:nowrap; }
+	/* The plan's labour / parts / sublet together, under the services. */
+	.vh-lines { margin-top:10px; border:1px solid var(--border); border-radius:10px; background:var(--surface); }
+	.vh-lines__head { display:flex; align-items:center; gap:12px; width:100%; padding:11px 14px; border:0; background:none;
+		cursor:pointer; text-align:left; font:inherit; color:var(--text); }
+	.vh-lines__head .t { font-weight:700; color:var(--red); }
+	.vh-lines__head .chev { color:var(--muted); font-size:11px; transition:transform .15s; }
+	.vh-lines__head[aria-expanded="true"] .chev { transform:rotate(90deg); }
+	.vh-lines-tot { display:flex; flex-wrap:wrap; gap:6px 16px; margin-left:auto; font-size:12.5px; }
+	.vh-lines-tot .grand { font-weight:700; }
+	.vh-lines__body { padding:0 14px 12px; }
+	.vh-lines__body h5 { margin:10px 0 4px; font-size:11px; letter-spacing:.04em; text-transform:uppercase; color:var(--k); }
+	.vh-lines__body table { width:100%; border-collapse:collapse; font-size:12px; }
+	.vh-lines__body th { text-align:left; font-size:10px; color:var(--muted); font-weight:600; padding:5px 6px; border-bottom:1px solid var(--border); background:var(--bg); }
+	.vh-lines__body td { padding:5px 6px; border-bottom:1px solid var(--border); }
+	.vh-lines__body .num { text-align:right; } .vh-lines__body td.svc { color:var(--muted); }
+	.vh-lines__body tfoot td { font-weight:700; border-bottom:0; }
 	.vh-tech-cell { display:flex; align-items:center; gap:6px; }
 	.vh-tech-pick { flex:0 0 auto; border:1px solid var(--border); background:var(--surface); border-radius:6px;
 		padding:5px 8px; cursor:pointer; color:var(--red); line-height:1; }
@@ -774,6 +842,10 @@
 	var SUPPLIERS = [], SKILLS = [];
 	var LTS_BY_SERVICE = {}, LTS_LABEL = {};
 	var optionsLoaded = null;
+	// Labor Time Kit switched on in Workshop Settings. Off: no standard and no kit
+	// popup per service -- each row has + Labour / + Part / + Sublet of its own.
+	var KIT_ENABLED = true;
+	function newRowKey() { return "r" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
 	function loadJobCardOptions() {
 		if (optionsLoaded) return optionsLoaded;
 		optionsLoaded = callMethod("garagedesk.api.front_office.get_job_card_options", {})
@@ -786,6 +858,7 @@
 				PART_GROUPS = o.part_groups || [];
 				SUPPLIERS = o.suppliers || [];
 				SKILLS = o.skill_levels || [];
+				KIT_ENABLED = o.kit_enabled !== false;
 				LTS_BY_SERVICE = {}; LTS_LABEL = {};
 				(o.labor_standards || []).forEach(function (s) {
 					if (s.operation_name && !LTS_BY_SERVICE[s.operation_name]) LTS_BY_SERVICE[s.operation_name] = s.name;
@@ -830,17 +903,79 @@
 			'<td><select class="c-sev"' + dis + ">" + opts(cmpOpts.severities, d.severity) + "</select></td>" +
 			'<td><input class="c-desc" placeholder="What you can see" value="' + esc(d.description || "") + '"' + dis + "></td>" +
 			'<td><select class="c-resp"' + dis + ">" + respOptions(key) + "</select></td>" +
-			'<td class="c-photo">' + (d.photo
-				? '<img class="vh-dmg-ph" src="' + escAttr(d.photo) + '" alt="Damage photo" title="Open the photo" data-zoom="' +
-				  escAttr(d.photo) + '">'
-				: '<span class="muted">—</span>') + "</td>" +
+			'<td class="c-photo"></td>' +
 			"<td>" + (locked ? jcLink(d.job_card) : '<span class="muted">—</span>') + "</td>" +
 			'<td style="width:32px">' + (locked ? "" :
 				'<button type="button" class="vh-cmp-rm" title="Remove"><i class="fa-solid fa-xmark"></i></button>') + "</td>";
 		if (!locked) tr.querySelector(".vh-cmp-rm").addEventListener("click", function () { tr.remove(); cmpSync(); });
+		// The walk-round row's shot, unless a photo was added on this row itself.
+		tr.dataset.ownPhoto = d.own_photo || "";
+		tr.dataset.srcPhoto = d.own_photo ? "" : (d.photo || "");
+		renderDmgPhoto(tr, locked);
 		tr.classList.toggle("is-picked", isPicked(tr));
 		tb.appendChild(tr);
 		cmpSync();
+	}
+
+	// A damage row's photo cell: the photo (click to zoom), and on an open row a
+	// button to add one -- a Vehicle Damage Line added here has no walk-round
+	// shot behind it -- or to remove the one added.
+	function renderDmgPhoto(tr, locked) {
+		var td = tr.querySelector(".c-photo");
+		var own = tr.dataset.ownPhoto || "", url = own || tr.dataset.srcPhoto || "";
+		td.innerHTML = url
+			? '<span class="vh-dmg-ph-wrap"><img class="vh-dmg-ph" src="' + escAttr(url) +
+			  '" alt="Damage photo" title="Open the photo" data-zoom="' + escAttr(url) + '">' +
+			  (own && !locked ? '<button type="button" class="vh-dmg-ph-rm" title="Remove this photo"><i class="fa-solid fa-xmark"></i></button>' : "") +
+			  "</span>"
+			: locked
+			? '<span class="muted">—</span>'
+			: '<button type="button" class="vh-dmg-ph-add" title="Add a damage photo"><i class="fa-solid fa-camera"></i></button>' +
+			  '<input type="file" accept="image/*" style="display:none">';
+		var rm = td.querySelector(".vh-dmg-ph-rm");
+		if (rm) rm.addEventListener("click", function (e) {
+			e.stopPropagation();
+			tr.dataset.ownPhoto = "";
+			renderDmgPhoto(tr, locked);
+		});
+		var add = td.querySelector(".vh-dmg-ph-add"), pick = td.querySelector('input[type="file"]');
+		if (!add) return;
+		add.addEventListener("click", function () { pick.click(); });
+		pick.addEventListener("change", function () {
+			var f = pick.files && pick.files[0];
+			if (!f || !cmpHandover) return;
+			add.disabled = true;
+			add.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+			uploadDamagePhoto(f, cmpHandover).then(function (url) {
+				tr.dataset.ownPhoto = url;
+				renderDmgPhoto(tr, locked);
+			}).catch(function (err) {
+				vhAlert("Could not upload the photo", esc(err && err.message ? err.message : String(err)));
+				renderDmgPhoto(tr, locked);
+			});
+		});
+	}
+	// Uploaded against the handover at once (it already exists); the row keeps
+	// the file's url and save_comparison stores it on the Vehicle Damage Line.
+	function uploadDamagePhoto(f, handover) {
+		var fd = new FormData();
+		fd.append("file", f, f.name);
+		fd.append("is_private", 0);
+		fd.append("folder", "Home/Attachments");
+		fd.append("doctype", "Driver Vehicle Handover");
+		fd.append("docname", handover);
+		return fetch("/api/method/upload_file", {
+			method: "POST",
+			headers: { "X-Frappe-CSRF-Token": window.csrf_token || "", "Accept": "application/json" },
+			body: fd
+		}).then(function (r) {
+			return r.json().then(function (data) {
+				if (!r.ok || !data.message || !data.message.file_url) {
+					throw new Error(cleanError((data && data._server_messages) || (data && data.exc) || r.statusText));
+				}
+				return data.message.file_url;
+			});
+		});
 	}
 
 	function rowKey(tr) { return (tr.querySelector(".c-resp") || {}).value || ""; }
@@ -870,7 +1005,8 @@
 				// Which diff line the row came from, and the card repairing it —
 				// the server keeps a carded row as stored whatever is sent here.
 				source_key: tr.dataset.sourceKey || "",
-				job_card: tr.dataset.jobCard || ""
+				job_card: tr.dataset.jobCard || "",
+				photo: tr.dataset.ownPhoto || ""
 			});
 		});
 		return out;
@@ -997,7 +1133,10 @@
 	var kitLabor = [], kitParts = [], kitSublet = []; // committed kit lines
 
 	function svcBody() { return document.getElementById("vh-svc-body"); }
-	function svcRows() { return svcBody() ? Array.prototype.slice.call(svcBody().children) : []; }
+	// Each service row is followed by its own lines row (Labor Time Kit off).
+	function svcRows() {
+		return svcBody() ? Array.prototype.filter.call(svcBody().children, function (tr) { return !tr.classList.contains("svc-lines"); }) : [];
+	}
 	function dmgRows() { return Array.prototype.slice.call(document.querySelectorAll("#vh-cmp-dmg tr")); }
 	function dmgRow(ref) {
 		return ref ? dmgRows().filter(function (tr) { return tr.dataset.ref === ref; })[0] : null;
@@ -1053,6 +1192,8 @@
 		var tb = svcBody(); if (!tb) return;
 		var tr = document.createElement("tr");
 		tr.dataset.labour = v.labour_service_code || "";
+		// Ties the row's own labour / part / sublet lines to it (Labor Time Kit off).
+		tr.dataset.rowKey = v.row_key || (KIT_ENABLED ? "" : newRowKey());
 		// Technicians are assigned in the job card's Task Preview; the row only carries the value through.
 		tr.dataset.tech = v.technician || "";
 		tr.innerHTML =
@@ -1062,16 +1203,28 @@
 				'<input type="text" class="svc-input" placeholder="Type a Job Type Service…" autocomplete="off" value="' +
 				escAttr(serviceLabel(v.service || "")) + '">' +
 				'<input type="hidden" class="svc" value="' + escAttr(v.service || "") + '"></div></td>' +
-			'<td><span class="vh-labor-code is-empty" data-labor-code>—</span></td>' +
+			(KIT_ENABLED
+				? '<td><span class="vh-labor-code is-empty" data-labor-code>—</span></td>'
+				: '<td><div class="row-add">' +
+					'<button type="button" data-add-line="labor" title="Add a labour line"><i class="fa-solid fa-plus"></i> Labour <span class="n"></span></button>' +
+					'<button type="button" data-add-line="parts" title="Add a part"><i class="fa-solid fa-plus"></i> Part <span class="n"></span></button>' +
+					'<button type="button" data-add-line="sublet" title="Add sublet work"><i class="fa-solid fa-plus"></i> Sublet <span class="n"></span></button></div></td>') +
 			'<td><input class="vh-desc" placeholder="Description" value="' + escAttr(v.description || "") + '"></td>' +
 			'<td><input class="vh-hrs" type="number" min="0" step="any" value="' +
 				(v.hours != null && v.hours !== "" ? v.hours : 1) + '"></td>' +
 			'<td style="width:32px"><button type="button" class="vh-cmp-rm" title="Remove"><i class="fa-solid fa-xmark"></i></button></td>';
 		tr.querySelector(".vh-cmp-rm").addEventListener("click", function () {
 			var std = tr.dataset.labour || "";
+			dropRowLines(tr);
 			tr.remove(); cleanupKitForStandard(std); cmpSync();
 		});
 		tb.appendChild(tr);
+		if (!KIT_ENABLED) {
+			var lt = document.createElement("tr");
+			lt.className = "svc-lines"; lt.style.display = "none";
+			lt.innerHTML = '<td colspan="7"></td>';
+			tb.appendChild(lt);
+		}
 		renderLaborCode(tr);
 		attachServiceAutocomplete(tr);
 		if (!quiet) cmpSync();
@@ -1087,6 +1240,7 @@
 			var ref = svcIssue(tr), dmg = dmgRow(ref);
 			if (ref && (!dmg || dmg.dataset.jobCard)) {
 				var std = tr.dataset.labour || "";
+				dropRowLines(tr);
 				tr.remove();
 				cleanupKitForStandard(std);
 			}
@@ -1095,7 +1249,7 @@
 		// typed in stays, hidden, so ticking the damage again brings it back.
 		svcRows().forEach(function (tr) {
 			var dmg = dmgRow(svcIssue(tr));
-			if (dmg && !isPicked(dmg) && !svcPlanned(tr)) tr.remove();
+			if (dmg && !isPicked(dmg) && !svcPlanned(tr)) { dropRowLines(tr); tr.remove(); }
 		});
 		dmgRows().forEach(function (dmg) {
 			if (!isPicked(dmg) || !rowFilled(dmg)) return;
@@ -1157,17 +1311,6 @@
 			markSvcUnsaved(tr);
 		});
 	}
-	// A job card holds each service once, so a service may repeat across
-	// parties — their cards are separate — but not within one party's damage.
-	// Returns the row already holding it for the same party, if any.
-	function serviceAlreadyUsed(service, exceptTr) {
-		if (!service) return null;
-		var mine = dmgRow(svcIssue(exceptTr)), party = mine ? rowKey(mine) : null;
-		return svcRows().filter(function (tr) {
-			var sv = svcHidden(tr), dmg = dmgRow(svcIssue(tr));
-			return tr !== exceptTr && sv && sv.value === service && dmg && rowKey(dmg) === party;
-		})[0] || null;
-	}
 	function clearRowService(tr, keepText) {
 		var hidden = svcHidden(tr), input = svcInput(tr);
 		if (hidden) hidden.value = "";
@@ -1185,22 +1328,10 @@
 		var hidden = svcHidden(tr), input = svcInput(tr);
 		var prev = tr.dataset.labour || "";
 		label = label || serviceLabel(name);
-		var twin = name && serviceAlreadyUsed(name, tr);
-		if (twin) {
-			var dmg = dmgRow(svcIssue(twin));
-			vhAlert("Job Type Service already planned", "<b>" + esc(label) + "</b> is already planned for <b>" +
-				esc(respLabel(rowKey(dmg))) + "</b>’s damage (" + esc(issueLabel(dmg)) + ").<br><br>" +
-				"A Workshop Job Card holds each Job Type Service once — describe both Vehicle Damage Lines on that row.");
-			if (input) input.value = "";
-			if (hidden) hidden.value = "";
-			setRowLaborCode(tr, "");
-			if (prev) cleanupKitForStandard(prev);
-			markSvcUnsaved(tr);
-			return;
-		}
 		if (hidden) hidden.value = name || "";
 		if (input) input.value = label || "";
 		markSvcUnsaved(tr);
+		if (!KIT_ENABLED) { cmpSync(); return; } // lines are added on the row itself
 		var standard = name ? (LTS_BY_SERVICE[name] || "") : "";
 		setRowLaborCode(tr, standard);
 		if (prev && prev !== standard) cleanupKitForStandard(prev);
@@ -1217,7 +1348,7 @@
 	}
 	function standardStillUsed(standard) {
 		if (!standard || !svcBody()) return true;
-		return Array.prototype.some.call(svcBody().children, function (tr) {
+		return svcRows().some(function (tr) {
 			return (tr.dataset.labour || "") === standard;
 		});
 	}
@@ -1241,7 +1372,8 @@
 				labour_service_code: tr.dataset.labour || "",
 				description: (tr.querySelector(".vh-desc") || {}).value || "",
 				technician: tr.dataset.tech || "",
-				hours: (tr.querySelector(".vh-hrs") || {}).value || 0
+				hours: (tr.querySelector(".vh-hrs") || {}).value || 0,
+				row_key: tr.dataset.rowKey || ""
 			});
 		});
 		return out;
@@ -1249,9 +1381,15 @@
 	// Kit belongs to a service through its standard, as on the job card; kit
 	// typed for a service with no standard goes wherever such a service goes.
 	function kitFor(services) {
-		var std = {}, loose = false;
-		services.forEach(function (s) { if (s.labour_service_code) std[s.labour_service_code] = 1; else loose = true; });
-		function used(r) { return r.source_standard ? !!std[r.source_standard] : loose; }
+		var std = {}, keys = {}, loose = false;
+		services.forEach(function (s) {
+			if (s.row_key) keys[s.row_key] = 1;
+			if (s.labour_service_code) std[s.labour_service_code] = 1; else loose = true;
+		});
+		function used(r) {
+			if (r.row_key) return !!keys[r.row_key];
+			return r.source_standard ? !!std[r.source_standard] : loose;
+		}
 		return { labor: kitLabor.filter(used), parts: kitParts.filter(used), sublet: kitSublet.filter(used) };
 	}
 	// The tally follows the filter: under one party it is that party's card.
@@ -1260,6 +1398,17 @@
 	// standard takes it, as the kit is held once per standard. Rows with no
 	// kit labour keep whatever was typed.
 	function syncServiceHours(rows, hrsSel) {
+		if (!KIT_ENABLED) {
+			// A row's Hrs is the total of the labour lines added on it.
+			Array.prototype.forEach.call(rows, function (tr) {
+				var key = tr.dataset.rowKey; if (!key) return;
+				var mine = kitLabor.filter(function (r) { return r.row_key === key; });
+				var hrs = tr.querySelector(hrsSel);
+				if (!mine.length || !hrs) return;
+				hrs.value = Math.round(mine.reduce(function (s, r) { return s + (parseFloat(r.hours) || 0); }, 0) * 100) / 100;
+			});
+			return;
+		}
 		var total = {};
 		kitLabor.forEach(function (r) {
 			if (r.source_standard) total[r.source_standard] = (total[r.source_standard] || 0) + (parseFloat(r.hours) || 0);
@@ -1279,6 +1428,7 @@
 		var k = cmpFilter === null ? { labor: kitLabor, parts: kitParts, sublet: kitSublet }
 			: kitFor(cmpServiceRows(shownServiceRows()));
 		var n = k.labor.length + k.parts.length + k.sublet.length;
+		if (!KIT_ENABLED) { syncRowLines(); renderLinesTotals(el, k); return; }
 		el.innerHTML = n
 			? '<i class="fa-solid fa-box"></i> Labor Time Standard components' + (cmpFilter === null ? "" : " on this Workshop Job Card") +
 			  ": <b>" + k.labor.length + "</b> labor · <b>" + k.parts.length + "</b> parts · <b>" +
@@ -1360,19 +1510,6 @@
 				html += '<div class="vh-cmp-sec"><h4 class="has-btn">Vehicle Damage Lines' +
 					'<button type="button" class="btn btn--outline btn--sm vh-h4-btn" id="vh-dmg-add">' +
 					'<i class="fa-solid fa-plus"></i> Add Vehicle Damage Line</button></h4>' +
-					(c.prefilled
-						? '<div class="vh-cmp-note">Filled in from the <b>' + (c.damages || []).length +
-						  " new Vehicle Damage Line" + ((c.damages || []).length === 1 ? "" : "s") +
-						  "</b> this Driver Vehicle Handover found. Correct anything that is wrong, then save.</div>"
-						: "") +
-					(c.carried_open
-						? '<div class="vh-cmp-note"><i class="fa-solid fa-circle-info"></i> <b>' +
-						  c.carried_open + "</b> older Vehicle Damage Line" + (c.carried_open === 1 ? "" : "s") +
-						  " still open on this vehicle " + (c.carried_open === 1 ? "is" : "are") +
-						  " not listed here — " + (c.carried_open === 1 ? "its" : "their") +
-						  " Workshop Job Card is raised from the Vehicle Damage Lines of the Driver Vehicle Handover that first found " +
-						  (c.carried_open === 1 ? "it" : "them") + ".</div>"
-						: "") +
 					'<div class="vh-resp-chips" id="vh-resp-chips"></div>' +
 					'<table class="vh-cmp-tbl"><thead><tr>' +
 					'<th class="c-pick"><input type="checkbox" id="vh-sel-all" title="Tick every open Vehicle Damage Line showing"></th>' +
@@ -1388,9 +1525,9 @@
 					'<button type="button" class="btn btn--outline btn--sm vh-h4-btn" id="vh-svc-add">' +
 					'<i class="fa-solid fa-plus"></i> Add</button></h4>' +
 					'<div class="vh-cmp-note" id="vh-svc-note"></div>' +
-					'<table class="vh-cmp-tbl vh-svc-tbl"><thead><tr><th style="width:19%">Vehicle Damage Line</th>' +
-					'<th style="width:14%">Jobcard Type</th><th style="width:17%">Job Type Service</th>' +
-					'<th style="width:11%">Labor Time Standard</th><th>Description</th>' +
+					'<table class="vh-cmp-tbl vh-svc-tbl"><thead><tr><th style="width:' + (KIT_ENABLED ? 19 : 16) + '%">Vehicle Damage Line</th>' +
+					'<th style="width:' + (KIT_ENABLED ? 14 : 12) + '%">Jobcard Type</th><th style="width:' + (KIT_ENABLED ? 17 : 15) + '%">Job Type Service</th>' +
+					(KIT_ENABLED ? '<th style="width:11%">Labor Time Standard</th>' : '<th style="width:250px">Add</th>') + '<th>Description</th>' +
 					'<th style="width:80px">Hrs</th><th></th></tr></thead>' +
 					'<tbody id="vh-svc-body"></tbody></table>' +
 					'<div class="vh-kit-sum" id="vh-kit-sum"></div></div>';
@@ -1419,6 +1556,10 @@
 				kitLabor = (c.kit_labor || []).map(function (r) { return buildKitRow("labor", r); });
 				kitParts = (c.kit_parts || []).map(function (r) { return buildKitRow("parts", r); });
 				kitSublet = (c.kit_sublet || []).map(function (r) { return buildKitRow("sublet", r); });
+				if (!KIT_ENABLED) {
+					if (kitLabor.length || kitParts.length) ensureKitItems();
+					svcRows().forEach(function (tr) { tr.dataset.collapsed = "1"; renderRowLinesOnly(tr); });
+				}
 				renderKitSummary();
 				cmpSync();
 			})
@@ -1460,6 +1601,7 @@
 			addServiceRow({ damage: first ? first.dataset.ref : "" });
 			return;
 		}
+		if (rowLinesClick(e)) return;
 		var chip = e.target.closest("[data-labor-code]");
 		if (chip) {
 			var row = chip.closest("tr");
@@ -1489,6 +1631,291 @@
 		} else if (e.target.matches(".vh-jt-sel")) clearRowService(e.target.closest("tr"));
 		else if (e.target.matches(".c-area, .c-type, .c-desc, .c-resp, .vh-issue")) cmpSync();
 	});
+
+	// ------------------------------------------------- a row's own lines (Labor Time Kit off)
+	// The Create Job Card wizard's layout: + Labour / + Part / + Sublet add a line
+	// in a panel under the row; Save keeps the plan and folds the row into a
+	// one-line summary, opened again with Edit.
+	function linesRowOf(tr) {
+		var n = tr && tr.nextElementSibling;
+		return n && n.classList.contains("svc-lines") ? n : null;
+	}
+	function rowLineArr(g) { return g === "labor" ? kitLabor : g === "parts" ? kitParts : kitSublet; }
+	function fmtNum(v) { return String(Math.round((parseFloat(v) || 0) * 100) / 100); }
+	function fmtMoney(v) {
+		return "AED " + (parseFloat(v) || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+	}
+	function sublSell(r) { return (parseFloat(r.qty) || 1) * (parseFloat(r.cost) || 0) * (1 + (parseFloat(r.markup_pct) || 0) / 100); }
+	// Title, then [column, width] -- "" takes what is left.
+	var ROW_LINE_HEADS = {
+		labor: ["Labour", [["Item", "24%"], ["Description", ""], ["Hours", "70px"], ["Rate", "86px"], ["Skill", "100px"]]],
+		parts: ["Parts", [["Item", ""], ["Qty", "70px"], ["UOM", "100px"], ["Rate", "86px"]]],
+		sublet: ["Sublet", [["Item", "20%"], ["Qty", "60px"], ["Service", ""], ["Vendor", "20%"], ["Cost / unit", "86px"], ["Markup %", "76px"]]]
+	};
+	function renderRowLinesOnly(tr) {
+		var lt = linesRowOf(tr); if (!lt) return;
+		var key = tr.dataset.rowKey, html = "", groups = [];
+		["labor", "parts", "sublet"].forEach(function (g) {
+			var mine = rowLineArr(g).filter(function (r) { return r.row_key === key; });
+			if (!mine.length) return;
+			var head = ROW_LINE_HEADS[g];
+			html += '<div class="rl-grp" data-g="' + g + '"><div class="rl-title">' + head[0] + ' <span class="n">' + mine.length + "</span></div>" +
+				'<table class="table editable"><colgroup>' +
+				head[1].map(function (h) { return "<col" + (h[1] ? ' style="width:' + h[1] + '"' : "") + ">"; }).join("") + '<col style="width:30px"></colgroup>' +
+				"<thead><tr>" + head[1].map(function (h) { return "<th>" + esc(h[0]) + "</th>"; }).join("") + "<th></th></tr></thead>" +
+				'<tbody data-g="' + g + '">' + mine.map(function (r) { return kitEditRow(g, r); }).join("") + "</tbody></table></div>";
+			groups.push([g, mine]);
+		});
+		tr.classList.toggle("has-lines", !!html);
+		["labor", "parts", "sublet"].forEach(function (g) {
+			var n = tr.querySelector('[data-add-line="' + g + '"] .n');
+			var c = groups.filter(function (p) { return p[0] === g; })[0];
+			if (n) n.textContent = c ? c[1].length : "";
+		});
+		lt.style.display = html && tr.style.display !== "none" ? "" : "none";
+		if (html && tr.dataset.collapsed === "1") {
+			lt.firstElementChild.innerHTML = '<div class="row-lines is-collapsed" data-rl-edit title="Click to edit">' +
+				rowLinesSummary(groups) + '<span class="rl-saved"><i class="fa-solid fa-check"></i> Saved</span>' +
+				'<button type="button" class="btn btn--outline btn--sm" data-rl-edit><i class="fa-solid fa-pen"></i> Edit</button></div>';
+			return;
+		}
+		lt.firstElementChild.innerHTML = html ? '<div class="row-lines">' + html +
+			'<div class="rl-foot"><span class="rl-msg"></span>' +
+			'<button type="button" class="btn btn--primary btn--sm" data-rl-save><i class="fa-solid fa-floppy-disk"></i> Save</button></div></div>' : "";
+		// Each line's object rides on its <tr>, so edits are written back to it.
+		groups.forEach(function (p) {
+			var tb = lt.querySelector('tbody[data-g="' + p[0] + '"]');
+			Array.prototype.forEach.call(tb.children, function (row, i) { row._rowLine = p[1][i]; row.dataset.g = p[0]; });
+		});
+		lt.querySelectorAll(".ke-item").forEach(attachKitItemAutocomplete);
+		lt.querySelectorAll(".ke-uom").forEach(attachUomAutocomplete);
+		lt.querySelectorAll(".ke-op").forEach(attachLabourItemAutocomplete);
+		lt.querySelectorAll(".ke-vendor").forEach(attachVendorAutocomplete);
+		lt.querySelectorAll(".ke-sitem").forEach(attachSubletItemAutocomplete);
+	}
+	// One line for a folded row: what it holds and what it comes to.
+	function rowLinesSummary(groups) {
+		var bits = [], total = 0;
+		groups.forEach(function (p) {
+			var g = p[0], rows = p[1];
+			if (g === "labor") {
+				var h = rows.reduce(function (s, r) { return s + (parseFloat(r.hours) || 0); }, 0);
+				total += rows.reduce(function (s, r) { return s + (parseFloat(r.hours) || 0) * (parseFloat(r.rate) || 0); }, 0);
+				bits.push('<span data-k="labor"><span class="k">Labour</span> ' + rows.length + " · " + fmtNum(h) + " h</span>");
+			} else if (g === "parts") {
+				total += rows.reduce(function (s, r) { return s + (parseFloat(r.qty) || 0) * (parseFloat(r.rate) || 0); }, 0);
+				bits.push('<span data-k="parts"><span class="k">Parts</span> ' + rows.map(function (r) {
+					return fmtNum(r.qty) + " × " + esc(r.item_name || itemNameOf(r.item_code) || r.item_code);
+				}).join(", ") + "</span>");
+			} else {
+				total += rows.reduce(function (s, r) { return s + sublSell(r); }, 0);
+				bits.push('<span data-k="sublet"><span class="k">Sublet</span> ' + rows.map(function (r) {
+					return esc(r.service_description || r.item_name || "Sublet work");
+				}).join(", ") + "</span>");
+			}
+		});
+		return '<div class="rl-sum">' + bits.join("") + '<span class="rl-total">' + fmtMoney(total) + "</span></div>";
+	}
+	// The counts on the buttons, and which lines rows show (a row hidden by the
+	// party filter hides its lines too) -- without redrawing what is being typed.
+	function syncRowLines() {
+		svcRows().forEach(function (tr) {
+			var lt = linesRowOf(tr); if (!lt) return;
+			var key = tr.dataset.rowKey, any = false;
+			["labor", "parts", "sublet"].forEach(function (g) {
+				var m = rowLineArr(g).filter(function (r) { return r.row_key === key; }).length;
+				var n = tr.querySelector('[data-add-line="' + g + '"] .n');
+				if (n) n.textContent = m || "";
+				if (m) any = true;
+			});
+			tr.classList.toggle("has-lines", any);
+			lt.style.display = any && tr.style.display !== "none" ? "" : "none";
+		});
+	}
+	// A line with nothing in it is a row added and never filled: dropped. One half
+	// filled is reported -- the card would refuse it without its key field.
+	function lineEmpty(g, r) {
+		if (g === "labor") return !(r.description || "").trim() && !r.operation && !(parseFloat(r.rate) || 0);
+		if (g === "parts") return !r.item_code && !(parseFloat(r.rate) || 0);
+		return !(r.service_description || "").trim() && !r.item_code && !r.vendor && !(parseFloat(r.cost) || 0);
+	}
+	function pruneEmptyLines(key) {
+		["labor", "parts", "sublet"].forEach(function (g) {
+			var arr = rowLineArr(g);
+			for (var i = arr.length - 1; i >= 0; i--) if (arr[i].row_key === key && lineEmpty(g, arr[i])) arr.splice(i, 1);
+		});
+	}
+	function rowLineGaps(key) {
+		var gaps = [];
+		// An Item the list does not know is dropped by the server, so it is asked for here.
+		var known = function (code) { return !KIT_ITEMS.length || KIT_ITEMS.some(function (it) { return it.item === code; }); };
+		kitLabor.forEach(function (r) {
+			if (r.row_key !== key) return;
+			if (!(r.description || "").trim()) gaps.push("a labour line needs its Description");
+			if (!r.operation) gaps.push("a labour line needs its Item");
+			else if (!known(r.operation)) gaps.push('labour Item "' + r.operation + '" is not an Item - pick it from the list or create it');
+		});
+		kitParts.forEach(function (r) {
+			if (r.row_key !== key) return;
+			if (!r.item_code) gaps.push("a part needs its Item");
+			else if (!known(r.item_code)) gaps.push('part Item "' + r.item_code + '" is not an Item - pick it from the list or create it');
+		});
+		kitSublet.forEach(function (r) { if (r.row_key === key && !(r.service_description || "").trim()) gaps.push("a sublet line needs its Service"); });
+		return gaps.filter(function (g, i) { return gaps.indexOf(g) === i; });
+	}
+	// What the row-line inputs hold, written back onto their line objects.
+	function collectRowLines() {
+		if (KIT_ENABLED || !svcBody()) return;
+		svcBody().querySelectorAll(".row-lines tr[data-g]").forEach(function (row) {
+			var r = row._rowLine, g = row.dataset.g; if (!r) return;
+			function v(sel) { var el = row.querySelector(sel); return el ? el.value : ""; }
+			if (g === "labor") {
+				r.description = v(".ke-desc"); r.operation = itemCodeOf(row.querySelector(".ke-op"), true);
+				r.hours = v(".ke-hours"); r.rate = v(".ke-rate"); r.skill_level = v(".ke-skill");
+			} else if (g === "parts") {
+				var code = itemCodeOf(row.querySelector(".ke-item"));
+				r.item_code = code; r.item_name = itemNameOf(code) || v(".ke-item").trim();
+				r.qty = v(".ke-qty"); r.uom = v(".ke-uom"); r.rate = v(".ke-rate");
+			} else {
+				r.item_code = itemCodeOf(row.querySelector(".ke-sitem"), true); r.item_name = itemNameOf(r.item_code);
+				r.qty = v(".ke-sqty"); r.service_description = v(".ke-desc");
+				r.vendor = vendorCodeOf(row.querySelector(".ke-vendor"));
+				r.cost = v(".ke-cost"); r.markup_pct = v(".ke-markup");
+			}
+		});
+	}
+	// Add / Edit / Save / delete on a row's lines; true when the click was one of them.
+	function rowLinesClick(e) {
+		var add = e.target.closest("[data-add-line]");
+		if (add) {
+			var tr = add.closest("tr"), g = add.dataset.addLine;
+			if (!tr.dataset.rowKey) tr.dataset.rowKey = newRowKey();
+			collectRowLines();
+			tr.dataset.collapsed = "0";
+			ensureKitItems();
+			var line = buildKitRow(g, g === "labor" ? { hours: 1 } : g === "parts" ? { qty: 1 } : {});
+			line.row_key = tr.dataset.rowKey;
+			rowLineArr(g).push(line);
+			renderRowLinesOnly(tr);
+			renderKitSummary();
+			var tb = linesRowOf(tr).querySelector('tbody[data-g="' + g + '"]');
+			var first = tb && tb.lastElementChild.querySelector("input");
+			if (first) first.focus();
+			return true;
+		}
+		var edit = e.target.closest("[data-rl-edit]");
+		if (edit) {
+			var etr = edit.closest("tr.svc-lines").previousElementSibling;
+			etr.dataset.collapsed = "0";
+			renderRowLinesOnly(etr);
+			return true;
+		}
+		var save = e.target.closest("[data-rl-save]");
+		if (save) {
+			var str = save.closest("tr.svc-lines").previousElementSibling;
+			collectRowLines();
+			pruneEmptyLines(str.dataset.rowKey);
+			var gaps = rowLineGaps(str.dataset.rowKey);
+			// A row with no Jobcard Type / Job Type Service is not kept in the plan,
+			// so its lines would be left behind.
+			if (!(str.querySelector(".vh-jt-sel") || {}).value || !(svcHidden(str) || {}).value)
+				gaps.unshift("the row's Jobcard Type and Job Type Service");
+			renderRowLinesOnly(str);
+			renderKitSummary();
+			var lt = linesRowOf(str), msg = lt && lt.querySelector(".rl-msg"), btn = lt && lt.querySelector("[data-rl-save]");
+			if (!btn) return true; // every line was empty
+			if (gaps.length) { msg.textContent = "Fill in: " + gaps.join(", ") + "."; return true; }
+			btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving…';
+			// Saves the whole plan on the handover, like the footer Save, but stays open.
+			saveComparison().then(function () {
+				str.dataset.collapsed = "1";
+				renderRowLinesOnly(str);
+				renderKitSummary();
+			}).catch(function (err) {
+				btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Save';
+				msg.textContent = "Could not save: " + errText(err).replace(/<[^>]*>/g, "");
+			});
+			return true;
+		}
+		var del = e.target.closest(".row-lines [data-kdel]");
+		if (del) {
+			var row = del.closest("tr"), svc = row.closest("tr.svc-lines").previousElementSibling;
+			collectRowLines();
+			var arr = rowLineArr(row.dataset.g), i = arr.indexOf(row._rowLine);
+			if (i >= 0) arr.splice(i, 1);
+			renderRowLinesOnly(svc);
+			renderKitSummary();
+			return true;
+		}
+		var head = e.target.closest("#vh-lines-head");
+		if (head) { collectRowLines(); linesOpen = !linesOpen; renderKitSummary(); return true; }
+		return false;
+	}
+	document.getElementById("vh-cmp-body").addEventListener("input", function (e) {
+		if (!e.target.closest(".row-lines")) return;
+		collectRowLines();
+		renderKitSummary();
+	});
+	document.getElementById("vh-cmp-body").addEventListener("change", function (e) {
+		if (e.target.closest(".row-lines")) { collectRowLines(); renderKitSummary(); }
+	});
+	// Labour, parts and sublet of the plan -- or, under a party, of that party's
+	// Workshop Job Card -- with totals; opened for every line.
+	var linesOpen = false;
+	function serviceOfKey(key) {
+		var tr = svcRows().filter(function (r) { return r.dataset.rowKey === key; })[0];
+		return tr ? (((svcInput(tr) || {}).value || "").trim() || (tr.querySelector(".vh-jt-sel") || {}).value || "—") : "—";
+	}
+	function renderLinesTotals(el, k) {
+		var n = function (v) { return parseFloat(v) || 0; };
+		var lab = k.labor, par = k.parts, sub = k.sublet;
+		if (!lab.length && !par.length && !sub.length) {
+			el.className = "vh-kit-sum";
+			el.innerHTML = '<i class="fa-solid fa-box"></i> No labour, parts or sublet yet — use <b>+ Labour</b>, <b>+ Part</b> or <b>+ Sublet</b> on a row.';
+			return;
+		}
+		var labAmt = lab.reduce(function (s, r) { return s + n(r.hours) * n(r.rate); }, 0);
+		var labHrs = lab.reduce(function (s, r) { return s + n(r.hours); }, 0);
+		var parAmt = par.reduce(function (s, r) { return s + n(r.qty) * n(r.rate); }, 0);
+		var subAmt = sub.reduce(function (s, r) { return s + sublSell(r); }, 0);
+		el.className = "vh-lines";
+		var html = '<button type="button" class="vh-lines__head" id="vh-lines-head" aria-expanded="' + linesOpen + '">' +
+			'<i class="fa-solid fa-chevron-right chev"></i><span class="t">Labour, Parts &amp; Sublet</span>' +
+			'<span class="muted">' + (cmpFilter === null ? "— this plan" : "— this Workshop Job Card") + "</span>" +
+			'<span class="vh-lines-tot">' +
+			'<span data-k="labor"><span class="k">Labour</span> ' + lab.length + " · " + fmtNum(labHrs) + " h · " + fmtMoney(labAmt) + "</span>" +
+			'<span data-k="parts"><span class="k">Parts</span> ' + par.length + " · " + fmtMoney(parAmt) + "</span>" +
+			'<span data-k="sublet"><span class="k">Sublet</span> ' + sub.length + " · " + fmtMoney(subAmt) + "</span>" +
+			'<span class="grand">Total ' + fmtMoney(labAmt + parAmt + subAmt) + "</span></span></button>";
+		if (linesOpen) {
+			var grp = function (key, title, rows, head, cells, foot) {
+				if (!rows.length) return "";
+				return '<div data-k="' + key + '"><h5>' + title + ' <span class="muted">' + rows.length + "</span></h5><table><thead><tr>" + head +
+					"</tr></thead><tbody>" + rows.map(cells).join("") + "</tbody><tfoot><tr>" + foot + "</tr></tfoot></table></div>";
+			};
+			html += '<div class="vh-lines__body">' +
+				grp("labor", "Labour", lab, '<th>Service</th><th>Item</th><th>Description</th><th class="num">Hours</th><th class="num">Rate</th><th class="num">Amount</th>',
+					function (r) {
+						return '<tr><td class="svc">' + esc(serviceOfKey(r.row_key)) + "</td><td>" + esc(itemNameOf(r.operation) || r.operation || "—") +
+							"</td><td>" + esc(r.description || "") + '</td><td class="num">' + fmtNum(r.hours) + '</td><td class="num">' + fmtMoney(r.rate) +
+							'</td><td class="num">' + fmtMoney(n(r.hours) * n(r.rate)) + "</td></tr>";
+					}, '<td colspan="3">Total</td><td class="num">' + fmtNum(labHrs) + '</td><td></td><td class="num">' + fmtMoney(labAmt) + "</td>") +
+				grp("parts", "Parts", par, '<th>Service</th><th>Item</th><th class="num">Qty</th><th>UOM</th><th class="num">Rate</th><th class="num">Amount</th>',
+					function (r) {
+						return '<tr><td class="svc">' + esc(serviceOfKey(r.row_key)) + "</td><td>" + esc(r.item_name || itemNameOf(r.item_code) || r.item_code || "—") +
+							'</td><td class="num">' + fmtNum(r.qty) + "</td><td>" + esc(r.uom || "") + '</td><td class="num">' + fmtMoney(r.rate) +
+							'</td><td class="num">' + fmtMoney(n(r.qty) * n(r.rate)) + "</td></tr>";
+					}, '<td colspan="5">Total</td><td class="num">' + fmtMoney(parAmt) + "</td>") +
+				grp("sublet", "Sublet", sub, '<th>Service</th><th>Item</th><th class="num">Qty</th><th>Sublet work</th><th>Vendor</th><th class="num">Cost / unit</th><th class="num">Markup</th><th class="num">Amount</th>',
+					function (r) {
+						return '<tr><td class="svc">' + esc(serviceOfKey(r.row_key)) + "</td><td>" + esc(r.item_name || itemNameOf(r.item_code) || r.item_code || "—") +
+							'</td><td class="num">' + fmtNum(n(r.qty) || 1) + "</td><td>" + esc(r.service_description || "") + "</td><td>" + esc(supplierName(r.vendor) || "—") +
+							'</td><td class="num">' + fmtMoney(r.cost) + '</td><td class="num">' + fmtNum(r.markup_pct) + '%</td><td class="num">' + fmtMoney(sublSell(r)) + "</td></tr>";
+					}, '<td colspan="7">Total</td><td class="num">' + fmtMoney(subAmt) + "</td>") +
+				"</div>";
+		}
+		el.innerHTML = html;
+	}
 
 	// ------------------------------------------------- kit components dialog
 	var kitModal = wireModal(document.getElementById("vh-kit-modal"));
@@ -1524,14 +1951,15 @@
 	}
 	// The code behind a cell: the picked one while the name still reads as
 	// picked, else an item whose name (or code) is exactly what was typed.
+	function squish(t) { return String(t || "").replace(/\s+/g, " ").trim().toLowerCase(); }
 	function itemCodeOf(input, labour) {
 		var v = input ? input.value.trim() : "";
 		if (!v) return "";
-		if (input.dataset.code && v === input.dataset.label) return input.dataset.code;
-		var low = v.toLowerCase();
+		var low = squish(v);
+		if (input.dataset.code && low === squish(input.dataset.label)) return input.dataset.code;
 		var hit = KIT_ITEMS.filter(function (it) {
 			if (it.is_item === 0 || (labour && it.is_stock)) return false;
-			return (it.item_name || "").toLowerCase() === low || (it.item || "").toLowerCase() === low;
+			return squish(it.item_name) === low || squish(it.item) === low;
 		})[0];
 		return hit ? hit.item : v;
 	}
@@ -1560,10 +1988,10 @@
 	function vendorCodeOf(input) {
 		var v = input ? input.value.trim() : "";
 		if (!v) return "";
-		if (input.dataset.code && v === input.dataset.label) return input.dataset.code;
-		var low = v.toLowerCase();
+		var low = squish(v);
+		if (input.dataset.code && low === squish(input.dataset.label)) return input.dataset.code;
 		var hit = SUPPLIERS.filter(function (x) {
-			return (x.supplier_name || "").toLowerCase() === low || (x.name || "").toLowerCase() === low;
+			return squish(x.supplier_name) === low || squish(x.name) === low;
 		})[0];
 		return hit ? hit.name : v;
 	}
@@ -1635,6 +2063,26 @@
 	// The labour Item: what a Sales Order raised from this job bills the line
 	// against. A line without one is unbillable unless Workshop Settings names a
 	// Default Labour Item, so the cell offers the service (non-stock) Items.
+	// The sublet Item: a stock Item the sublet is bought and billed as -- picked,
+	// or created when it does not exist yet. On the Purchase Receipt the job's
+	// qty is issued to the card and any extra stays in stock.
+	function attachSubletItemAutocomplete(input) {
+		attachAutocomplete(input, function (typed) {
+			var q = (typed || "").toLowerCase();
+			var rows = KIT_ITEMS.filter(function (it) {
+				if (!it.is_stock || it.is_item === 0) return false;
+				return !q || (it.item || "").toLowerCase().indexOf(q) >= 0 ||
+					(it.item_name || "").toLowerCase().indexOf(q) >= 0;
+			}).slice(0, 10).map(function (it) {
+				return { label: esc(it.item_name || it.item), value: it.item, name: it.item_name || it.item };
+			});
+			var create = itemCreateRow(typed, "sublet");
+			return create ? rows.concat([create]) : rows;
+		}, function (it) {
+			if (it.action === "create") { openItemDialog("sublet", it.typed, input); return; }
+			setItemCell(input, it.value, it.name);
+		});
+	}
 	function attachLabourItemAutocomplete(input) {
 		attachAutocomplete(input, function (typed) {
 			var q = (typed || "").toLowerCase();
@@ -1690,6 +2138,8 @@
 			'<td><input class="ke-rate" type="number" min="0" step="0.01" value="' + (r.rate != null ? r.rate : 0) + '"></td>' +
 			'<td style="width:32px"><button type="button" class="vh-cmp-rm" data-kdel><i class="fa-solid fa-xmark"></i></button></td></tr>';
 		return "<tr>" +
+			"<td>" + itemCellHtml("ke-sitem", r.item_code, r.item_name, "Sublet item") + "</td>" +
+			'<td><input class="ke-sqty" type="number" min="0" step="any" value="' + (r.qty != null && r.qty !== "" ? r.qty : 1) + '"></td>' +
 			'<td><input class="ke-desc" value="' + escAttr(r.service_description || "") + '" placeholder="Service"></td>' +
 			"<td>" + vendorCellHtml("ke-vendor", r.vendor) + "</td>" +
 			'<td><input class="ke-cost" type="number" min="0" step="0.01" value="' + (r.cost != null ? r.cost : 0) + '"></td>' +
@@ -1711,17 +2161,20 @@
 			'<div class="kit-none" style="margin-bottom:10px">Labor Time Kit items for this Job Type Service — edit quantities and rates, add rows if needed, then “Add to Job”.</div>' +
 			kitSection("labor", "Labor Time Kit Labor", ["Item", "Description", "Hours", "Rate", "Skill"]) +
 			kitSection("parts", "Labor Time Kit Parts", ["Item", "Qty", "UOM", "Rate"]) +
-			kitSection("sublet", "Labor Time Kit Sublet", ["Service", "Vendor", "Cost", "Markup %"]);
+			kitSection("sublet", "Labor Time Kit Sublet", ["Item", "Qty", "Service", "Vendor", "Cost / unit", "Markup %"]);
 		document.querySelectorAll("#vh-kit-body .ke-item").forEach(attachKitItemAutocomplete);
 		document.querySelectorAll("#vh-kit-body .ke-uom").forEach(attachUomAutocomplete);
 		document.querySelectorAll("#vh-kit-body .ke-op").forEach(attachLabourItemAutocomplete);
 		document.querySelectorAll("#vh-kit-body .ke-vendor").forEach(attachVendorAutocomplete);
+		document.querySelectorAll("#vh-kit-body .ke-sitem").forEach(attachSubletItemAutocomplete);
 	}
 	// Works with or without a Labor Time Standard: with one the tables open
 	// pre-filled from it, without one they open empty for manual entry.
 	function openKitDialog(standard, service, row, label) {
 		kitStandard = standard || ""; kitService = service || ""; kitRow = row || null;
 		var btn = document.getElementById("vh-kit-std");
+		btn.style.display = "";
+		document.getElementById("vh-kit-title").textContent = "Add Labor Time Standard Components";
 		btn.disabled = false;
 		btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> ' + (standard ? "Update Labor Time Standard" : "Create Labor Time Standard");
 		ensureKitItems();
@@ -1744,6 +2197,14 @@
 				document.getElementById("vh-kit-body").innerHTML =
 					'<div class="kit-none">Could not load Labor Time Standard components.</div>';
 			});
+	}
+	// A service row going takes its lines -- and the row they are shown in -- with it.
+	function dropRowLines(tr) {
+		var lt = linesRowOf(tr); if (lt) lt.remove();
+		var key = tr && tr.dataset.rowKey; if (!key) return;
+		[kitLabor, kitParts, kitSublet].forEach(function (arr) {
+			for (var i = arr.length - 1; i >= 0; i--) if (arr[i].row_key === key) arr.splice(i, 1);
+		});
 	}
 	function bookedKit(standard) {
 		function mine(r) { return r.source_standard === standard; }
@@ -1768,6 +2229,7 @@
 				attachLabourItemAutocomplete(tb.lastElementChild.querySelector(".ke-op"));
 			} else {
 				attachVendorAutocomplete(tb.lastElementChild.querySelector(".ke-vendor"));
+				attachSubletItemAutocomplete(tb.lastElementChild.querySelector(".ke-sitem"));
 			}
 			return;
 		}
@@ -1784,14 +2246,16 @@
 				var code = itemCodeOf(tr.querySelector(".ke-item"));
 				return { item_code: code, item_name: itemNameOf(code) || (v(".ke-item") || "").trim(), qty: v(".ke-qty"), uom: v(".ke-uom"), rate: v(".ke-rate") };
 			}
-			return { service_description: v(".ke-desc"), vendor: vendorCodeOf(tr.querySelector(".ke-vendor")), cost: v(".ke-cost"), markup_pct: v(".ke-markup") };
+			var sitem = itemCodeOf(tr.querySelector(".ke-sitem"), true);
+			return { item_code: sitem, item_name: itemNameOf(sitem), qty: v(".ke-sqty"), service_description: v(".ke-desc"), vendor: vendorCodeOf(tr.querySelector(".ke-vendor")), cost: v(".ke-cost"), markup_pct: v(".ke-markup") };
 		});
 	}
 	// Dedupe keys mirror the wizard's, so one line is never carried twice.
 	function kitKey(group, r) {
-		if (group === "labor") return "labor|" + (r.operation || "") + "|" + (r.description || "") + "|" + (r.hours || "");
-		if (group === "parts") return "parts|" + (r.item_code || "");
-		return "sublet|" + (r.vendor || "") + "|" + (r.service_description || "");
+		var rk = "|" + (r.row_key || "");
+		if (group === "labor") return "labor|" + (r.operation || "") + "|" + (r.description || "") + "|" + (r.hours || "") + rk;
+		if (group === "parts") return "parts|" + (r.item_code || "") + rk;
+		return "sublet|" + (r.vendor || "") + "|" + (r.service_description || "") + rk;
 	}
 	function buildKitRow(group, s) {
 		var b;
@@ -1800,10 +2264,12 @@
 			amount: s.amount || 0, skill_level: s.skill_level || "" };
 		else if (group === "parts") b = { item_code: s.item_code || "", item_name: s.item_name || "",
 			qty: s.qty || 0, uom: s.uom || "", rate: s.rate || 0, markup_pct: s.markup_pct || 0, amount: s.amount || 0 };
-		else b = { vendor: s.vendor || "", service_description: s.service_description || "",
+		else b = { item_code: s.item_code || "", item_name: s.item_name || "", qty: s.qty || 1,
+			vendor: s.vendor || "", service_description: s.service_description || "",
 			cost: s.cost || 0, markup_pct: s.markup_pct || 0, sell_amount: s.sell_amount || 0,
 			warranty_months: s.warranty_months || 0 };
 		b.source_standard = s.source_standard || "";
+		b.row_key = s.row_key || "";
 		return b;
 	}
 	// "Add to Job" — the popup's lines become this booking's kit for the standard,
@@ -1823,6 +2289,7 @@
 				if (group === "sublet" && !(src.service_description || "").trim()) return;
 				var row = buildKitRow(group, src);
 				row.source_standard = kitStandard || "";
+				row.row_key = "";
 				var k = kitKey(group, row);
 				if (have[k]) return;
 				have[k] = 1; target.push(row);
@@ -1906,15 +2373,15 @@
 	function itemCreateRow(typed, kind) {
 		typed = (typed || "").trim();
 		if (!typed) return null;
-		var low = typed.toLowerCase();
+		var low = squish(typed);
 		var taken = KIT_ITEMS.some(function (it) {
 			if (kind === "labour" && (it.is_stock || it.is_item === 0)) return false;
-			return (it.item || "").toLowerCase() === low || (it.item_name || "").toLowerCase() === low;
+			return squish(it.item) === low || squish(it.item_name) === low;
 		});
 		if (taken) return null;
 		return { action: "create", typed: typed,
 			label: '<i class="fa-solid fa-plus"></i> Create “' + esc(typed) + "”",
-			sub: kind === "labour" ? "New labor item" : "New part" };
+			sub: kind === "labour" ? "New labor item" : kind === "sublet" ? "New sublet item" : "New part" };
 	}
 	function itemError(msg) {
 		var box = document.getElementById("vh-item-err");
@@ -1922,9 +2389,11 @@
 	}
 	function openItemDialog(kind, typed, input) {
 		itemInput = input; itemKind = kind;
-		var part = kind === "part";
-		document.getElementById("vh-item-title").textContent = part ? "New Part" : "New Labor Item";
-		document.getElementById("vh-item-sub").textContent = part
+		var part = kind === "part" || kind === "sublet"; // both are stock Items: group + unit
+		document.getElementById("vh-item-title").textContent = kind === "sublet" ? "New Sublet Item" : part ? "New Part" : "New Labor Item";
+		document.getElementById("vh-item-sub").textContent = kind === "sublet"
+			? "A stock item bought from the sublet vendor: the job's quantity is issued to the job card on receipt, any extra stays in stock. Its code is numbered automatically."
+			: part
 			? "A stock item. Its code is numbered automatically."
 			: "A service item billed per hour, filed under Services. Its code is numbered automatically.";
 		document.querySelectorAll("#vh-item-modal [data-part-only]").forEach(function (f) {
@@ -1951,7 +2420,7 @@
 		var name = document.getElementById("vh-item-name").value.trim();
 		var group = document.getElementById("vh-item-group").value;
 		if (!name) { itemError("Enter the item name."); return; }
-		if (kind === "part" && !group) { itemError("Pick the group this part belongs in."); return; }
+		if (kind !== "labour" && !group) { itemError("Pick the group this " + (kind === "sublet" ? "sublet item" : "part") + " belongs in."); return; }
 		btn.disabled = true;
 		callMethod("garagedesk.api.front_office.create_kit_item", {
 			item_name: name, kind: kind, item_group: group,
@@ -2096,20 +2565,23 @@
 	// The popup closes once it has saved, so the confirmation is the Handovers
 	// row itself, refreshed underneath. A failure leaves the popup open with the
 	// work still in it.
-	document.getElementById("vh-cmp-save").addEventListener("click", function () {
-		if (!cmpHandover) return;
-		var btn = this, original = btn.innerHTML;
-		var handover = cmpHandover;
-		btn.disabled = true;
-		btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving…';
-		callMethod("garagedesk.api.handover_comparison.save_comparison", {
-			handover: handover,
+	function saveComparison() {
+		collectRowLines();
+		return callMethod("garagedesk.api.handover_comparison.save_comparison", {
+			handover: cmpHandover,
 			damages: JSON.stringify(cmpRows()),
 			services: JSON.stringify(cmpServiceRows()),
 			kit_labor: JSON.stringify(kitLabor),
 			kit_parts: JSON.stringify(kitParts),
 			kit_sublet: JSON.stringify(kitSublet)
-		})
+		});
+	}
+	document.getElementById("vh-cmp-save").addEventListener("click", function () {
+		if (!cmpHandover) return;
+		var btn = this, original = btn.innerHTML;
+		btn.disabled = true;
+		btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving…';
+		saveComparison()
 			.then(function () {
 				cmpModal.close();
 				loadHistory();

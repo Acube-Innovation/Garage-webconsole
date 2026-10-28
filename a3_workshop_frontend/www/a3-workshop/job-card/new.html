@@ -103,11 +103,21 @@
 			<button type="button" class="btn btn--primary btn--sm" id="add-job-detail"><i class="fa-solid fa-plus"></i> Add</button></div>
 			<div class="card__body" style="padding:0">
 				<table class="table editable"><thead><tr>
-					<th style="width:22%">Jobcard Type</th><th>Job Type Service</th><th style="width:16%">Labor Time Standard</th><th>Description</th><th style="width:80px">Hrs</th><th style="width:40px"></th>
+					<th style="width:22%">Jobcard Type</th><th>Job Type Service</th><th style="width:16%" id="jd-std-th">Labor Time Standard</th><th>Description</th><th style="width:80px">Hrs</th><th style="width:40px"></th>
 				</tr></thead><tbody id="job-detail-body"></tbody></table>
 				<div class="empty" id="job-detail-empty">Select a Jobcard Type on the left, then click “Add”.</div>
 			</div>
 		</div>
+	</div>
+
+	<!-- Labor Time Kit off: every row's labour, parts and sublet together, folded by default -->
+	<div class="card" id="lines-card" style="margin-top:18px; display:none">
+		<button type="button" class="lc-head" id="lines-card-head" aria-expanded="false">
+			<i class="fa-solid fa-chevron-right lc-chev"></i>
+			<span class="lc-title">Labour, Parts &amp; Sublet <span class="muted">— this Workshop Job Card</span></span>
+			<span class="lc-totals" id="lines-card-totals"></span>
+		</button>
+		<div class="card__body lc-body" id="lines-card-body" hidden></div>
 	</div>
 
 	<!-- Kit components pulled from the selected Labor Time Standards -->
@@ -252,6 +262,85 @@
 	.jc-labor-code { display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600;
 		background:#eef4ff; color:#1b4fd6; border:1px solid #cfe0ff; border-radius:6px; padding:3px 8px; cursor:pointer; }
 	.jc-labor-code.is-empty { background:transparent; color:var(--muted,#7a8598); border-style:dashed; cursor:pointer; font-weight:500; }
+	.jc-labor-code.is-missing { border-color:#e5484d; color:#e5484d; }
+	/* Labor Time Kit off: + Labour / + Part / + Sublet on the row, its lines beneath it. */
+	/* Labour = blue, Part = green, Sublet = amber: the same colours as the Estimate's type badges. */
+	.row-add { display:flex; gap:5px; flex-wrap:nowrap; }
+	.row-add button { --k:var(--muted); display:inline-flex; align-items:center; gap:4px; font-size:11.5px; font-weight:600;
+		padding:4px 9px; border:1px solid var(--border); border-radius:999px; background:var(--surface);
+		color:var(--k); cursor:pointer; white-space:nowrap; transition:background .12s, border-color .12s; }
+	.row-add button i { font-size:9px; }
+	.row-add button[data-add-line="labor"] { --k:var(--blue); }
+	.row-add button[data-add-line="parts"] { --k:#16a34a; }
+	.row-add button[data-add-line="sublet"] { --k:#d97706; }
+	.row-add button:hover { border-color:var(--k); background:color-mix(in srgb, var(--k) 8%, transparent); }
+	.row-add button .n { min-width:16px; padding:0 4px; border-radius:999px; background:var(--k); color:#fff; font-size:10px; line-height:16px; text-align:center; }
+	.row-add button .n:empty { display:none; }
+	/* A service row with lines and its lines read as one block. */
+	#job-detail-body tr.svc-row.has-lines > td { border-bottom-color:transparent; }
+	#job-detail-body tr.svc-lines:hover { background:transparent; }
+	#job-detail-body tr.svc-lines > td { padding:0 14px 14px 14px; border-bottom:1px solid var(--border); }
+	.row-lines { background:var(--surface); border:1px solid var(--border); border-left:3px solid var(--navy);
+		border-radius:10px; padding:4px 12px 8px; }
+	.row-lines .rl-grp + .rl-grp { border-top:1px dashed var(--border); }
+	.row-lines .rl-title { display:flex; align-items:center; gap:6px; margin:10px 0 2px; font-size:11px; font-weight:700;
+		letter-spacing:.04em; text-transform:uppercase; color:var(--k); }
+	.row-lines .rl-title .n { color:var(--muted); font-weight:600; letter-spacing:0; }
+	.row-lines .rl-grp[data-g="labor"] { --k:var(--blue); }
+	.row-lines .rl-grp[data-g="parts"] { --k:#16a34a; }
+	.row-lines .rl-grp[data-g="sublet"] { --k:#d97706; }
+	.row-lines table { width:100%; table-layout:fixed; border-collapse:collapse; }
+	.row-lines .table thead th { background:transparent; color:var(--muted); font-size:10px; font-weight:600;
+		letter-spacing:.04em; padding:6px 6px 4px; border-radius:0; border-bottom:1px solid var(--border); }
+	.row-lines .table tbody td { padding:5px 6px; border-bottom:none; }
+	.row-lines .table tbody tr:hover { background:transparent; }
+	.row-lines .table input, .row-lines .table select { height:32px; padding:5px 8px; border:1px solid var(--border);
+		background:var(--surface); font-size:12.5px; border-radius:7px; }
+	.row-lines .table input:hover, .row-lines .table select:hover { border-color:#cfd5df; }
+	.row-lines input[type=number] { -moz-appearance:textfield; appearance:textfield; text-align:right; }
+	.row-lines input[type=number]::-webkit-inner-spin-button, .row-lines input[type=number]::-webkit-outer-spin-button { -webkit-appearance:none; margin:0; }
+	.row-lines .icon-del { opacity:.55; } .row-lines tr:hover .icon-del { opacity:1; }
+	.row-lines .rl-foot { display:flex; justify-content:flex-end; align-items:center; gap:10px; margin-top:8px;
+		padding-top:8px; border-top:1px solid var(--border); }
+	.row-lines .rl-foot .rl-msg { margin-right:auto; font-size:12px; color:var(--red); }
+	/* Saved: the row's lines fold into one line, opened again with Edit. */
+	.row-lines.is-collapsed { display:flex; align-items:center; gap:14px; padding:8px 12px; cursor:pointer; }
+	.row-lines.is-collapsed:hover { background:var(--bg); }
+	.rl-sum { display:flex; flex-wrap:wrap; gap:6px 14px; font-size:12.5px; color:var(--text); flex:1; }
+	.rl-sum .k { font-weight:700; color:var(--k, var(--muted)); }
+	.rl-sum [data-k="labor"] { --k:var(--blue); } .rl-sum [data-k="parts"] { --k:#16a34a; } .rl-sum [data-k="sublet"] { --k:#d97706; }
+	.rl-sum .rl-total { margin-left:auto; font-weight:700; }
+	.rl-saved { font-size:11.5px; color:#16a34a; white-space:nowrap; }
+	/* The job card's combined labour / parts / sublet, under the services. */
+	#lines-card .lc-head { display:flex; align-items:center; gap:12px; width:100%; padding:16px 20px; border:0; background:none;
+		cursor:pointer; text-align:left; font:inherit; color:var(--text); }
+	#lines-card .lc-head:hover { background:var(--bg); border-radius:var(--radius); }
+	#lines-card .lc-chev { font-size:12px; color:var(--muted); transition:transform .15s; }
+	#lines-card .lc-head[aria-expanded="true"] .lc-chev { transform:rotate(90deg); }
+	#lines-card .lc-title { font-weight:700; color:var(--red); white-space:nowrap; }
+	#lines-card .lc-title .muted { font-weight:500; color:var(--muted); }
+	#lines-card .lc-totals { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:6px 16px; margin-left:auto; font-size:12.5px; }
+	#lines-card .lc-totals .k { font-weight:700; color:var(--k); }
+	#lines-card [data-k="labor"] { --k:var(--blue); } #lines-card [data-k="parts"] { --k:#16a34a; } #lines-card [data-k="sublet"] { --k:#d97706; }
+	#lines-card .lc-totals .lc-grand { font-weight:800; }
+	#lines-card .lc-body { padding-top:0; }
+	#lines-card .lc-grp + .lc-grp { margin-top:16px; }
+	#lines-card .lc-grp h4 { display:flex; align-items:center; gap:8px; margin:0 0 6px; font-size:12px; text-transform:uppercase;
+		letter-spacing:.04em; color:var(--k); }
+	#lines-card .lc-grp h4 .muted { text-transform:none; letter-spacing:0; font-weight:500; }
+	#lines-card table { width:100%; }
+	#lines-card .table thead th { background:var(--bg); color:var(--muted); font-size:10.5px; padding:7px 10px; border-radius:0; }
+	#lines-card .table tbody td { padding:7px 10px; font-size:12.5px; }
+	#lines-card td.num, #lines-card th.num { text-align:right; white-space:nowrap; }
+	#lines-card td.svc { color:var(--muted); }
+	#lines-card tfoot td { padding:7px 10px; font-weight:700; border-top:1px solid var(--border); font-size:12.5px; }
+	.tp-mat > td { background:var(--surface-2,#f7f8fb); font-size:12px; padding:6px 10px 10px 28px; }
+	.tp-mat .tp-mat__grp { display:flex; align-items:flex-start; gap:10px; margin-top:4px; }
+	.tp-mat .tp-mat__grp b { min-width:58px; }
+	.tp-mat .tp-mat__lines { flex:1; }
+	.tp-mat .tp-mat__line { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+	.tp-mat .tp-buy { font-size:11px; color:var(--muted,#7a8598); }
+	.tp-mat .tp-buy input { padding:2px 4px; font-size:12px; }
 	.kit-block { margin-bottom:18px; }
 	.kit-block:last-child { margin-bottom:0; }
 	.kit-title { font-size:13px; font-weight:800; letter-spacing:.02em; margin:0 0 8px; }
@@ -438,6 +527,8 @@
 	.tp-ot b { color:var(--red,#ec2e5d); }
 	#tp-table td { padding:6px 8px; vertical-align:middle; }
 	#tp-table input, #tp-table select { width:100%; box-sizing:border-box; }
+	/* Wide enough for 1.5 / 12.25 -- the column was clipping the decimals. */
+	#tp-table input[data-f="expected_time"] { min-width:64px; text-align:center; }
 	#tp-table tr.tp-group td { background:var(--bg,#f1f4f8); font-weight:700; }
 	#tp-table tr.tp-group .tp-sub { font-weight:500; }
 	#tp-table tr.tp-child td:first-child { padding-left:28px; }
@@ -689,7 +780,7 @@ window.WS_VAT = {{ (vat_options or {}) | tojson }};
 		fitTab();
 		// Step numbers, not document order: Readings is step 2 (see the stepper).
 		if (cur === READINGS_STEP) sizeCanvas();
-		if (cur === 5) { ensureKitItems(); syncCartFromKit(); }
+		if (cur === 5) { collectRowLines(); ensureKitItems(); syncCartFromKit(); }
 		if (cur === TASKS_STEP) loadTaskPreview();
 		if (cur === QC_STEP) loadQc();
 		if (cur === TOTAL) loadBillingData();
@@ -880,6 +971,7 @@ window.WS_VAT = {{ (vat_options or {}) | tojson }};
 			SUPPLIERS = o.suppliers || [];
 			SKILLS = o.skill_levels || [];
 			LABOR_STANDARDS = o.labor_standards || [];
+			applyKitSetting(o.kit_enabled !== false);
 			LTS_BY_SERVICE = {}; LTS_LABEL = {};
 			LABOR_STANDARDS.forEach(function (s) {
 				if (s.operation_name && !LTS_BY_SERVICE[s.operation_name]) LTS_BY_SERVICE[s.operation_name] = s.name;
@@ -1170,6 +1262,8 @@ window.WS_VAT = {{ (vat_options or {}) | tojson }};
 			return Promise.reject(new Error("required fields missing"));
 		}
 		if (tpDirty) mirrorTasksToServiceRows();
+		collectRowLines();
+		if (!KIT_ENABLED) pruneEmptyLines();
 		return callMethod("garagedesk.api.front_office.save_job_card", {
 			job_card: jobCardName,
 			customer: val("customer_id"),
@@ -1227,8 +1321,29 @@ window.WS_VAT = {{ (vat_options or {}) | tojson }};
 	// swallows the rejection a missing required field raises — it has already
 	// been reported and the advisor sent to the field.
 	function noop() {}
+	// A service is billed through its Labor Time Standard, so one without a standard
+	// can't go on past Workshop Job Card Services (billing_block_reason refuses it
+	// too). Save Draft still saves the step as it is.
+	function servicesWithoutStandard() {
+		var missing = [];
+		jdBody.querySelectorAll('tr').forEach(function (tr) {
+			var svc = svcHidden(tr), chip = tr.querySelector('[data-labor-code]');
+			var gap = !!(svc && svc.value) && !tr.dataset.labour;
+			if (chip) chip.classList.toggle('is-missing', gap);
+			if (gap) missing.push(serviceLabel(svc.value) || svc.value);
+		});
+		return missing;
+	}
 	nextBtn.addEventListener('click', function () {
 		if (isLocked) { if (cur < TOTAL) goTo(cur + 1); return; }
+		if (cur === SERVICES_STEP && KIT_ENABLED) {
+			var missing = servicesWithoutStandard();
+			if (missing.length) {
+				alert("Pick a Labor Time Standard for " + missing.join(", ") +
+					" before going on.\n\nClick \"+ Labor Time Standard\" on the row to choose one, or create one there. You can change its rates for this job card afterwards.");
+				return;
+			}
+		}
 		saveJobCard(true).catch(noop);
 	});
 	document.getElementById('wiz-save').addEventListener('click', function () { saveJobCard(false).catch(noop); });
@@ -1487,25 +1602,17 @@ window.WS_VAT = {{ (vat_options or {}) | tojson }};
 		if (prevStd) cleanupKitForStandard(prevStd);
 		markSvcUnsaved(tr);
 	}
-	// Commit a service onto a row: the same duplicate / labor-standard / kit-popup
-	// behaviour the old <select> change handler had.
+	// Commit a service onto a row: the same labor-standard / kit-popup behaviour the
+	// old <select> change handler had. A service may be on several rows -- each is
+	// its own repair with its own Task, billed separately.
 	function setRowService(tr, name, label) {
 		var hidden = svcHidden(tr), input = svcInput(tr);
 		var prevStd = tr.dataset.labour || '';
 		label = label || serviceLabel(name);
-		// A service can only appear once in Job Details.
-		if (name && serviceAlreadyUsed(name, tr)) {
-			alert('“' + label + '” is already added. Each Job Type Service can only be added once.');
-			if (input) input.value = '';
-			if (hidden) hidden.value = '';
-			setRowLaborCode(tr, '');
-			if (prevStd) cleanupKitForStandard(prevStd);
-			markSvcUnsaved(tr);
-			return;
-		}
 		if (hidden) hidden.value = name || '';
 		if (input) input.value = label || '';
 		markSvcUnsaved(tr);
+		if (!KIT_ENABLED) { renderLinesCard(); return; } // lines are added on the row itself
 		var standard = name ? (LTS_BY_SERVICE[name] || '') : '';
 		setRowLaborCode(tr, standard);
 		if (prevStd && prevStd !== standard) cleanupKitForStandard(prevStd);
@@ -1519,7 +1626,7 @@ window.WS_VAT = {{ (vat_options or {}) | tojson }};
 	}
 	// Keep row Job Type dropdowns in sync with the LHS selection.
 	function refreshRowJobTypes() {
-		document.querySelectorAll('#job-detail-body tr').forEach(function (tr) {
+		serviceRows().forEach(function (tr) {
 			var jt = tr.querySelector('select.jt'); if (!jt) return;
 			var v = jt.value; jt.innerHTML = jobTypeOptions(v);
 			// Job type de-selected on the left → its service no longer applies.
@@ -1531,14 +1638,6 @@ window.WS_VAT = {{ (vat_options or {}) | tojson }};
 		var tr = e.target.closest('tr'); if (!tr) return;
 		if (e.target.matches('select.jt')) clearRowService(tr);
 	});
-	// True if another Job Details row already has this service selected.
-	function serviceAlreadyUsed(service, exceptTr) {
-		if (!service) return false;
-		return Array.prototype.some.call(jdBody.children, function (tr) {
-			var sv = svcHidden(tr);
-			return tr !== exceptTr && sv && sv.value === service;
-		});
-	}
 	// Click the labor-code chip to (re)open the kit popup for that row — with or without a standard.
 	jdBody.addEventListener('click', function (e) {
 		var chip = e.target.closest('[data-labor-code]'); if (!chip) return;
@@ -1568,8 +1667,13 @@ window.WS_VAT = {{ (vat_options or {}) | tojson }};
 		if (!v.jobtype && !selected.length) { jdEmpty.textContent = 'Select at least one Jobcard Type on the left first.'; return; }
 		var jt0 = v.jobtype || selected[0];
 		var tr = document.createElement('tr');
+		tr.className = 'svc-row';
 		tr.dataset.task = v.task || '';
 		tr.dataset.labour = v.labour_service_code || '';
+		// Ties the row's own labour / part / sublet lines to it (Labor Time Kit off).
+		tr.dataset.rowKey = v.row_key || (KIT_ENABLED ? '' : newRowKey());
+		// A row loaded with its service (a saved card, a handover) shows its lines folded.
+		if (v.service) tr.dataset.collapsed = '1';
 		// Technicians are assigned in Task Preview; the row only carries the value through.
 		tr.dataset.tech = v.technician || '';
 		tr.innerHTML =
@@ -1578,16 +1682,31 @@ window.WS_VAT = {{ (vat_options or {}) | tojson }};
 				'<input type="text" class="svc-input" placeholder="Type a Job Type Service…" autocomplete="off" value="' + escAttr(serviceLabel(v.service || '')) + '">' +
 				'<input type="hidden" class="svc" value="' + escAttr(v.service || '') + '">' +
 			'</div></td>' +
-			'<td><span class="jc-labor-code is-empty" data-labor-code>—</span></td>' +
+			(KIT_ENABLED
+				? '<td><span class="jc-labor-code is-empty" data-labor-code>—</span></td>'
+				: '<td><div class="row-add">' +
+					'<button type="button" data-add-line="labor" title="Add a labour line"><i class="fa-solid fa-plus"></i> Labour <span class="n"></span></button>' +
+					'<button type="button" data-add-line="parts" title="Add a part"><i class="fa-solid fa-plus"></i> Part <span class="n"></span></button>' +
+					'<button type="button" data-add-line="sublet" title="Add sublet work"><i class="fa-solid fa-plus"></i> Sublet <span class="n"></span></button></div></td>') +
 			'<td><input class="desc" placeholder="Description" value="' + escAttr(v.description || '') + '"></td>' +
 			'<td><input class="hrs" type="number" min="0" step="any" value="' + (v.hours != null && v.hours !== '' ? v.hours : 1) + '"></td>' +
 			'<td><button type="button" class="icon-del"><i class="fa-solid fa-trash"></i></button></td>';
 		tr.querySelector('.icon-del').addEventListener('click', function () {
-			var std = tr.dataset.labour || '';
+			var std = tr.dataset.labour || '', key = tr.dataset.rowKey || '';
+			var lines = linesRowOf(tr); if (lines) lines.remove();
 			tr.remove(); toggleEmpty(jdBody, jdEmpty);
+			if (key) dropRowLines(key);
 			cleanupKitForStandard(std); // drop this service's kit rows if no other row still uses it
+			renderLinesCard();
 		});
 		jdBody.appendChild(tr); renderLaborCodeCell(tr); toggleEmpty(jdBody, jdEmpty);
+		if (!KIT_ENABLED) {
+			var lt = document.createElement('tr');
+			lt.className = 'svc-lines';
+			lt.innerHTML = '<td colspan="6"></td>';
+			jdBody.appendChild(lt);
+			renderRowLines(tr);
+		}
 		attachServiceAutocomplete(tr);
 	}
 	// Is a standard still referenced by any Job Details row? (kept if so.)
@@ -1605,7 +1724,7 @@ window.WS_VAT = {{ (vat_options or {}) | tojson }};
 	document.getElementById('add-job-detail').addEventListener('click', function () { addServiceRow(); });
 	function gatherServices() {
 		var rows = [];
-		document.querySelectorAll('#job-detail-body tr').forEach(function (tr) {
+		serviceRows().forEach(function (tr) {
 			var jt = tr.querySelector('.jt'), sv = svcHidden(tr);
 			rows.push({
 				jobtype: jt ? jt.value : '',
@@ -1614,7 +1733,8 @@ window.WS_VAT = {{ (vat_options or {}) | tojson }};
 				description: (tr.querySelector('.desc') || {}).value || '',
 				technician: tr.dataset.tech || '',
 				hours: (tr.querySelector('.hrs') || {}).value || 0,
-				task: tr.dataset.task || ''
+				task: tr.dataset.task || '',
+				row_key: tr.dataset.rowKey || ''
 			});
 		});
 		return rows.filter(function (r) { return r.jobtype || r.service; });
@@ -1684,9 +1804,10 @@ window.WS_VAT = {{ (vat_options or {}) | tojson }};
 
 	// Dedup keys mirror the desk form so a line is never offered/added twice.
 	function kitKey(group, r) {
-		if (group === 'labor') return 'labor|' + (r.operation || '') + '|' + (r.description || '') + '|' + (r.hours || '');
-		if (group === 'parts') return 'parts|' + (r.item_code || '');
-		return 'sublet|' + (r.vendor || '') + '|' + (r.service_description || '');
+		var rk = '|' + (r.row_key || '');
+		if (group === 'labor') return 'labor|' + (r.operation || '') + '|' + (r.description || '') + '|' + (r.hours || '') + rk;
+		if (group === 'parts') return 'parts|' + (r.item_code || '') + rk;
+		return 'sublet|' + (r.vendor || '') + '|' + (r.service_description || '') + rk;
 	}
 	function existingKitKeys() {
 		var keys = new Set();
@@ -1699,8 +1820,9 @@ window.WS_VAT = {{ (vat_options or {}) | tojson }};
 		var b;
 		if (group === 'labor') b = { operation: s.operation || '', description: s.description || '', description_ar: s.description_ar || '', hours: s.hours || 0, rate: s.rate || 0, amount: s.amount || 0, skill_level: s.skill_level || '' };
 		else if (group === 'parts') b = { item_code: s.item_code || '', item_name: s.item_name || '', qty: s.qty || 0, uom: s.uom || '', rate: s.rate || 0, markup_pct: s.markup_pct || 0, amount: s.amount || 0, task: s.task || '', material_request: s.material_request || '', material_request_status: s.material_request_status || '' };
-		else b = { vendor: s.vendor || '', service_description: s.service_description || '', cost: s.cost || 0, markup_pct: s.markup_pct || 0, sell_amount: s.sell_amount || 0, warranty_months: s.warranty_months || 0 };
+		else b = { item_code: s.item_code || '', item_name: s.item_name || '', qty: s.qty || 1, issued_qty: s.issued_qty || 0, stock_entry: s.stock_entry || '', vendor: s.vendor || '', service_description: s.service_description || '', cost: s.cost || 0, markup_pct: s.markup_pct || 0, sell_amount: s.sell_amount || 0, warranty_months: s.warranty_months || 0, task: s.task || '', material_request: s.material_request || '', material_request_status: s.material_request_status || '' };
 		b.source_standard = s.source_standard || '';
+		b.row_key = s.row_key || '';
 		return b;
 	}
 
@@ -1710,6 +1832,7 @@ window.WS_VAT = {{ (vat_options or {}) | tojson }};
 	var kitDialogStandard = ''; // the standard the open popup belongs to (stamped on committed rows)
 	var kitDialogService = '';  // the Job Type Service the popup was opened for (may have no standard)
 	var kitDialogRow = null;    // the Job Details <tr> the popup belongs to (to update its labor-code chip)
+	var kitDialogPrefilled = null; // this job's lines (no standard yet) the popup opened with -- see unassignedKit
 	function kitModalClose() { kitModal.classList.remove('is-open'); }
 	kitModal.querySelectorAll('[data-kit-close]').forEach(function (b) { b.addEventListener('click', kitModalClose); });
 	kitModal.addEventListener('click', function (e) { if (e.target === kitModal) kitModalClose(); });
@@ -1769,7 +1892,7 @@ window.WS_VAT = {{ (vat_options or {}) | tojson }};
 	function ensureKitItems() {
 		if (KIT_ITEMS.length || kitItemsAsked) return;
 		kitItemsAsked = true;
-		callMethod("garagedesk.api.front_office.get_estimate_items", { services: gatherServices().map(function (r) { return r.service; }).filter(Boolean) })
+		callMethod("garagedesk.api.front_office.get_estimate_items", { services: gatherServices().map(function (r) { return r.service; }).filter(Boolean), booking_date: val("booking_date") })
 			.then(function (o) {
 				o = o || {}; KIT_ITEMS = (o.mapped || []).concat(o.others || []);
 				relabelItemCells();
@@ -1793,14 +1916,16 @@ window.WS_VAT = {{ (vat_options or {}) | tojson }};
 	}
 	// The code behind a cell: the picked one while the name still reads as
 	// picked, else an item whose name (or code) is exactly what was typed.
+	function squish(t) { return String(t || '').replace(/\s+/g, ' ').trim().toLowerCase(); }
 	function itemCodeOf(input, labour) {
 		var v = input ? input.value.trim() : '';
 		if (!v) return '';
-		if (input.dataset.code && v === input.dataset.label) return input.dataset.code;
-		var low = v.toLowerCase();
+		// Item names can carry stray or doubled spaces: compared with them squeezed out.
+		var low = squish(v);
+		if (input.dataset.code && low === squish(input.dataset.label)) return input.dataset.code;
 		var hit = KIT_ITEMS.filter(function (it) {
 			if (it.is_item === 0 || (labour && it.is_stock)) return false;
-			return (it.item_name || '').toLowerCase() === low || (it.item || '').toLowerCase() === low;
+			return squish(it.item_name) === low || squish(it.item) === low;
 		})[0];
 		return hit ? hit.item : v;
 	}
@@ -1828,10 +1953,10 @@ window.WS_VAT = {{ (vat_options or {}) | tojson }};
 	function vendorCodeOf(input) {
 		var v = input ? input.value.trim() : '';
 		if (!v) return '';
-		if (input.dataset.code && v === input.dataset.label) return input.dataset.code;
-		var low = v.toLowerCase();
+		var low = squish(v);
+		if (input.dataset.code && low === squish(input.dataset.label)) return input.dataset.code;
 		var hit = SUPPLIERS.filter(function (x) {
-			return (x.supplier_name || '').toLowerCase() === low || (x.name || '').toLowerCase() === low;
+			return squish(x.supplier_name) === low || squish(x.name) === low;
 		})[0];
 		return hit ? hit.name : v;
 	}
@@ -1865,7 +1990,7 @@ window.WS_VAT = {{ (vat_options or {}) | tojson }};
 		markVendor(input);
 	}
 	function relabelItemCells() {
-		document.querySelectorAll('#kit-modal-body .ke-op, #kit-modal-body .ke-item').forEach(function (input) {
+		document.querySelectorAll('#kit-modal-body .ke-op, #kit-modal-body .ke-item, #kit-modal-body .ke-sitem, .row-lines .ke-op, .row-lines .ke-item, .row-lines .ke-sitem').forEach(function (input) {
 			var code = input.dataset.code, name = itemNameOf(code);
 			if (code && name && input.value === code && input.dataset.label === code) setItemCell(input, code, name);
 		});
@@ -1905,6 +2030,30 @@ window.WS_VAT = {{ (vat_options or {}) | tojson }};
 		var hit = KIT_ITEMS.filter(function (it) { return it.item === code; })[0];
 		return hit ? (hit.item_name || '') : '';
 	}
+	// The sublet Item: a stock Item the sublet is bought as (its Purchase Material
+	// Request) and billed as -- picked, or created when it does not exist yet. On
+	// the Purchase Receipt the job's qty is issued to the card; any extra bought
+	// stays in stock. Without one the line falls back to the Default Sublet Item.
+	function attachSubletItemAutocomplete(input) {
+		if (!input || input.dataset.acset) return;
+		input.dataset.acset = '1';
+		attachAutocomplete(input, function (typed) {
+			var q = (typed || '').toLowerCase();
+			var rows = KIT_ITEMS.filter(function (it) {
+				if (!it.is_stock || it.is_item === 0) return false;
+				return !q || (it.item || '').toLowerCase().indexOf(q) >= 0 ||
+					(it.item_name || '').toLowerCase().indexOf(q) >= 0;
+			}).slice(0, 10).map(function (it) {
+				return { label: esc(it.item_name || it.item), value: it.item, name: it.item_name || it.item, rate: it.rate };
+			});
+			var create = itemCreateRow(typed, 'sublet');
+			return create ? rows.concat([create]) : rows;
+		}, function (it) {
+			if (it.action === 'create') { openItemDialog('sublet', it.typed, input); return; }
+			setItemCell(input, it.value, it.name);
+			collectRowLines();
+		});
+	}
 	// The labour Item: what a Sales Order raised from this job bills the line
 	// against. Without one the line is unbillable unless a Default Labour Item is
 	// set in Workshop Settings — so the cell offers the service (non-stock) Items.
@@ -1943,15 +2092,15 @@ window.WS_VAT = {{ (vat_options or {}) | tojson }};
 	function itemCreateRow(typed, kind) {
 		typed = (typed || '').trim();
 		if (!typed) return null;
-		var low = typed.toLowerCase();
+		var low = squish(typed);
 		var taken = KIT_ITEMS.some(function (it) {
 			if (kind === 'labour' && (it.is_stock || it.is_item === 0)) return false;
-			return (it.item || '').toLowerCase() === low || (it.item_name || '').toLowerCase() === low;
+			return squish(it.item) === low || squish(it.item_name) === low;
 		});
 		if (taken) return null;
 		return { action: 'create', typed: typed,
 			label: '<i class="fa-solid fa-plus"></i> Create “' + esc(typed) + '”',
-			sub: kind === 'labour' ? 'New labor item' : 'New part' };
+			sub: kind === 'labour' ? 'New labor item' : kind === 'sublet' ? 'New sublet item' : 'New part' };
 	}
 	function itemError(msg) {
 		var box = document.getElementById('item-modal-err');
@@ -1964,9 +2113,11 @@ window.WS_VAT = {{ (vat_options or {}) | tojson }};
 	}
 	function openItemDialog(kind, typed, input) {
 		itemInput = input; itemKind = kind;
-		var part = kind === 'part';
-		document.getElementById('item-modal-title').textContent = part ? 'New Part' : 'New Labor Item';
-		document.getElementById('item-modal-sub').textContent = part
+		var part = kind === 'part' || kind === 'sublet'; // both are stock Items: group + unit
+		document.getElementById('item-modal-title').textContent = kind === 'sublet' ? 'New Sublet Item' : part ? 'New Part' : 'New Labor Item';
+		document.getElementById('item-modal-sub').textContent = kind === 'sublet'
+			? 'A stock item bought from the sublet vendor: the job\'s quantity is issued to the job card on receipt, any extra stays in stock. Its code is numbered automatically.'
+			: part
 			? 'A stock item. Its code is numbered automatically.'
 			: 'A service item billed per hour, filed under Services. Its code is numbered automatically.';
 		itemModal.querySelectorAll('[data-part-only]').forEach(function (f) { f.style.display = part ? '' : 'none'; });
@@ -1993,7 +2144,7 @@ window.WS_VAT = {{ (vat_options or {}) | tojson }};
 		var name = document.getElementById('item-modal-name').value.trim();
 		var group = document.getElementById('item-modal-group').value;
 		if (!name) { itemError('Enter the item name.'); return; }
-		if (kind === 'part' && !group) { itemError('Pick the group this part belongs in.'); return; }
+		if (kind !== 'labour' && !group) { itemError('Pick the group this ' + (kind === 'sublet' ? 'sublet item' : 'part') + ' belongs in.'); return; }
 		itemCreateBtn.disabled = true;
 		callMethod('garagedesk.api.front_office.create_kit_item', {
 			item_name: name, kind: kind, item_group: group,
@@ -2054,8 +2205,14 @@ window.WS_VAT = {{ (vat_options or {}) | tojson }};
 		ensureKitItems();
 		document.getElementById('kit-modal-sub').textContent = label || LTS_LABEL[standard] || service || standard || __svcLabelForRow(row) || 'Manual Labor Time Standard';
 		kitModal.classList.add('is-open');
-		if (!standard) { // no standard for this service — start with empty editable tables
-			kitDialogData = { labor: [], parts: [], sublet: [] };
+		kitDialogPrefilled = null;
+		if (!standard) {
+			// No standard for this service yet: start from the lines already added to
+			// this job for it, so "Create Labor Time Standard" is built from them
+			// instead of re-typing; otherwise from empty editable tables.
+			kitDialogPrefilled = unassignedKit(service);
+			var pre = kitDialogPrefilled || { labor: [], parts: [], sublet: [] };
+			kitDialogData = { labor: pre.labor.slice(), parts: pre.parts.slice(), sublet: pre.sublet.slice() };
 			renderKitModalBody();
 			return;
 		}
@@ -2094,6 +2251,8 @@ window.WS_VAT = {{ (vat_options or {}) | tojson }};
 			'<td><input class="ke-rate" type="number" min="0" step="0.01" value="' + (r.rate != null ? r.rate : 0) + '"></td>' +
 			'<td><button type="button" class="icon-del" data-kdel><i class="fa-solid fa-trash"></i></button></td></tr>';
 		return '<tr>' +
+			'<td>' + itemCellHtml('ke-sitem', r.item_code, r.item_name, 'Sublet item') + '</td>' +
+			'<td><input class="ke-sqty" type="number" min="0" step="any" value="' + (r.qty != null && r.qty !== '' ? r.qty : 1) + '"></td>' +
 			'<td><input class="ke-desc" value="' + escAttr(r.service_description || '') + '" placeholder="Service"></td>' +
 			'<td>' + vendorCellHtml('ke-vendor', r.vendor) + '</td>' +
 			'<td><input class="ke-cost" type="number" min="0" step="0.01" value="' + (r.cost != null ? r.cost : 0) + '"></td>' +
@@ -2112,11 +2271,12 @@ window.WS_VAT = {{ (vat_options or {}) | tojson }};
 			'<div class="kit-none" style="margin-bottom:10px">Labor Time Standard items for this Job Type Service are listed below — edit quantities/rates, add rows if needed, then “Add to Workshop Job Card”.</div>' +
 			kitEditSection('labor', 'Labor Time Kit Labor', ['Item', 'Description', 'Hours', 'Rate', 'Skill']) +
 			kitEditSection('parts', 'Labor Time Kit Parts', ['Item', 'Qty', 'UOM', 'Rate']) +
-			kitEditSection('sublet', 'Labor Time Kit Sublet', ['Service', 'Vendor', 'Cost', 'Markup %']);
+			kitEditSection('sublet', 'Labor Time Kit Sublet', ['Item', 'Qty', 'Service', 'Vendor', 'Cost / unit', 'Markup %']);
 		document.querySelectorAll('#kit-modal-body .ke-item').forEach(attachKitItemAutocomplete);
 		document.querySelectorAll('#kit-modal-body .ke-uom').forEach(attachUomAutocomplete);
 		document.querySelectorAll('#kit-modal-body .ke-op').forEach(attachLabourItemAutocomplete);
 		document.querySelectorAll('#kit-modal-body .ke-vendor').forEach(attachVendorAutocomplete);
+		document.querySelectorAll('#kit-modal-body .ke-sitem').forEach(attachSubletItemAutocomplete);
 	}
 	// Add-row / remove-row inside the popup.
 	document.getElementById('kit-modal-body').addEventListener('click', function (e) {
@@ -2131,6 +2291,7 @@ window.WS_VAT = {{ (vat_options or {}) | tojson }};
 				attachLabourItemAutocomplete(tb.lastElementChild.querySelector('.ke-op'));
 			} else {
 				attachVendorAutocomplete(tb.lastElementChild.querySelector('.ke-vendor'));
+				attachSubletItemAutocomplete(tb.lastElementChild.querySelector('.ke-sitem'));
 			}
 			return;
 		}
@@ -2146,7 +2307,8 @@ window.WS_VAT = {{ (vat_options or {}) | tojson }};
 				var code = itemCodeOf(tr.querySelector('.ke-item'));
 				return { item_code: code, item_name: itemNameOf(code) || tr.querySelector('.ke-item').value.trim(), qty: tr.querySelector('.ke-qty').value, uom: tr.querySelector('.ke-uom').value, rate: tr.querySelector('.ke-rate').value };
 			}
-			return { service_description: tr.querySelector('.ke-desc').value, vendor: vendorCodeOf(tr.querySelector('.ke-vendor')), cost: tr.querySelector('.ke-cost').value, markup_pct: tr.querySelector('.ke-markup').value };
+			var sitem = itemCodeOf(tr.querySelector('.ke-sitem'), true);
+			return { item_code: sitem, item_name: itemNameOf(sitem), qty: tr.querySelector('.ke-sqty').value, service_description: tr.querySelector('.ke-desc').value, vendor: vendorCodeOf(tr.querySelector('.ke-vendor')), cost: tr.querySelector('.ke-cost').value, markup_pct: tr.querySelector('.ke-markup').value };
 		});
 	}
 	// Push popup rows into the Job's kit tables (stamped with the standard, deduped).
@@ -2159,12 +2321,38 @@ window.WS_VAT = {{ (vat_options or {}) | tojson }};
 				if (g === 'parts' && !(src.item_code || '').trim()) return;
 				if (g === 'sublet' && !(src.service_description || '').trim()) return;
 				var row = buildKitRow(g, src); row.source_standard = std || '';
+				if (!std) row.source_service = kitDialogService || '';
 				var k = kitKey(g, row);
 				if (have.has(k)) return; // never store the same line twice
 				have.add(k); target.push(row);
 			});
 		});
 		renderKitTables();
+	}
+	// This job's lines that belong to no standard, for `service`: the ones added from
+	// its popup this session (tagged source_service), else -- e.g. after a reload, when
+	// that tag is gone -- every unassigned line, but only while this is the only
+	// service row still without a standard, so another service's lines aren't taken.
+	function unassignedKit(service) {
+		if (!service) return null;
+		function pick(test) {
+			var b = { labor: kitLabor.filter(test), parts: kitParts.filter(test), sublet: kitSublet.filter(test) };
+			return (b.labor.length || b.parts.length || b.sublet.length) ? b : null;
+		}
+		var tagged = pick(function (r) { return !r.source_standard && r.source_service === service; });
+		if (tagged) return tagged;
+		var open = Array.prototype.filter.call(jdBody.children, function (tr) {
+			var svc = svcHidden(tr); return svc && svc.value && !tr.dataset.labour;
+		});
+		if (open.length !== 1) return null;
+		return pick(function (r) { return !r.source_standard && !r.source_service; });
+	}
+	function dropPrefilled() {
+		if (!kitDialogPrefilled) return;
+		var p = kitDialogPrefilled;
+		function keep(list) { return function (r) { return list.indexOf(r) < 0; }; }
+		kitLabor = kitLabor.filter(keep(p.labor)); kitParts = kitParts.filter(keep(p.parts)); kitSublet = kitSublet.filter(keep(p.sublet));
+		kitDialogPrefilled = null;
 	}
 	function bookedKit(standard) {
 		function mine(r) { return r.source_standard === standard; }
@@ -2181,6 +2369,7 @@ window.WS_VAT = {{ (vat_options or {}) | tojson }};
 			var other = function (r) { return r.source_standard !== std; };
 			kitLabor = kitLabor.filter(other); kitParts = kitParts.filter(other); kitSublet = kitSublet.filter(other);
 		}
+		dropPrefilled(); // the popup's rows replace the lines it opened with
 		commitKitRows(rows, std);
 		kitModalClose();
 	});
@@ -2200,6 +2389,13 @@ window.WS_VAT = {{ (vat_options or {}) | tojson }};
 				if (kitDialogService) LTS_BY_SERVICE[kitDialogService] = std;
 				LTS_LABEL[std] = (r && r.standard_code) || std;
 				if (kitDialogRow) setRowLaborCode(kitDialogRow, std); // reflect the (new) code on the row
+				// The job's lines the popup was built from now belong to the new standard.
+				if (kitDialogPrefilled) {
+					var p = kitDialogPrefilled;
+					p.labor.concat(p.parts, p.sublet).forEach(function (r) { r.source_standard = std; });
+					kitDialogPrefilled = null;
+					renderKitTables();
+				}
 			}
 			btn.innerHTML = '<i class="fa-solid fa-check"></i> Saved';
 			setTimeout(function () { btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Update Labor Time Standard'; }, 1600);
@@ -2237,6 +2433,17 @@ window.WS_VAT = {{ (vat_options or {}) | tojson }};
 	// standard takes it, as the kit is held once per standard. Rows with no
 	// kit labour keep whatever was typed.
 	function syncServiceHours(rows, hrsSel) {
+		if (!KIT_ENABLED) {
+			// A row's Hrs is the total of the labour lines added on it.
+			Array.prototype.forEach.call(rows, function (tr) {
+				var key = tr.dataset.rowKey; if (!key) return;
+				var mine = kitLabor.filter(function (r) { return r.row_key === key; });
+				var hrs = tr.querySelector(hrsSel);
+				if (!mine.length || !hrs) return;
+				hrs.value = Math.round(mine.reduce(function (s, r) { return s + (parseFloat(r.hours) || 0); }, 0) * 100) / 100;
+			});
+			return;
+		}
 		var total = {};
 		kitLabor.forEach(function (r) {
 			if (r.source_standard) total[r.source_standard] = (total[r.source_standard] || 0) + (parseFloat(r.hours) || 0);
@@ -2252,6 +2459,7 @@ window.WS_VAT = {{ (vat_options or {}) | tojson }};
 	}
 	function renderKitTables() {
 		if (kitLabor.length || kitParts.length) ensureKitItems();
+		if (!KIT_ENABLED) { adoptLooseLines(); serviceRows().forEach(renderRowLines); }
 		syncServiceHours(jdBody.children, '.hrs');
 		['labor', 'parts', 'sublet'].forEach(function (g) {
 			var m = KIT_TABLES[g], rows = m.arr();
@@ -2261,9 +2469,320 @@ window.WS_VAT = {{ (vat_options or {}) | tojson }};
 			document.getElementById(m.empty).style.display = rows.length ? 'none' : 'block';
 			document.getElementById(m.count).textContent = rows.length ? '(' + rows.length + ')' : '';
 		});
-		var any = kitLabor.length || kitParts.length || kitSublet.length;
+		var any = KIT_ENABLED && (kitLabor.length || kitParts.length || kitSublet.length);
 		document.getElementById('kit-card').style.display = any ? 'block' : 'none';
 	}
+
+	// ---- Labor Time Kit off (Workshop Settings): lines on each service row ----
+	// No Labor Time Standard and no kit popup: each service row has + Labour /
+	// + Part / + Sublet, and its lines sit in a row of their own beneath it. They
+	// are still held in kitLabor / kitParts / kitSublet (so save, the Estimate and
+	// reloads work as before), each stamped with its service row's row_key.
+	var KIT_ENABLED = true;
+	function applyKitSetting(on) {
+		KIT_ENABLED = !!on;
+		if (KIT_ENABLED) return;
+		var th = document.getElementById('jd-std-th');
+		th.textContent = 'Add';
+		th.style.width = '270px'; // room for the three buttons side by side
+		document.getElementById('kit-card').style.display = 'none';
+		document.getElementById('tp-empty').textContent = 'No tasks yet — add Job Type Services in Workshop Job Card Services; the tasks are created when the Workshop Job Card is saved.';
+	}
+	function newRowKey() { return 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+	function serviceRows() {
+		return Array.prototype.filter.call(jdBody.children, function (tr) { return !tr.classList.contains('svc-lines'); });
+	}
+	function linesRowOf(tr) {
+		var n = tr && tr.nextElementSibling;
+		return n && n.classList.contains('svc-lines') ? n : null;
+	}
+	function rowLineArr(g) { return g === 'labor' ? kitLabor : g === 'parts' ? kitParts : kitSublet; }
+	function dropRowLines(key) {
+		var keep = function (r) { return r.row_key !== key; };
+		kitLabor = kitLabor.filter(keep); kitParts = kitParts.filter(keep); kitSublet = kitSublet.filter(keep);
+	}
+	// Lines saved before the kit was switched off carry no row key: they go to
+	// the row on their standard, else to the only row there is.
+	function adoptLooseLines() {
+		var rows = serviceRows().filter(function (tr) { return tr.dataset.rowKey; });
+		kitLabor.concat(kitParts, kitSublet).forEach(function (r) {
+			if (r.row_key) return;
+			var hit = rows.filter(function (tr) { return r.source_standard && tr.dataset.labour === r.source_standard; })[0]
+				|| (rows.length === 1 ? rows[0] : null);
+			if (hit) r.row_key = hit.dataset.rowKey;
+		});
+	}
+	// Title, then [column, width] -- '' takes what is left.
+	var ROW_LINE_HEADS = {
+		labor: ['Labour', [['Item', '26%'], ['Description', ''], ['Hours', '80px'], ['Rate', '100px'], ['Skill', '110px']]],
+		parts: ['Parts', [['Item', ''], ['Qty', '80px'], ['UOM', '110px'], ['Rate', '100px']]],
+		sublet: ['Sublet', [['Item', '22%'], ['Qty', '70px'], ['Service', ''], ['Vendor', '20%'], ['Cost / unit', '100px'], ['Markup %', '84px']]]
+	};
+	function renderRowLines(tr) {
+		renderRowLinesOnly(tr);
+		renderLinesCard();
+	}
+	// ---- the combined card: every row's lines, with the service they are on ----
+	var linesCardOpen = false;
+	function serviceOfKey(key) {
+		var tr = serviceRows().filter(function (r) { return r.dataset.rowKey === key; })[0];
+		if (!tr) return '—';
+		var i = svcInput(tr), jt = tr.querySelector('select.jt');
+		return ((i && i.value.trim()) || (jt && jt.value) || '—');
+	}
+	function linesCardMr(r) {
+		if (!r.material_request) return '<span class="muted">—</span>';
+		return '<a href="/app/material-request/' + encodeURIComponent(r.material_request) + '" target="_blank">' + esc(r.material_request) + '</a>' +
+			(r.material_request_status ? ' · ' + esc(r.material_request_status) : '');
+	}
+	function renderLinesCard() {
+		var card = document.getElementById('lines-card');
+		if (!card) return;
+		// Lines of rows still on the card, in row order.
+		var keys = serviceRows().map(function (tr) { return tr.dataset.rowKey; }).filter(Boolean);
+		var byRow = function (arr) {
+			return arr.filter(function (r) { return keys.indexOf(r.row_key) >= 0; })
+				.sort(function (a, b) { return keys.indexOf(a.row_key) - keys.indexOf(b.row_key); });
+		};
+		var lab = byRow(kitLabor), par = byRow(kitParts), sub = byRow(kitSublet);
+		card.style.display = (!KIT_ENABLED && (lab.length || par.length || sub.length)) ? '' : 'none';
+		if (card.style.display === 'none') return;
+		var n = function (v) { return parseFloat(v) || 0; };
+		var labAmt = lab.reduce(function (s, r) { return s + n(r.hours) * n(r.rate); }, 0);
+		var labHrs = lab.reduce(function (s, r) { return s + n(r.hours); }, 0);
+		var parAmt = par.reduce(function (s, r) { return s + n(r.qty) * n(r.rate); }, 0);
+		var subSell = function (r) { return (n(r.qty) || 1) * n(r.cost) * (1 + n(r.markup_pct) / 100); };
+		var subAmt = sub.reduce(function (s, r) { return s + subSell(r); }, 0);
+		document.getElementById('lines-card-totals').innerHTML =
+			'<span data-k="labor"><span class="k">Labour</span> ' + lab.length + ' · ' + fmtNum(labHrs) + ' h · ' + fmtMoney(labAmt) + '</span>' +
+			'<span data-k="parts"><span class="k">Parts</span> ' + par.length + ' · ' + fmtMoney(parAmt) + '</span>' +
+			'<span data-k="sublet"><span class="k">Sublet</span> ' + sub.length + ' · ' + fmtMoney(subAmt) + '</span>' +
+			'<span class="lc-grand">Total ' + fmtMoney(labAmt + parAmt + subAmt) + '</span>';
+		var body = document.getElementById('lines-card-body');
+		document.getElementById('lines-card-head').setAttribute('aria-expanded', linesCardOpen ? 'true' : 'false');
+		body.hidden = !linesCardOpen;
+		if (!linesCardOpen) return;
+		function grp(k, title, count, head, rows, foot) {
+			if (!count) return '';
+			return '<div class="lc-grp" data-k="' + k + '"><h4>' + title + ' <span class="muted">' + count + '</span></h4>' +
+				'<table class="table"><thead><tr>' + head + '</tr></thead><tbody>' + rows + '</tbody>' +
+				(foot ? '<tfoot><tr>' + foot + '</tr></tfoot>' : '') + '</table></div>';
+		}
+		body.innerHTML =
+			grp('labor', 'Labour', lab.length,
+				'<th>Service</th><th>Item</th><th>Description</th><th class="num">Hours</th><th class="num">Rate</th><th class="num">Amount</th>',
+				lab.map(function (r) {
+					return '<tr><td class="svc">' + esc(serviceOfKey(r.row_key)) + '</td><td>' + esc(itemNameOf(r.operation) || r.operation || '—') +
+						'</td><td>' + esc(r.description || '') + '</td><td class="num">' + fmtNum(r.hours) + '</td><td class="num">' + fmtMoney(r.rate) +
+						'</td><td class="num">' + fmtMoney(n(r.hours) * n(r.rate)) + '</td></tr>';
+				}).join(''),
+				'<td colspan="3">Total</td><td class="num">' + fmtNum(labHrs) + '</td><td></td><td class="num">' + fmtMoney(labAmt) + '</td>') +
+			grp('parts', 'Parts', par.length,
+				'<th>Service</th><th>Item</th><th class="num">Qty</th><th>UOM</th><th class="num">Rate</th><th class="num">Amount</th><th>Material Request</th>',
+				par.map(function (r) {
+					return '<tr><td class="svc">' + esc(serviceOfKey(r.row_key)) + '</td><td>' + esc(r.item_name || itemNameOf(r.item_code) || r.item_code || '—') +
+						'</td><td class="num">' + fmtNum(r.qty) + '</td><td>' + esc(r.uom || '') + '</td><td class="num">' + fmtMoney(r.rate) +
+						'</td><td class="num">' + fmtMoney(n(r.qty) * n(r.rate)) + '</td><td>' + linesCardMr(r) + '</td></tr>';
+				}).join(''),
+				'<td colspan="5">Total</td><td class="num">' + fmtMoney(parAmt) + '</td><td></td>') +
+			grp('sublet', 'Sublet', sub.length,
+				'<th>Service</th><th>Item</th><th class="num">Qty</th><th>Sublet work</th><th>Vendor</th><th class="num">Cost / unit</th><th class="num">Markup</th><th class="num">Amount</th><th>Material Request</th><th class="num">Issued</th>',
+				sub.map(function (r) {
+					return '<tr><td class="svc">' + esc(serviceOfKey(r.row_key)) + '</td><td>' + esc(r.item_name || itemNameOf(r.item_code) || r.item_code || '—') +
+						'</td><td class="num">' + fmtNum(n(r.qty) || 1) + '</td><td>' + esc(r.service_description || '') + '</td><td>' + esc(supplierName(r.vendor) || '—') +
+						'</td><td class="num">' + fmtMoney(r.cost) + '</td><td class="num">' + fmtNum(r.markup_pct) + '%</td><td class="num">' + fmtMoney(subSell(r)) +
+						'</td><td>' + linesCardMr(r) + '</td><td class="num">' + (n(r.issued_qty) ? fmtNum(r.issued_qty) : '<span class="muted">—</span>') + '</td></tr>';
+				}).join(''),
+				'<td colspan="7">Total</td><td class="num">' + fmtMoney(subAmt) + '</td><td colspan="2"></td>');
+	}
+	document.getElementById('lines-card-head').addEventListener('click', function () {
+		collectRowLines();
+		linesCardOpen = !linesCardOpen;
+		renderLinesCard();
+	});
+	function renderRowLinesOnly(tr) {
+		var lt = linesRowOf(tr); if (!lt) return;
+		var key = tr.dataset.rowKey, html = '', groups = [];
+		['labor', 'parts', 'sublet'].forEach(function (g) {
+			var mine = rowLineArr(g).filter(function (r) { return r.row_key === key; });
+			if (!mine.length) return;
+			var head = ROW_LINE_HEADS[g];
+			html += '<div class="rl-grp" data-g="' + g + '"><div class="rl-title">' + head[0] + ' <span class="n">' + mine.length + '</span></div>' +
+				'<table class="table editable"><colgroup>' +
+				head[1].map(function (h) { return '<col' + (h[1] ? ' style="width:' + h[1] + '"' : '') + '>'; }).join('') + '<col style="width:34px"></colgroup>' +
+				'<thead><tr>' + head[1].map(function (h) { return '<th>' + esc(h[0]) + '</th>'; }).join('') + '<th></th></tr></thead>' +
+				'<tbody data-g="' + g + '">' + mine.map(function (r) { return kitEditRow(g, r); }).join('') + '</tbody></table></div>';
+			groups.push([g, mine]);
+		});
+		// The add buttons carry the row's counts; the row and its lines read as one block.
+		tr.classList.toggle('has-lines', !!html);
+		['labor', 'parts', 'sublet'].forEach(function (g) {
+			var n = tr.querySelector('[data-add-line="' + g + '"] .n');
+			var c = groups.filter(function (p) { return p[0] === g; })[0];
+			if (n) n.textContent = c ? c[1].length : '';
+		});
+		lt.style.display = html ? '' : 'none';
+		if (html && tr.dataset.collapsed === '1') {
+			lt.firstElementChild.innerHTML = '<div class="row-lines is-collapsed" data-rl-edit title="Click to edit">' +
+				rowLinesSummary(groups) + '<span class="rl-saved"><i class="fa-solid fa-check"></i> Saved</span>' +
+				'<button type="button" class="btn btn--outline btn--sm" data-rl-edit><i class="fa-solid fa-pen"></i> Edit</button></div>';
+			return;
+		}
+		lt.firstElementChild.innerHTML = html ? '<div class="row-lines">' + html +
+			'<div class="rl-foot"><span class="rl-msg"></span>' +
+			'<button type="button" class="btn btn--primary btn--sm" data-rl-save><i class="fa-solid fa-floppy-disk"></i> Save</button></div></div>' : '';
+		// Each line's object rides on its <tr>, so edits are written back to it.
+		groups.forEach(function (p) {
+			var tb = lt.querySelector('tbody[data-g="' + p[0] + '"]');
+			Array.prototype.forEach.call(tb.children, function (row, i) { row._rowLine = p[1][i]; row.dataset.g = p[0]; });
+		});
+		lt.querySelectorAll('.ke-item').forEach(attachKitItemAutocomplete);
+		lt.querySelectorAll('.ke-uom').forEach(attachUomAutocomplete);
+		lt.querySelectorAll('.ke-op').forEach(attachLabourItemAutocomplete);
+		lt.querySelectorAll('.ke-vendor').forEach(attachVendorAutocomplete);
+		lt.querySelectorAll('.ke-sitem').forEach(attachSubletItemAutocomplete);
+	}
+	// One line for a folded row: what it holds and what it comes to.
+	function rowLinesSummary(groups) {
+		var bits = [], total = 0;
+		groups.forEach(function (p) {
+			var g = p[0], rows = p[1];
+			if (g === 'labor') {
+				var h = rows.reduce(function (s, r) { return s + (parseFloat(r.hours) || 0); }, 0);
+				total += rows.reduce(function (s, r) { return s + (parseFloat(r.hours) || 0) * (parseFloat(r.rate) || 0); }, 0);
+				bits.push('<span data-k="labor"><span class="k">Labour</span> ' + rows.length + ' · ' + fmtNum(h) + ' h</span>');
+			} else if (g === 'parts') {
+				total += rows.reduce(function (s, r) { return s + (parseFloat(r.qty) || 0) * (parseFloat(r.rate) || 0); }, 0);
+				bits.push('<span data-k="parts"><span class="k">Parts</span> ' + rows.map(function (r) {
+					return fmtNum(r.qty) + ' × ' + esc(r.item_name || itemNameOf(r.item_code) || r.item_code);
+				}).join(', ') + '</span>');
+			} else {
+				total += rows.reduce(function (s, r) {
+					return s + (parseFloat(r.qty) || 1) * (parseFloat(r.cost) || 0) * (1 + (parseFloat(r.markup_pct) || 0) / 100);
+				}, 0);
+				bits.push('<span data-k="sublet"><span class="k">Sublet</span> ' + rows.map(function (r) {
+					return esc(r.service_description || r.item_name || 'Sublet work');
+				}).join(', ') + '</span>');
+			}
+		});
+		return '<div class="rl-sum">' + bits.join('') + '<span class="rl-total">' + fmtMoney(total) + '</span></div>';
+	}
+	// A line with nothing in it is a row added and never filled: dropped. One half
+	// filled is reported -- the card would refuse it without its key field.
+	function lineEmpty(g, r) {
+		if (g === 'labor') return !(r.description || '').trim() && !r.operation && !(parseFloat(r.rate) || 0);
+		if (g === 'parts') return !r.item_code && !(parseFloat(r.rate) || 0);
+		return !(r.service_description || '').trim() && !r.item_code && !r.vendor && !(parseFloat(r.cost) || 0);
+	}
+	function pruneEmptyLines(key) {
+		['labor', 'parts', 'sublet'].forEach(function (g) {
+			var arr = rowLineArr(g);
+			for (var i = arr.length - 1; i >= 0; i--) {
+				if ((!key || arr[i].row_key === key) && arr[i].row_key && lineEmpty(g, arr[i])) arr.splice(i, 1);
+			}
+		});
+	}
+	function rowLineGaps(key) {
+		var gaps = [];
+		// An Item the list does not know is dropped by the server, so it is asked for
+		// here: labour is billed against its Item, a part is issued as one.
+		var known = function (code) { return !KIT_ITEMS.length || KIT_ITEMS.some(function (it) { return it.item === code; }); };
+		kitLabor.forEach(function (r) {
+			if (r.row_key !== key) return;
+			if (!(r.description || '').trim()) gaps.push('a labour line needs its Description');
+			if (!r.operation) gaps.push('a labour line needs its Item');
+			else if (!known(r.operation)) gaps.push('labour Item "' + r.operation + '" is not an Item - pick it from the list or create it');
+		});
+		kitParts.forEach(function (r) {
+			if (r.row_key !== key) return;
+			if (!r.item_code) gaps.push('a part needs its Item');
+			else if (!known(r.item_code)) gaps.push('part Item "' + r.item_code + '" is not an Item - pick it from the list or create it');
+		});
+		kitSublet.forEach(function (r) { if (r.row_key === key && !(r.service_description || '').trim()) gaps.push('a sublet line needs its Service'); });
+		return gaps.filter(function (g, i) { return gaps.indexOf(g) === i; });
+	}
+	// What the row-line inputs hold, written back onto their line objects.
+	function collectRowLines() {
+		if (KIT_ENABLED) return;
+		jdBody.querySelectorAll('.row-lines tr[data-g]').forEach(function (row) {
+			var r = row._rowLine, g = row.dataset.g; if (!r) return;
+			if (g === 'labor') {
+				r.description = row.querySelector('.ke-desc').value; r.operation = itemCodeOf(row.querySelector('.ke-op'), true);
+				r.hours = row.querySelector('.ke-hours').value; r.rate = row.querySelector('.ke-rate').value;
+				r.skill_level = row.querySelector('.ke-skill').value;
+			} else if (g === 'parts') {
+				var code = itemCodeOf(row.querySelector('.ke-item'));
+				r.item_code = code; r.item_name = itemNameOf(code) || row.querySelector('.ke-item').value.trim();
+				r.qty = row.querySelector('.ke-qty').value; r.uom = row.querySelector('.ke-uom').value;
+				r.rate = row.querySelector('.ke-rate').value;
+			} else {
+				r.item_code = itemCodeOf(row.querySelector('.ke-sitem'), true); r.item_name = itemNameOf(r.item_code);
+				r.qty = row.querySelector('.ke-sqty').value;
+				r.service_description = row.querySelector('.ke-desc').value; r.vendor = vendorCodeOf(row.querySelector('.ke-vendor'));
+				r.cost = row.querySelector('.ke-cost').value; r.markup_pct = row.querySelector('.ke-markup').value;
+			}
+		});
+	}
+	jdBody.addEventListener('click', function (e) {
+		var add = e.target.closest('[data-add-line]');
+		if (add) {
+			var tr = add.closest('tr'), g = add.dataset.addLine;
+			collectRowLines();
+			tr.dataset.collapsed = '0';
+			ensureKitItems();
+			var line = buildKitRow(g, g === 'labor' ? { hours: 1 } : g === 'parts' ? { qty: 1 } : {});
+			line.row_key = tr.dataset.rowKey;
+			rowLineArr(g).push(line);
+			renderRowLines(tr);
+			syncServiceHours([tr], '.hrs');
+			var tb = linesRowOf(tr).querySelector('tbody[data-g="' + g + '"]');
+			var first = tb && tb.lastElementChild.querySelector('input');
+			if (first) first.focus();
+			return;
+		}
+		var edit = e.target.closest('[data-rl-edit]');
+		if (edit) {
+			var etr = edit.closest('tr.svc-lines').previousElementSibling;
+			etr.dataset.collapsed = '0';
+			renderRowLines(etr);
+			return;
+		}
+		var save = e.target.closest('[data-rl-save]');
+		if (save) {
+			var str = save.closest('tr.svc-lines').previousElementSibling, msg = save.parentNode.querySelector('.rl-msg');
+			collectRowLines();
+			pruneEmptyLines(str.dataset.rowKey);
+			var gaps = rowLineGaps(str.dataset.rowKey);
+			if (gaps.length) { renderRowLines(str); linesRowOf(str).querySelector('.rl-msg').textContent = 'Fill in: ' + gaps.join(', ') + '.'; return; }
+			save.disabled = true; save.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving…'; msg.textContent = '';
+			// Saves the whole draft card, so the row's lines (and their Tasks) are written now.
+			saveJobCard(false).then(function () {
+				str.dataset.collapsed = '1';
+				renderRowLines(str);
+				syncServiceHours([str], '.hrs');
+			}).catch(function (err) {
+				save.disabled = false; save.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Save';
+				if (err && err.message !== 'required fields missing') msg.textContent = 'Could not save: ' + otMsg(err).replace(/<[^>]*>/g, '');
+			});
+			return;
+		}
+		var del = e.target.closest('.row-lines [data-kdel]');
+		if (del) {
+			var row = del.closest('tr'), arr = rowLineArr(row.dataset.g), i = arr.indexOf(row._rowLine);
+			var svc = row.closest('tr.svc-lines').previousElementSibling;
+			collectRowLines();
+			if (i >= 0) arr.splice(i, 1);
+			renderRowLines(svc);
+			syncServiceHours([svc], '.hrs');
+		}
+	});
+	jdBody.addEventListener('input', function (e) {
+		if (!e.target.closest('.row-lines')) return;
+		collectRowLines();
+		if (e.target.classList.contains('ke-hours')) syncServiceHours(jdBody.children, '.hrs');
+		renderLinesCard();
+	});
+
 	document.getElementById('kit-card').addEventListener('click', function (e) {
 		var b = e.target.closest('[data-kit-del]'); if (!b) return;
 		var g = b.dataset.kitDel, tr = b.closest('tr'), idx = Array.prototype.indexOf.call(tr.parentNode.children, tr);
@@ -2452,9 +2971,9 @@ window.WS_VAT = {{ (vat_options or {}) | tojson }};
 		});
 		kitSublet.forEach(function (r) {
 			if (!(r.service_description || '').trim()) return;
-			var sell = (parseFloat(r.cost) || 0) * (1 + (parseFloat(r.markup_pct) || 0) / 100);
-			out.push({ kind: 'sublet', item: '', item_name: '', description: r.service_description,
-				qty: 1, rate: Math.round(sell * 100) / 100, uom: '', src: 'kit' });
+			var sell = (parseFloat(r.cost) || 0) * (1 + (parseFloat(r.markup_pct) || 0) / 100); // per unit
+			out.push({ kind: 'sublet', item: r.item_code || '', item_name: r.item_name || itemNameOf(r.item_code), description: r.service_description,
+				qty: parseFloat(r.qty) || 1, rate: Math.round(sell * 100) / 100, uom: '', src: 'kit' });
 		});
 		return out;
 	}
@@ -2744,7 +3263,8 @@ window.WS_VAT = {{ (vat_options or {}) | tojson }};
 				return '<tr class="tp-group" data-i="' + i + '"><td colspan="3">' + esc(t.service_name || t.subject) +
 					'<span class="tp-sub">' + tpTaskLink(t) + (t.jobtype ? ' · ' + esc(t.jobtype) : '') + ' · ' + kids.length + ' labor task' + (kids.length === 1 ? '' : 's') + '</span></td>' +
 					'<td>' + hrs + '</td><td colspan="3" class="tp-none" style="font-weight:500">Completes when its labor tasks are done</td>' +
-					'<td><span class="tp-status is-' + escAttr(workStatus(t.status).replace(/ /g, '-')) + '">' + esc(workStatus(t.status)) + '</span></td><td></td></tr>';
+					'<td><span class="tp-status is-' + escAttr(workStatus(t.status).replace(/ /g, '-')) + '">' + esc(workStatus(t.status)) + '</span></td><td></td></tr>' +
+					tpMaterialRow(t, i);
 			}
 			var dis = '';
 			return '<tr class="' + (t.parent_task ? 'tp-child' : '') + '" data-i="' + i + '">' +
@@ -2758,10 +3278,65 @@ window.WS_VAT = {{ (vat_options or {}) | tojson }};
 				'<td>' + tpEmpCell(t, i) + '</td>' +
 				'<td>' + tpStatusSelect(t) + '</td>' +
 				'<td><button type="button" class="btn btn--outline btn--sm tp-ot" data-ot="' + i + '" title="Record overtime on this task">' +
-					'<i class="fa-solid fa-clock"></i> OT' + (t.ot_hours ? ' <b>' + t.ot_hours + 'h</b>' : '') + '</button></td></tr>';
+					'<i class="fa-solid fa-clock"></i> OT' + (t.ot_hours ? ' <b>' + t.ot_hours + 'h</b>' : '') + '</button></td></tr>' +
+				tpMaterialRow(t, i);
 		}).join('');
 		tpPlacePanel();
 	}
+	// A service task's parts and sublet, under it: what each has been requested
+	// on, and the buttons that raise the request -- a Material Issue Material
+	// Request for the parts, a Purchase Material Request for the sublet work.
+	function tpMrCell(r) {
+		if (!r.material_request) return '<span class="tp-none">Not requested</span>';
+		return '<a href="/app/material-request/' + encodeURIComponent(r.material_request) + '" target="_blank">' + esc(r.material_request) + '</a>' +
+			(r.material_request_status ? ' · ' + esc(r.material_request_status) : '');
+	}
+	function tpMaterialRow(t, i) {
+		var parts = t.parts || [], sublet = t.sublet || [];
+		if (!parts.length && !sublet.length) return '';
+		var open = function (list) { return list.some(function (r) { return !r.material_request; }); };
+		var html = '';
+		if (parts.length) html += '<div class="tp-mat__grp"><b>Parts</b><div class="tp-mat__lines">' + parts.map(function (r) {
+			return '<div class="tp-mat__line"><span>' + fmtNum(r.qty) + ' × ' + esc(r.item_name || r.item_code) + (r.uom ? ' ' + esc(r.uom) : '') + '</span>' + tpMrCell(r) + '</div>';
+		}).join('') + '</div>' + (open(parts) && !isLocked
+			? '<button type="button" class="btn btn--outline btn--sm" data-req="material" data-i="' + i + '"><i class="fa-solid fa-box"></i> Request Material</button>' : '') + '</div>';
+		if (sublet.length) html += '<div class="tp-mat__grp"><b>Sublet</b><div class="tp-mat__lines">' + sublet.map(function (r) {
+			// Buy qty: more than the job needs goes into stock when received (the
+			// Purchase Order cannot order more than this request).
+			var buy = !r.material_request && !isLocked
+				? '<label class="tp-buy">Buy qty <input type="number" min="' + (r.qty || 1) + '" step="any" value="' + (r.qty || 1) +
+					'" data-buy="' + escAttr(r.name) + '" style="width:64px"></label>' : '';
+			var issued = r.issued_qty
+				? '<span>Issued ' + fmtNum(r.issued_qty) + ' of ' + fmtNum(r.qty) + (r.stock_entry ? ' · <a href="/app/stock-entry/' +
+					encodeURIComponent(r.stock_entry) + '" target="_blank">' + esc(r.stock_entry) + '</a>' : '') + '</span>'
+				: (r.material_request ? '<span class="tp-none">Issued on receipt</span>' : '');
+			return '<div class="tp-mat__line"><span>' + fmtNum(r.qty) + ' × ' + (r.item_name ? esc(r.item_name) + ' · ' : '<span class="tp-none">No item</span> · ') +
+				esc(r.service_description || 'Sublet work') + (r.vendor ? ' · ' + esc(supplierName(r.vendor)) : '') +
+				' · ' + fmtMoney(r.cost) + '/unit</span>' + buy + tpMrCell(r) + issued + '</div>';
+		}).join('') + '</div>' + (open(sublet) && !isLocked
+			? '<button type="button" class="btn btn--outline btn--sm" data-req="sublet" data-i="' + i + '"><i class="fa-solid fa-truck"></i> Sublet Request</button>' : '') + '</div>';
+		return '<tr class="tp-mat"><td colspan="9">' + html + '</td></tr>';
+	}
+	tpList.addEventListener('click', function (e) {
+		var btn = e.target.closest('[data-req]'); if (!btn) return;
+		var t = tpTasks[+btn.dataset.i]; if (!t) return;
+		var kind = btn.dataset.req;
+		btn.disabled = true;
+		// Unsaved Task Preview edits go first: the request returns the tasks afresh.
+		var args = { job_card: jobCardName, task: t.task };
+		if (kind === 'sublet') {
+			args.buy_qty = {};
+			btn.closest('.tp-mat').querySelectorAll('[data-buy]').forEach(function (inp) { args.buy_qty[inp.dataset.buy] = inp.value; });
+		}
+		saveTaskPreview().then(function () {
+			return callMethod('garagedesk.api.job_card_steps.' + (kind === 'sublet' ? 'request_task_sublet' : 'request_task_material'), args);
+		}).then(function (rows) {
+			tpTasks = rows || []; renderTaskPreview();
+		}).catch(function (err) {
+			btn.disabled = false;
+			alert('Could not raise the ' + (kind === 'sublet' ? 'sublet' : 'material') + ' request: ' + otMsg(err));
+		});
+	});
 	// Under the button, or above it when the window has no room below.
 	function tpPlacePanel() {
 		var box = tpList.querySelector('.tp-ms.is-open'); if (!box) return;
@@ -2841,7 +3416,7 @@ window.WS_VAT = {{ (vat_options or {}) | tojson }};
 		tpTasks.forEach(function (t) {
 			// A labour sub-task's lead and hours are its own; a heading has neither.
 			if (t.parent_task || t.is_group) return;
-			var tr = Array.prototype.filter.call(document.querySelectorAll('#job-detail-body tr'), function (r) {
+			var tr = serviceRows().filter(function (r) {
 				if (used.indexOf(r) >= 0) return false;
 				var sv = svcHidden(r);
 				return r.dataset.task === t.task || (!r.dataset.task && sv && sv.value === t.service);
@@ -3296,7 +3871,7 @@ window.WS_VAT = {{ (vat_options or {}) | tojson }};
 		if (billLoaded) return;
 		billLoaded = true;
 		if (!BILL_ITEMS.length) {
-			callMethod("garagedesk.api.front_office.get_estimate_items", { services: gatherServices().map(function (r) { return r.service; }).filter(Boolean) })
+			callMethod("garagedesk.api.front_office.get_estimate_items", { services: gatherServices().map(function (r) { return r.service; }).filter(Boolean), booking_date: val("booking_date") })
 				.then(function (o) { o = o || {}; BILL_ITEMS = (o.mapped || []).concat(o.others || []); }).catch(function () { });
 		}
 		// Unsaved QC results or Work Status changes are written first: reaching

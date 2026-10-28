@@ -334,6 +334,7 @@
 {% endif %}
 
 {% if h.observations %}<p style="margin-top:8px"><span class="k" style="font-size:10px;text-transform:uppercase;color:#8a94a6;font-weight:700">Observations:</span> {{ h.observations }}</p>{% endif %}
+{% if h.observation_attachment %}<p style="margin-top:4px"><span class="k" style="font-size:10px;text-transform:uppercase;color:#8a94a6;font-weight:700">Police Report:</span> <a href="{{ h.observation_attachment }}" target="_blank" rel="noopener">{{ h.observation_attachment.split('/')[-1] }}</a></p>{% endif %}
 
 {#- The open damage ledger as of this handover: what it found and what it
     carried from earlier ones. Each line names who answers for it and the
