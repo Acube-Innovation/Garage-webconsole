@@ -72,7 +72,11 @@
 				{{ field("Fuel Level","fuel_level",type="select",options=["Empty","Quarter","Half","Three-Quarter","Full"]) }}
 			</div>
 			{{ field("Overall Condition","overall_condition",type="select",options=["Excellent","Good","Fair","Poor"]) }}
-			{{ field("Other Observations","observations",type="textarea") }}
+			{#- Half width, not the macro's full-width textarea: the attachment that
+			    backs the observations sits beside it. -#}
+			<div class="field"><label>Other Observations</label><textarea name="observations"></textarea></div>
+			<div class="field"><label>Police Report</label><span class="ho-ph" id="ho-obs-att"></span>
+				{%- if not readonly %}<div class="muted" style="font-size:12px;margin-top:6px">PDF, image or document</div>{% endif %}</div>
 		</form>
 	</div>
 </div>
@@ -276,12 +280,19 @@
 	.ho-ph-btn { border:1px solid var(--border); background:var(--surface); color:var(--muted);
 		width:32px; height:32px; border-radius:8px; cursor:pointer; font-size:13px; flex:0 0 32px; }
 	.ho-ph-btn:hover { border-color:var(--red); color:var(--red); }
+	.ho-ph-btn--text { width:auto; flex:0 0 auto; padding:0 12px; font:inherit; font-size:13px; }
 	.ho-ph-add { width:26px; height:26px; flex:0 0 26px; font-size:11px; }
 	.ho-ph-strip { display:inline-flex; align-items:center; gap:3px; cursor:pointer; }
 	.ho-ph-strip img { width:30px; height:30px; object-fit:cover; border-radius:6px;
 		border:1px solid var(--border); display:block; }
 	.ho-ph-strip:hover img { border-color:var(--red); }
 	.ho-ph-more { font-size:11px; font-weight:700; color:var(--muted); padding-left:2px; }
+	.ho-ph-file { display:inline-flex; align-items:center; gap:5px; max-width:130px; font-size:11px; color:var(--text);
+		border:1px solid var(--border); border-radius:6px; padding:4px 7px; cursor:pointer; }
+	.ho-ph-file span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+	.ho-ph-file:hover { border-color:var(--red); }
+	.ho-ph-rm { border:none; background:none; color:var(--muted); cursor:pointer; padding:0 2px; font-size:11px; }
+	.ho-ph-rm:hover { color:var(--red); }
 	/* Anchored chooser — body-level so a field with overflow cannot clip it. */
 	.ho-ph-menu { position:absolute; z-index:1200; background:var(--surface); border:1px solid var(--border);
 		border-radius:9px; box-shadow:0 8px 24px rgba(0,0,0,.16); padding:4px; min-width:158px; }
@@ -1081,6 +1092,7 @@
 				attachFieldPhoto("odometer", { target: "odometer" }, { title: "Odometer photo" });
 				attachFieldPhoto("fuel_level", { target: "fuel" }, { title: "Fuel gauge photo" });
 			}
+			observationWidget();
 			ctx.innerHTML = "<b>" + esc(p.model) + "</b> · Plate " + esc(p.plate) +
 				(p.current_driver && p.current_driver.driver_name ? " · Current driver: <b>" + esc(p.current_driver.driver_name) + "</b>" : "") +
 				(p.odometer ? " · Last odometer " + p.odometer.toLocaleString() + " km" : "");
@@ -1424,7 +1436,9 @@
 		photoWidgets.push(w);
 
 		var picker = document.createElement("input");
-		picker.type = "file"; picker.accept = "image/*"; picker.style.display = "none";
+		// opts.accept widens what may be picked: "" takes any file (the observation
+		// attachment can be a PDF or a document); photos stay image-only.
+		picker.type = "file"; picker.accept = opts.accept != null ? opts.accept : "image/*"; picker.style.display = "none";
 		if (multi) picker.multiple = true;
 		host.appendChild(picker);
 
@@ -1454,10 +1468,21 @@
 			if (!shots.length) {
 				// Nothing was photographed here and nothing can be now; an empty
 				// camera button on a filed record invites a tap that does nothing.
+				// opts.button labels the empty button, for a widget that takes a
+				// file rather than a photo.
 				body = RO
 					? '<span class="ho-ph-none muted">—</span>'
+					: opts.button
+					? '<button type="button" class="ho-ph-btn ho-ph-btn--text" data-act="menu" title="' +
+					  esc(opts.title || "Attach file") + '"><i class="fa-solid fa-paperclip"></i> ' + esc(opts.button) + "</button>"
 					: '<button type="button" class="ho-ph-btn" data-act="menu" title="' +
 					  esc(opts.title || "Add photo") + '"><i class="fa-solid fa-camera"></i></button>';
+			} else if (!isImageShot(shots[0])) {
+				// A document has no thumbnail: show its name, open it in a new tab.
+				var sh0 = shots[0];
+				body = '<span class="ho-ph-file" data-act="open" title="Open ' + esc(shotName(sh0)) + '">' +
+					'<i class="fa-solid fa-file-lines"></i><span>' + esc(shotName(sh0)) + "</span></span>" +
+					(RO ? "" : '<button type="button" class="ho-ph-rm" data-act="rm" title="Remove"><i class="fa-solid fa-xmark"></i></button>');
 			} else {
 				body = '<span class="ho-ph-strip" data-act="open">' +
 					shots.slice(0, 4).map(function (sh) {
@@ -1490,6 +1515,10 @@
 					},
 					upload: function () { picker.click(); },
 				});
+			} else if (act.dataset.act === "rm") {
+				if (!RO) w.removeAt(0);
+			} else if (act.dataset.act === "open" && !isImageShot(shots[0])) {
+				window.open(shots[0].url, "_blank");
 			} else if (act.dataset.act === "open") {
 				openLightbox(shots.map(function (sh, i) {
 					return { w: w, i: i, label: opts.title || "Photo", note: "" };
@@ -1499,6 +1528,17 @@
 
 		render();
 		return w;
+	}
+
+	// A shot is a picture unless it is a document picked into a widget that takes any file.
+	function isImageShot(sh) {
+		if (!sh) return true;
+		if (sh.file) return /^image\//.test(sh.file.type || "");
+		return /\.(jpe?g|png|gif|webp|heic|heif|bmp|svg)(\?|$)/i.test(sh.url || "");
+	}
+	function shotName(sh) {
+		if (sh.file && sh.file.name) return sh.file.name;
+		return decodeURIComponent((sh.url || "").split("/").pop().split("?")[0]) || "File";
 	}
 
 	// Drop every widget whose host lives inside `node` — used when a qty is
@@ -1931,7 +1971,8 @@
 		tdRm.style.width = "34px";
 
 		tr.appendChild(tdName); tr.appendChild(tdCond); tr.appendChild(tdRem);
-		tr.appendChild(resp.el); tr.appendChild(tdDepth); tr.appendChild(tdPhoto); tr.appendChild(tdRm);
+		tr.appendChild(resp.el); tr.appendChild(tdDepth);
+		tr.appendChild(tdPhoto); tr.appendChild(tdRm);
 
 		if (before) {
 			body.insertBefore(tr, before);
@@ -2419,6 +2460,15 @@
 		delete viewPanels[key];
 	}
 
+	// The file beside Other Observations. Any type -- a PDF as much as a photo --
+	// and the vehicle and an attachment handed over in its own right both have it.
+	function observationWidget() {
+		var host = document.getElementById("ho-obs-att");
+		if (!host) return null;
+		return photoWidget(host, { target: "observation" },
+			{ title: "Police report", accept: "", button: "Attach file" });
+	}
+
 	function attachFieldPhoto(fieldName, route, opts) {
 		var input = document.querySelector('#ho-form [name="' + fieldName + '"]');
 		if (!input) return null;
@@ -2553,8 +2603,8 @@
 	var confirmGo = document.getElementById("ho-confirm-go");
 	var pending = null;
 
-	// Which widget carries a given field's photo — odometer and fuel are the only
-	// two that are not reachable from a row list.
+	// Which widget carries a given field's photo — odometer, fuel and the
+	// observation attachment are the only ones not reachable from a row list.
 	function fieldWidget(target) {
 		for (var i = 0; i < photoWidgets.length; i++) {
 			if (photoWidgets[i].route && photoWidgets[i].route.target === target) return photoWidgets[i];
@@ -2981,7 +3031,8 @@
 			vehicle: window.ho_vehicle,
 			saved_at: Date.now(),
 			fields: fields,
-			field_photos: { odometer: shotIds(fieldWidget("odometer")), fuel: shotIds(fieldWidget("fuel")) },
+			field_photos: { odometer: shotIds(fieldWidget("odometer")), fuel: shotIds(fieldWidget("fuel")),
+			                observation: shotIds(fieldWidget("observation")) },
 			checklist: collectTicks(chkBox).rows,
 			attachments: collectTicks(attBox).rows,
 			walk: walkRows.map(function (r) {
@@ -3026,7 +3077,7 @@
 			return ids;
 		}
 		var fp = rec.field_photos || {};
-		ids = ids.concat(fp.odometer || [], fp.fuel || []);
+		ids = ids.concat(fp.odometer || [], fp.fuel || [], fp.observation || []);
 		(rec.walk || []).forEach(function (r) { ids = ids.concat(r.photos || [], r.dmg_photos || []); });
 		(rec.views || []).forEach(function (p) {
 			(p.rows || []).forEach(function (r) { ids = ids.concat(r.photos || [], r.dmg_photos || []); });
@@ -3185,7 +3236,7 @@
 		});
 
 		var fp = d.field_photos || {};
-		[["odometer", fp.odometer], ["fuel", fp.fuel]].forEach(function (pair) {
+		[["odometer", fp.odometer], ["fuel", fp.fuel], ["observation", fp.observation]].forEach(function (pair) {
 			var w = fieldWidget(pair[0]);
 			(pair[1] || []).forEach(function (id) { if (w && blobs[id]) w.restore(blobs[id], id); });
 		});
@@ -3770,6 +3821,8 @@
 			var fuelW = attachFieldPhoto("fuel_level", { target: "fuel" }, { title: "Fuel gauge photo" });
 			if (fuelW && h.fuel_photo) fuelW.setRemote([h.fuel_photo]);
 		}
+		var obsW = observationWidget();
+		if (obsW && h.observation_attachment) obsW.setRemote([h.observation_attachment]);
 
 		buildFiledWalkTable(h.area_inspections || [], h.tyre_readings || []);
 
