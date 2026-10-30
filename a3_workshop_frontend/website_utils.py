@@ -18,6 +18,27 @@ def require_login(context=None):
 	return context
 
 
+
+def can_use_transactions():
+	"""Whether the session user may use the purchasing Transactions pages.
+
+	Supervisor / System Manager (or Administrator) only -- the role list lives in
+	garagedesk.api.transactions.ACCESS_ROLES, which also gates every API call the
+	pages make. Exposed to Jinja (hooks.jinja) so the sidebar can hide the entry.
+	"""
+	from garagedesk.api.transactions import has_access
+
+	return has_access()
+
+
+def require_transactions_access(context=None):
+	"""require_login, then send anyone without transactions access back home."""
+	require_login(context)
+	if not can_use_transactions():
+		frappe.local.flags.redirect_location = "/a3-workshop"
+		raise frappe.Redirect
+	return context
+
 def _csrf_token():
 	"""A CSRF token that is guaranteed to be valid for this session.
 

@@ -192,6 +192,7 @@
 		color:var(--text); background:var(--surface); border:1px solid var(--border); border-radius:7px; }
 	.vh-cmp-rm { background:none; border:none; color:var(--muted); cursor:pointer; font-size:13px; }
 	.vh-cmp-rm:hover { color:var(--red); }
+	.vh-cmp-del { color:var(--red); opacity:.75; } .vh-cmp-del:hover { opacity:1; }
 	/* A section head that carries its own button (Damages found, Service jobs):
 	   the button takes the place of the rule that normally fills the line. */
 	.vh-cmp-sec h4.has-btn::after { display:none; }
@@ -247,13 +248,14 @@
 		background:#eef4ff; color:#1b4fd6; border:1px solid #cfe0ff; border-radius:6px; padding:3px 8px;
 		cursor:pointer; white-space:nowrap; }
 	.vh-labor-code.is-empty { background:transparent; color:var(--muted); border-style:dashed; font-weight:500; }
-	/* Labor Time Kit off: + Labour / + Part / + Sublet on each service row, its lines
+	/* Labor Time Kit off: + Labour / + Part on each service row, its lines
 	   beneath it -- the Create Job Card wizard's look: Labour blue, Part green, Sublet amber. */
 	.row-add { display:flex; gap:4px; flex-wrap:wrap; }
 	.row-add button { --k:var(--muted); display:inline-flex; align-items:center; gap:4px; font-size:11px; font-weight:600;
 		padding:3px 8px; border:1px solid var(--border); border-radius:999px; background:var(--surface);
 		color:var(--k); cursor:pointer; white-space:nowrap; transition:background .12s, border-color .12s; }
 	.row-add button i { font-size:9px; }
+	td.ke-amt { text-align:right; font-weight:600; white-space:nowrap; }
 	.row-add button[data-add-line="labor"] { --k:var(--blue); }
 	.row-add button[data-add-line="parts"] { --k:#16a34a; }
 	.row-add button[data-add-line="sublet"] { --k:#d97706; }
@@ -843,7 +845,7 @@
 	var LTS_BY_SERVICE = {}, LTS_LABEL = {};
 	var optionsLoaded = null;
 	// Labor Time Kit switched on in Workshop Settings. Off: no standard and no kit
-	// popup per service -- each row has + Labour / + Part / + Sublet of its own.
+	// popup per service -- each row has + Labour / + Part of its own.
 	var KIT_ENABLED = true;
 	function newRowKey() { return "r" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
 	function loadJobCardOptions() {
@@ -872,6 +874,29 @@
 				throw err;
 			});
 		return optionsLoaded;
+	}
+
+	// Delete a damage entered by mistake. A row only typed here (not saved yet)
+	// just goes; a saved or suggested one is deleted on the handover itself --
+	// its walk-round row goes back to Good -- so it is not carried forward.
+	function deleteDamage(tr, btn) {
+		var ref = tr.dataset.ref || "";
+		if (ref.indexOf("new:") === 0) { tr.remove(); cmpSync(); return; }
+		var what = [tr.querySelector(".c-area"), tr.querySelector(".c-desc")].map(function (el) { return el ? el.value : ""; })
+			.filter(Boolean).join(" — ");
+		if (!window.confirm("Delete this Vehicle Damage Line" + (what ? " (" + what + ")" : "") + "?\n\n" +
+			"It is removed from this Driver Vehicle Handover and will not be carried forward. " +
+			"If it came from the inspection, that area is set back to Good.")) return;
+		btn.disabled = true;
+		callMethod("garagedesk.api.handover_comparison.delete_damage", {
+			handover: cmpHandover, ref: ref, source_key: tr.dataset.sourceKey || ""
+		}).then(function () {
+			tr.remove(); cmpSync();
+			loadHistory();
+		}).catch(function (err) {
+			btn.disabled = false;
+			vhAlert("Could not delete", errText(err));
+		});
 	}
 
 	// `d.key` presets who is responsible (Add Damage under a party's filter);
@@ -906,8 +931,8 @@
 			'<td class="c-photo"></td>' +
 			"<td>" + (locked ? jcLink(d.job_card) : '<span class="muted">—</span>') + "</td>" +
 			'<td style="width:32px">' + (locked ? "" :
-				'<button type="button" class="vh-cmp-rm" title="Remove"><i class="fa-solid fa-xmark"></i></button>') + "</td>";
-		if (!locked) tr.querySelector(".vh-cmp-rm").addEventListener("click", function () { tr.remove(); cmpSync(); });
+				'<button type="button" class="vh-cmp-rm vh-cmp-del" title="Delete this damage (entered by mistake)"><i class="fa-solid fa-trash"></i></button>') + "</td>";
+		if (!locked) tr.querySelector(".vh-cmp-rm").addEventListener("click", function () { deleteDamage(tr, this); });
 		// The walk-round row's shot, unless a photo was added on this row itself.
 		tr.dataset.ownPhoto = d.own_photo || "";
 		tr.dataset.srcPhoto = d.own_photo ? "" : (d.photo || "");
@@ -1207,8 +1232,7 @@
 				? '<td><span class="vh-labor-code is-empty" data-labor-code>—</span></td>'
 				: '<td><div class="row-add">' +
 					'<button type="button" data-add-line="labor" title="Add a labour line"><i class="fa-solid fa-plus"></i> Labour <span class="n"></span></button>' +
-					'<button type="button" data-add-line="parts" title="Add a part"><i class="fa-solid fa-plus"></i> Part <span class="n"></span></button>' +
-					'<button type="button" data-add-line="sublet" title="Add sublet work"><i class="fa-solid fa-plus"></i> Sublet <span class="n"></span></button></div></td>') +
+					'<button type="button" data-add-line="parts" title="Request a part: issued from stock, else bought from a vendor, at Task Preview"><i class="fa-solid fa-plus"></i> Part <span class="n"></span></button></div></td>') +
 			'<td><input class="vh-desc" placeholder="Description" value="' + escAttr(v.description || "") + '"></td>' +
 			'<td><input class="vh-hrs" type="number" min="0" step="any" value="' +
 				(v.hours != null && v.hours !== "" ? v.hours : 1) + '"></td>' +
@@ -1633,7 +1657,7 @@
 	});
 
 	// ------------------------------------------------- a row's own lines (Labor Time Kit off)
-	// The Create Job Card wizard's layout: + Labour / + Part / + Sublet add a line
+	// The Create Job Card wizard's layout: + Labour / + Part add a line
 	// in a panel under the row; Save keeps the plan and folds the row into a
 	// one-line summary, opened again with Edit.
 	function linesRowOf(tr) {
@@ -1648,9 +1672,9 @@
 	function sublSell(r) { return (parseFloat(r.qty) || 1) * (parseFloat(r.cost) || 0) * (1 + (parseFloat(r.markup_pct) || 0) / 100); }
 	// Title, then [column, width] -- "" takes what is left.
 	var ROW_LINE_HEADS = {
-		labor: ["Labour", [["Item", "24%"], ["Description", ""], ["Hours", "70px"], ["Rate", "86px"], ["Skill", "100px"]]],
-		parts: ["Parts", [["Item", ""], ["Qty", "70px"], ["UOM", "100px"], ["Rate", "86px"]]],
-		sublet: ["Sublet", [["Item", "20%"], ["Qty", "60px"], ["Service", ""], ["Vendor", "20%"], ["Cost / unit", "86px"], ["Markup %", "76px"]]]
+		labor: ["Labour", [["Item", "22%"], ["Description", ""], ["Hours", "70px"], ["Rate", "86px"], ["Skill", "100px"], ["Amount", "104px"]]],
+		parts: ["Parts", [["Item", ""], ["Qty", "70px"], ["UOM", "100px"], ["Rate", "86px"], ["Amount", "104px"]]],
+		sublet: ["Sublet", [["Item", "18%"], ["Qty", "60px"], ["Service", ""], ["Vendor", "18%"], ["Cost / unit", "86px"], ["Markup %", "76px"], ["Amount", "104px"]]]
 	};
 	function renderRowLinesOnly(tr) {
 		var lt = linesRowOf(tr); if (!lt) return;
@@ -1871,7 +1895,7 @@
 		var lab = k.labor, par = k.parts, sub = k.sublet;
 		if (!lab.length && !par.length && !sub.length) {
 			el.className = "vh-kit-sum";
-			el.innerHTML = '<i class="fa-solid fa-box"></i> No labour, parts or sublet yet — use <b>+ Labour</b>, <b>+ Part</b> or <b>+ Sublet</b> on a row.';
+			el.innerHTML = '<i class="fa-solid fa-box"></i> No labour or parts yet — use <b>+ Labour</b> or <b>+ Part</b> on a row.';
 			return;
 		}
 		var labAmt = lab.reduce(function (s, r) { return s + n(r.hours) * n(r.rate); }, 0);
@@ -1880,12 +1904,12 @@
 		var subAmt = sub.reduce(function (s, r) { return s + sublSell(r); }, 0);
 		el.className = "vh-lines";
 		var html = '<button type="button" class="vh-lines__head" id="vh-lines-head" aria-expanded="' + linesOpen + '">' +
-			'<i class="fa-solid fa-chevron-right chev"></i><span class="t">Labour, Parts &amp; Sublet</span>' +
+			'<i class="fa-solid fa-chevron-right chev"></i><span class="t">Labour &amp; Parts</span>' +
 			'<span class="muted">' + (cmpFilter === null ? "— this plan" : "— this Workshop Job Card") + "</span>" +
 			'<span class="vh-lines-tot">' +
 			'<span data-k="labor"><span class="k">Labour</span> ' + lab.length + " · " + fmtNum(labHrs) + " h · " + fmtMoney(labAmt) + "</span>" +
 			'<span data-k="parts"><span class="k">Parts</span> ' + par.length + " · " + fmtMoney(parAmt) + "</span>" +
-			'<span data-k="sublet"><span class="k">Sublet</span> ' + sub.length + " · " + fmtMoney(subAmt) + "</span>" +
+			(sub.length ? '<span data-k="sublet"><span class="k">Sublet</span> ' + sub.length + " · " + fmtMoney(subAmt) + "</span>" : "") +
 			'<span class="grand">Total ' + fmtMoney(labAmt + parAmt + subAmt) + "</span></span></button>";
 		if (linesOpen) {
 			var grp = function (key, title, rows, head, cells, foot) {
@@ -2047,7 +2071,7 @@
 			setItemCell(input, it.value, it.name);
 			var tr = input.closest("tr");
 			var rate = tr.querySelector(".ke-rate");
-			if (rate && it.rate && !parseFloat(rate.value)) rate.value = it.rate;
+			if (rate && it.rate && !parseFloat(rate.value)) { rate.value = it.rate; lineAmount(rate); }
 			// The unit belongs to the item, not to whoever types the row.
 			var uom = tr.querySelector(".ke-uom");
 			if (uom && it.uom && !uom.value.trim()) uom.value = it.uom;
@@ -2099,7 +2123,7 @@
 			if (it.action === "create") { openItemDialog("labour", it.typed, input); return; }
 			setItemCell(input, it.value, it.name);
 			var rate = input.closest("tr").querySelector(".ke-rate");
-			if (rate && it.rate && !parseFloat(rate.value)) rate.value = it.rate;
+			if (rate && it.rate && !parseFloat(rate.value)) { rate.value = it.rate; lineAmount(rate); }
 		});
 	}
 	// UOM is a Link on the kit row: anything that is not a real UOM is dropped
@@ -2122,6 +2146,25 @@
 		});
 		return starts.concat(contains).slice(0, 12);
 	}
+	// A line's amount: hours x rate, qty x rate, or the sublet's sell (qty x cost + markup).
+	function lineAmountOf(group, r) {
+		var n = function (v) { return parseFloat(v) || 0; };
+		if (group === "labor") return n(r.hours) * n(r.rate);
+		if (group === "parts") return n(r.qty) * n(r.rate);
+		return (n(r.qty) || 1) * n(r.cost) * (1 + n(r.markup_pct) / 100);
+	}
+	// Redraws the Amount cell of the row `el` is in, from what its inputs hold now.
+	function lineAmount(el) {
+		var tr = el && el.closest && el.closest("tr"), cell = tr && tr.querySelector(".ke-amt");
+		if (!cell) return;
+		var v = function (c) { var i = tr.querySelector(c); return i ? i.value : 0; };
+		var group = tr.querySelector(".ke-hours") ? "labor" : tr.querySelector(".ke-cost") ? "sublet" : "parts";
+		cell.textContent = fmtMoney(lineAmountOf(group, { hours: v(".ke-hours"), qty: v(group === "sublet" ? ".ke-sqty" : ".ke-qty"),
+			rate: v(".ke-rate"), cost: v(".ke-cost"), markup_pct: v(".ke-markup") }));
+	}
+	document.addEventListener("input", function (e) {
+		if (e.target.matches && e.target.matches(".ke-hours, .ke-qty, .ke-sqty, .ke-rate, .ke-cost, .ke-markup")) lineAmount(e.target);
+	});
 	function kitEditRow(group, r) {
 		r = r || {};
 		if (group === "labor") return "<tr>" +
@@ -2130,12 +2173,14 @@
 			'<td><input class="ke-hours" type="number" min="0" step="any" value="' + (r.hours != null ? r.hours : 0) + '"></td>' +
 			'<td><input class="ke-rate" type="number" min="0" step="0.01" value="' + (r.rate != null ? r.rate : 0) + '"></td>' +
 			'<td><select class="ke-skill">' + skillOptions(r.skill_level || "") + "</select></td>" +
+			'<td class="num ke-amt">' + fmtMoney(lineAmountOf("labor", r)) + "</td>" +
 			'<td style="width:32px"><button type="button" class="vh-cmp-rm" data-kdel><i class="fa-solid fa-xmark"></i></button></td></tr>';
 		if (group === "parts") return "<tr>" +
 			"<td>" + itemCellHtml("ke-item", r.item_code, r.item_name, "Item") + "</td>" +
 			'<td><input class="ke-qty" type="number" min="0" step="1" value="' + (r.qty != null ? r.qty : 1) + '"></td>' +
 			'<td><div class="vh-svc-combo"><input class="ke-uom" value="' + escAttr(r.uom || "") + '" placeholder="UOM" autocomplete="off"></div></td>' +
 			'<td><input class="ke-rate" type="number" min="0" step="0.01" value="' + (r.rate != null ? r.rate : 0) + '"></td>' +
+			'<td class="num ke-amt">' + fmtMoney(lineAmountOf("parts", r)) + "</td>" +
 			'<td style="width:32px"><button type="button" class="vh-cmp-rm" data-kdel><i class="fa-solid fa-xmark"></i></button></td></tr>';
 		return "<tr>" +
 			"<td>" + itemCellHtml("ke-sitem", r.item_code, r.item_name, "Sublet item") + "</td>" +
@@ -2144,6 +2189,7 @@
 			"<td>" + vendorCellHtml("ke-vendor", r.vendor) + "</td>" +
 			'<td><input class="ke-cost" type="number" min="0" step="0.01" value="' + (r.cost != null ? r.cost : 0) + '"></td>' +
 			'<td><input class="ke-markup" type="number" min="0" step="1" value="' + (r.markup_pct != null ? r.markup_pct : 0) + '"></td>' +
+			'<td class="num ke-amt">' + fmtMoney(lineAmountOf("sublet", r)) + "</td>" +
 			'<td style="width:32px"><button type="button" class="vh-cmp-rm" data-kdel><i class="fa-solid fa-xmark"></i></button></td></tr>';
 	}
 	function kitSection(group, title, headers) {
@@ -2159,9 +2205,9 @@
 	function renderKitBody() {
 		document.getElementById("vh-kit-body").innerHTML =
 			'<div class="kit-none" style="margin-bottom:10px">Labor Time Kit items for this Job Type Service — edit quantities and rates, add rows if needed, then “Add to Job”.</div>' +
-			kitSection("labor", "Labor Time Kit Labor", ["Item", "Description", "Hours", "Rate", "Skill"]) +
-			kitSection("parts", "Labor Time Kit Parts", ["Item", "Qty", "UOM", "Rate"]) +
-			kitSection("sublet", "Labor Time Kit Sublet", ["Item", "Qty", "Service", "Vendor", "Cost / unit", "Markup %"]);
+			kitSection("labor", "Labor Time Kit Labor", ["Item", "Description", "Hours", "Rate", "Skill", "Amount"]) +
+			kitSection("parts", "Labor Time Kit Parts", ["Item", "Qty", "UOM", "Rate", "Amount"]) +
+			kitSection("sublet", "Labor Time Kit Sublet", ["Item", "Qty", "Service", "Vendor", "Cost / unit", "Markup %", "Amount"]);
 		document.querySelectorAll("#vh-kit-body .ke-item").forEach(attachKitItemAutocomplete);
 		document.querySelectorAll("#vh-kit-body .ke-uom").forEach(attachUomAutocomplete);
 		document.querySelectorAll("#vh-kit-body .ke-op").forEach(attachLabourItemAutocomplete);
@@ -2435,7 +2481,7 @@
 			setItemCell(input, res.item, res.item_name);
 			var tr = input.closest("tr");
 			var rate = tr.querySelector(".ke-rate"), uom = tr.querySelector(".ke-uom");
-			if (rate && res.rate && !parseFloat(rate.value)) rate.value = res.rate;
+			if (rate && res.rate && !parseFloat(rate.value)) { rate.value = res.rate; lineAmount(rate); }
 			if (uom && res.uom && !uom.value.trim()) uom.value = res.uom;
 		}).catch(function (err) {
 			itemError("Could not create the item: " + ((err && err.message) || err));

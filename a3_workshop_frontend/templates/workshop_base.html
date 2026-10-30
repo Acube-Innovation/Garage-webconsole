@@ -249,6 +249,14 @@
 		{"label": "Manufacturing", "route": "/a3-workshop/manufacturing", "icon": "fa-industry"},
 		{"label": "Live Stock", "route": "/a3-workshop/live-stock", "icon": "fa-boxes-stacked"},
 	] -%}
+	{#- Purchasing (Material Request → Purchase Order → Receipt → Invoice) is for
+	    Supervisors / System Managers only; the pages and their API refuse anyone
+	    else, so the entry is hidden rather than shown as a dead end. -#}
+	{%- if can_use_transactions is defined and can_use_transactions() -%}
+	{%- set nav_items = nav_items + [
+		{"label": "Transactions", "route": "/a3-workshop/transactions", "icon": "fa-file-invoice-dollar"},
+	] -%}
+	{%- endif -%}
 	{%- set current_path = (frappe.request.path if frappe.request else "/a3-workshop").rstrip("/") -%}
 	{%- set uname = (frappe.session.user or "User") -%}
 	{%- set uinitial = uname[0] if uname and uname != "Guest" else "U" -%}

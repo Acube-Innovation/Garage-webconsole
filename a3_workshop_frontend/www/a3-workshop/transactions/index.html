@@ -1,0 +1,97 @@
+{% extends "templates/workshop_base.html" %}
+{% from "templates/macros/workshop.html" import badge %}
+
+{% block page_content %}
+{#- Hub for the purchasing chain. Cards arrive from the page controller
+    (transactions/index.py -> garagedesk.api.transactions.get_hub), one per
+    document type in chain order. "Drafts" are saved but not submitted yet;
+    "Pending" are submitted and still waiting for the next document. Both counts
+    link to the list already filtered to that view. -#}
+
+<div class="toolbar">
+	<div class="section-title" style="margin:0">Purchasing</div>
+	<div class="toolbar__right">
+		<a class="btn btn--outline" href="/a3-workshop/transactions/material-request/new?type=Material%20Issue"><i class="fa-solid fa-dolly"></i> Material Issue</a>
+		<a class="btn btn--primary" href="/a3-workshop/transactions/material-request/new"><i class="fa-solid fa-plus"></i> New Material Request</a>
+	</div>
+</div>
+
+<!-- The chain, left to right. Each step is its own list. -->
+<div class="tx-flow">
+	{%- for c in cards %}
+	<a class="tx-flow__step" href="{{ c.url }}">
+		<span class="n">{{ loop.index }}</span>
+		<span>{{ c.doctype }}</span>
+	</a>
+	{%- if not loop.last %}<i class="fa-solid fa-arrow-right tx-flow__arrow"></i>{% endif %}
+	{%- endfor %}
+</div>
+
+<div class="tx-hub">
+	{%- for c in cards %}
+	<div class="card">
+		<div class="card__head">
+			<h3><a href="{{ c.url }}">{{ c.doctype }}</a></h3>
+			<a class="btn btn--outline btn--sm" href="{{ c.new_url }}"><i class="fa-solid fa-plus"></i> New</a>
+		</div>
+		<div class="card__body">
+			<div class="tx-counts">
+				<a class="stat-card stat-card--sm" href="{{ c.url }}?view=draft">
+					<div class="label">Drafts</div><div class="value">{{ c.drafts }}</div><div class="sub">To submit</div>
+				</a>
+				<a class="stat-card stat-card--sm stat-card--navy" href="{{ c.url }}?view=pending">
+					<div class="label">Pending</div><div class="value">{{ c.pending }}</div><div class="sub">{{ c.pending_label }}</div>
+				</a>
+				<a class="stat-card stat-card--sm" href="{{ c.url }}">
+					<div class="label">All</div><div class="value">{{ c.total }}</div><div class="sub">Not cancelled</div>
+				</a>
+			</div>
+			<div class="group-head">Latest <span class="count"><a href="{{ c.url }}" style="color:var(--red)">View all</a></span></div>
+			{%- for r in c.recent %}
+			<a class="tx-recent" href="{{ r.url }}">
+				<span class="tx-recent__name">{{ r.name }}</span>
+				<span class="muted tx-recent__party">{{ r.party }}</span>
+				<span class="muted">{{ r.date }}</span>
+				{{ badge(r.status, r.variant) }}
+			</a>
+			{%- else %}
+			<div class="empty" style="padding:18px">No {{ c.doctype }} yet.</div>
+			{%- endfor %}
+		</div>
+	</div>
+	{%- endfor %}
+</div>
+
+<style>
+.tx-flow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 18px; }
+.tx-flow__step {
+	display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px;
+	background: var(--surface); border: 1px solid var(--border); border-radius: 999px;
+	font-weight: 600; font-size: 13px;
+}
+.tx-flow__step:hover { border-color: var(--red); }
+.tx-flow__step .n {
+	width: 22px; height: 22px; border-radius: 50%; background: var(--red); color: #fff;
+	display: inline-flex; align-items: center; justify-content: center; font-size: 11px;
+}
+.tx-flow__arrow { color: var(--muted); font-size: 12px; }
+.tx-hub { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; align-items: start; }
+@media (max-width: 1000px) { .tx-hub { grid-template-columns: 1fr; } }
+.tx-hub .card__head h3 a:hover { color: var(--red); }
+.tx-counts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.tx-counts .stat-card:hover { border-color: var(--red); }
+.tx-recent {
+	display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1.5fr) auto auto; gap: 10px;
+	align-items: center; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 13px;
+}
+.tx-recent:last-child { border-bottom: none; }
+.tx-recent:hover .tx-recent__name { color: var(--red); }
+.tx-recent__name { font-weight: 700; overflow-wrap: anywhere; }
+.tx-recent__party { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 560px) {
+	.tx-recent { grid-template-columns: minmax(0, 1fr) auto; }
+	.tx-recent__party, .tx-recent > .muted:nth-child(3) { display: none; }
+	.tx-counts .stat-card .sub { display: none; }
+}
+</style>
+{% endblock %}
