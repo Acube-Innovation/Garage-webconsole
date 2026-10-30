@@ -16,6 +16,13 @@ website_route_rules = [
 	{"from_route": "/a3-workshop/job-card/new", "to_route": "a3-workshop/job-card/new"},
 	{"from_route": "/a3-workshop/job-card/type-selection", "to_route": "a3-workshop/job-card/type-selection"},
 	{"from_route": "/a3-workshop/job-card/<id>", "to_route": "a3-workshop/job-card/detail"},
+	# Purchasing chain (www/a3-workshop/transactions/): one page per URL shape.
+	# /new and /<docname> both land on detail.html, which tells them apart by
+	# whether `docname` is in form_dict. Werkzeug ranks the static "new" segment
+	# above the <docname> converter, so the order here does not matter.
+	{"from_route": "/a3-workshop/transactions/<slug>/new", "to_route": "a3-workshop/transactions/detail"},
+	{"from_route": "/a3-workshop/transactions/<slug>/<docname>", "to_route": "a3-workshop/transactions/detail"},
+	{"from_route": "/a3-workshop/transactions/<slug>", "to_route": "a3-workshop/transactions/list"},
 ]
 
 # Apps
@@ -93,6 +100,11 @@ home_page = "a3-workshop"
 # ----------
 
 # add methods and filters to jinja environment
+# can_use_transactions() lets templates/workshop_base.html show the Transactions
+# nav entry to Supervisors / System Managers only.
+jinja = {
+	"methods": ["a3_workshop_frontend.website_utils.can_use_transactions"],
+}
 # jinja = {
 # 	"methods": "a3_workshop_frontend.utils.jinja_methods",
 # 	"filters": "a3_workshop_frontend.utils.jinja_filters"

@@ -1,0 +1,167 @@
+{% extends "templates/workshop_base.html" %}
+{% from "templates/macros/workshop.html" import badge %}
+
+{% block page_content %}
+{#- One list per document type (transactions/list.py ->
+    garagedesk.api.transactions.get_list). Every filter is server-side and lives
+    in the query string, so a filtered view survives a refresh and can be sent
+    to someone; the pager carries the filters along. Job Card is read through
+    the Material Request each document came from. -#}
+{%- set base = "/a3-workshop/transactions/" ~ slug -%}
+
+<!-- Document type tabs, in chain order -->
+<div class="tx-tabs">
+	<a href="/a3-workshop/transactions"><i class="fa-solid fa-table-cells-large"></i> Hub</a>
+	{%- for s, dt in doctypes.items() %}
+	<a href="/a3-workshop/transactions/{{ s }}" class="{{ 'is-active' if s == slug else '' }}">{{ dt }}</a>
+	{%- endfor %}
+</div>
+
+<div class="toolbar">
+	<a class="btn btn--primary" href="{{ base }}/new"><i class="fa-solid fa-plus"></i> New {{ doctype }}</a>
+	<div class="toolbar__right">
+		<div class="chip-group">
+			<a class="chip{{ ' is-active' if not f.view else '' }}" href="{{ base }}">All</a>
+			<a class="chip{{ ' is-active' if f.view == 'draft' else '' }}" href="{{ base }}?view=draft">Drafts</a>
+			<a class="chip{{ ' is-active' if f.view == 'pending' else '' }}" href="{{ base }}?view=pending">Pending</a>
+		</div>
+	</div>
+</div>
+
+<!-- Filters: one GET form. Submitting drops ?page=, since page 4 of the old
+     result set means nothing against a new one. -->
+<form method="get" class="card tx-filters" action="{{ base }}">
+	<div class="card__body">
+		{%- if f.view %}<input type="hidden" name="view" value="{{ f.view }}">{% endif %}
+		<div class="filter-bar__search tx-filters__search">
+			<i class="fa-solid fa-magnifying-glass"></i>
+			<input name="q" value="{{ f.q }}" placeholder="Search {{ doctype }}, supplier or Workshop Job Card…" autocomplete="off" aria-label="Search">
+		</div>
+		<select name="status" aria-label="Status">
+			<option value="">All statuses</option>
+			{%- for s in data.statuses %}<option value="{{ s }}"{{ ' selected' if s == f.status else '' }}>{{ s }}</option>{%- endfor %}
+		</select>
+		{%- if has_supplier %}
+		<input name="supplier" list="tx-suppliers" value="{{ f.supplier }}" placeholder="Any supplier" aria-label="Supplier" autocomplete="off">
+		<datalist id="tx-suppliers">
+			{%- for s in suppliers %}<option value="{{ s.name }}">{{ s.supplier_name if s.supplier_name != s.name else "" }}</option>{%- endfor %}
+		</datalist>
+		{%- endif %}
+		<label class="tx-filters__date">From <input type="date" name="from_date" value="{{ f.from_date }}"></label>
+		<label class="tx-filters__date">To <input type="date" name="to_date" value="{{ f.to_date }}"></label>
+		<button class="btn btn--outline" type="submit"><i class="fa-solid fa-filter"></i> Filter</button>
+		{%- if filtered %}<a class="btn btn--outline btn--sm" href="{{ base }}"><i class="fa-solid fa-xmark"></i> Clear</a>{% endif %}
+	</div>
+</form>
+
+<div class="card">
+	<div class="card__head">
+		<h3>{{ doctype }}s</h3>
+		<span class="muted" style="font-size:12px">
+			{%- if rows %}Showing {{ range_from }}–{{ range_to }} of {{ data.total }}{% else %}Nothing to show{% endif %}
+		</span>
+	</div>
+	<div class="card__body" style="padding:0">
+		<div class="tx-scroll"><table class="table tx-table">
+			<thead><tr>
+				<th>{{ doctype }}</th>
+				<th>Date</th>
+				<th>{{ "Type" if doctype == "Material Request" else "Supplier" }}</th>
+				<th>Workshop Job Card</th>
+				<th>Items</th>
+				{%- if doctype != "Material Request" %}<th style="text-align:right">Grand Total</th>{% endif %}
+				<th>Status</th>
+			</tr></thead>
+			<tbody>
+				{%- for r in rows %}
+				<tr data-href="{{ r.url }}">
+					<td><a href="{{ r.url }}" class="tx-name">{{ r.name }}</a></td>
+					<td class="muted" style="white-space:nowrap">{{ r.date }}</td>
+					<td>{{ r.type if doctype == "Material Request" else r.supplier }}</td>
+					<td>
+						{%- for jc in r.job_cards %}<a href="/a3-workshop/job-card/{{ jc|urlencode }}" class="tx-jc">{{ jc }}</a>{% if not loop.last %}, {% endif %}{%- else %}<span class="muted">—</span>{%- endfor %}
+						{%- if r.task %}<div class="muted" style="font-size:11px">{{ r.task }}</div>{% endif %}
+					</td>
+					<td>{{ r.lines }}</td>
+					{%- if doctype != "Material Request" %}<td style="text-align:right;font-weight:600;white-space:nowrap">{{ r.amount }}</td>{% endif %}
+					<td>{{ badge(r.status, r.variant) }}</td>
+				</tr>
+				{%- else %}
+				<tr><td colspan="7" class="empty">
+					{%- if filtered %}
+					No {{ doctype }}s match these filters.<br>
+					<a href="{{ base }}" style="color:var(--red);font-weight:600">Clear filters</a>
+					{%- else %}
+					No {{ doctype }}s yet.<br>
+					<a href="{{ base }}/new" style="color:var(--red);font-weight:600">Create the first one</a>
+					{%- endif %}
+				</td></tr>
+				{%- endfor %}
+			</tbody>
+		</table></div>
+	</div>
+</div>
+
+{%- if pages > 1 %}
+<div class="row-between" style="margin-top:14px">
+	<span class="muted" style="font-size:12px">Page {{ page }} of {{ pages }}</span>
+	<div class="pager">
+		{%- set qs = ("&" ~ qs) if qs else "" %}
+		{%- if page > 1 %}<a class="page" href="?page={{ page - 1 }}{{ qs }}">Prev</a>{% else %}<span class="page is-disabled">Prev</span>{% endif %}
+		{%- for p in page_links %}
+			{%- if p is none %}<span class="page is-gap">…</span>
+			{%- elif p == page %}<span class="page is-active">{{ p }}</span>
+			{%- else %}<a class="page" href="?page={{ p }}{{ qs }}">{{ p }}</a>{% endif %}
+		{%- endfor %}
+		{%- if page < pages %}<a class="page" href="?page={{ page + 1 }}{{ qs }}">Next</a>{% else %}<span class="page is-disabled">Next</span>{% endif %}
+	</div>
+</div>
+{%- endif %}
+
+<style>
+.tx-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+.tx-tabs a {
+	padding: 7px 13px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface);
+	font-size: 13px; font-weight: 600;
+}
+.tx-tabs a:hover { border-color: var(--red); }
+.tx-tabs a.is-active { background: var(--red); border-color: var(--red); color: #fff; }
+.chip-group a.chip { text-decoration: none; }
+.tx-filters { margin-bottom: 18px; }
+.tx-filters .card__body { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; padding: 14px 16px; }
+.tx-filters__search { flex: 1 1 240px; }
+.tx-filters select, .tx-filters input[name="supplier"], .tx-filters input[type="date"] {
+	height: 36px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface);
+	color: var(--text); padding: 0 10px; font: inherit; font-size: 13px;
+}
+.tx-filters select:focus, .tx-filters input:focus { outline: none; border-color: var(--red); box-shadow: 0 0 0 3px var(--red-soft); }
+.tx-filters__date { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); font-weight: 600; }
+.tx-scroll { overflow-x: auto; }
+.tx-table { min-width: 720px; }
+.tx-table tbody tr[data-href] { cursor: pointer; }
+.tx-name { color: var(--red); font-weight: 700; white-space: nowrap; }
+.tx-jc { color: var(--navy); font-weight: 600; white-space: nowrap; }
+.table .empty { padding: 28px; }
+.pager a.page { text-decoration: none; color: inherit; display: inline-flex; align-items: center; justify-content: center; padding: 0 8px; }
+.pager .page.is-disabled, .pager .page.is-gap { opacity: .45; border-color: transparent; display: inline-flex; align-items: center; padding: 0 8px; }
+@media (max-width: 700px) {
+	.toolbar { flex-wrap: wrap; }
+	.tx-filters__search { flex-basis: 100%; }
+}
+</style>
+
+{% raw %}
+<script>
+(function () {
+	// The whole row opens the document; real links inside it (job card) still win.
+	var table = document.querySelector(".tx-table");
+	if (!table) return;
+	table.addEventListener("click", function (e) {
+		if (e.target.closest("a")) return;
+		var tr = e.target.closest("tr[data-href]");
+		if (tr) window.location.href = tr.getAttribute("data-href");
+	});
+})();
+</script>
+{% endraw %}
+{% endblock %}

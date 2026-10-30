@@ -590,6 +590,12 @@
 	/* "open since HND-…" under a seeded row's name. */
 	.ho-since { font-size:11px; font-weight:400; color:var(--muted); margin-top:2px; }
 	.ho-since a { color:var(--red); font-weight:600; text-decoration:none; }
+	/* A carried damage's photo, beside its remark, until the damage is put right. */
+	.ho-remark-wrap { display:flex; align-items:center; gap:8px; }
+	.ho-remark-wrap > input { flex:1; min-width:0; }
+	.ho-dmg-thumb { flex:0 0 auto; display:block; width:44px; height:44px; border-radius:6px; overflow:hidden;
+		border:2px solid var(--red); }
+	.ho-dmg-thumb img { width:100%; height:100%; object-fit:cover; display:block; }
 	.ho-view-tbl tr.ho-prev-row td { background:var(--red-soft); }
 	.ho-dmg-sec h4 { margin:0 0 10px; font-size:12px; font-weight:800; letter-spacing:.05em;
 		text-transform:uppercase; color:var(--muted); }
@@ -1104,6 +1110,7 @@
 				// to pick the name up.
 				refreshResponsibleDefaults();
 			}
+			rectifiedKeys = p.rectified_keys || [];
 			if (p.previous_handover) {
 				// Rows the previous inspection left carrying damage come back
 				// pre-set, shaded, for this one to confirm or clear.
@@ -2092,6 +2099,7 @@
 			paintCondition(row);
 			row.tr.classList.add("ho-prev-row");
 			originTag(row.tr.querySelector("td.area"), seed.origin_handover);
+			damagePhoto(row.remark, seed.photo);
 			seeded += 1;
 		});
 		return seeded;
@@ -2107,6 +2115,21 @@
 		tag.innerHTML = 'open since <a href="/a3-workshop/vehicle-history-handover?handover=' +
 			encodeURIComponent(handover) + '" target="_blank" rel="noopener">' + esc(handover) + "</a>";
 		cell.appendChild(tag);
+	}
+
+	// The photo taken when the damage was found, beside the row's remark: it is
+	// shown for as long as the damage is carried, i.e. until a repair puts it right.
+	function damagePhoto(input, url) {
+		if (!input || !url || input.parentNode.classList.contains("ho-remark-wrap")) return;
+		var wrap = document.createElement("div");
+		wrap.className = "ho-remark-wrap";
+		input.parentNode.insertBefore(wrap, input);
+		wrap.appendChild(input);
+		var a = document.createElement("a");
+		a.className = "ho-dmg-thumb"; a.href = url; a.target = "_blank"; a.rel = "noopener";
+		a.title = "Damage photo — open full size";
+		a.innerHTML = '<img src="' + esc(url) + '" alt="Damage photo">';
+		wrap.appendChild(a);
 	}
 
 	// Attachment views the ledger still holds damage against. The attachment is
@@ -2178,6 +2201,7 @@
 				tr.classList.add("ho-prev-row");
 				originTag(tr.querySelector("td.vw"), v.origin_handover);
 			}
+			damagePhoto(row.remark, v.photo);
 			p.el.classList.add("is-open");
 			seeded += 1;
 		});
@@ -3036,14 +3060,14 @@
 			checklist: collectTicks(chkBox).rows,
 			attachments: collectTicks(attBox).rows,
 			walk: walkRows.map(function (r) {
-				return { kind: r.kind, label: r.value(), custom: !r.fixed, condition: r.condition,
+				return { kind: r.kind, label: r.value(), custom: !r.fixed, carried: !!r.carried, condition: r.condition,
 				         remark: r.remark.value, depth: r.depth ? r.depth.value : "",
 				         resp: respState(r), photos: shotIds(r.widget), dmg_photos: shotIds(r.dmgWidget) };
 			}),
 			views: Object.keys(viewPanels).map(function (k) {
 				var p = viewPanels[k];
 				return { item: p.item, unit_no: p.unit_no, rows: p.rows.map(function (r) {
-					return { view: r.view(), custom: !!r.name, condition: r.condition,
+					return { view: r.view(), custom: !!r.name, carried: !!r.carried, condition: r.condition,
 					         remark: r.remark.value, resp: respState(r), photos: shotIds(r.widget),
 					         dmg_photos: shotIds(r.dmgWidget) };
 				}) };
@@ -3186,6 +3210,28 @@
 		});
 	}
 
+	// A draft row that held damage carried from an earlier handover, where the
+	// form no longer carries it: the damage was put right (a repair job card)
+	// after the draft was saved. Restoring it would mark a fixed panel Damaged
+	// again, so it comes back clean -- or, an added row, not at all. A draft
+	// saved before rows were marked `carried` is matched on the damage the
+	// server says was rectified (rectified_keys) instead.
+	var rectifiedKeys = [];
+	function dropRectified(saved, live, nameOf, keyOf) {
+		var open = live.filter(function (r) { return r.carried; })
+			.map(function (r) { return nameOf(r).toLowerCase(); });
+		var nameOfSaved = function (s) { return String(s.label || s.view || "").trim().toLowerCase(); };
+		var stale = function (s) {
+			if (s.carried) return open.indexOf(nameOfSaved(s)) === -1;
+			return s.carried === undefined && !!s.condition && rectifiedKeys.indexOf(keyOf(s)) !== -1;
+		};
+		return saved.filter(function (s) { return !(stale(s) && s.custom); }).map(function (s) {
+			if (!stale(s)) return s;
+			return { kind: s.kind, label: s.label, view: s.view, custom: s.custom, condition: "", remark: "",
+			         depth: s.depth, resp: { suggested: true }, photos: s.photos, dmg_photos: [] };
+		});
+	}
+
 	function applyDraft(d, blobs) {
 		var f = d.fields || {};
 		DRAFT_FIELDS.forEach(function (n) {
@@ -3202,7 +3248,9 @@
 		["area", "tyre"].forEach(function (kind) {
 			var conds = kind === "tyre" ? tyreConds : areaConds;
 			reconcileRows(rowsOfKind(kind),
-				(d.walk || []).filter(function (r) { return r.kind === kind; }),
+				dropRectified((d.walk || []).filter(function (r) { return r.kind === kind; }), rowsOfKind(kind),
+					function (r) { return r.value(); },
+					function (s) { return kind + "::" + String(s.label || "").trim().toLowerCase(); }),
 				function (r) { return r.value(); },
 				function (r) { return r.fixed; },
 				function (s) {
@@ -3219,7 +3267,8 @@
 			var key = viewKey(pd.item, pd.unit_no);
 			var p = viewPanels[key];
 			if (!p) return;
-			reconcileRows(p.rows, pd.rows || [],
+			reconcileRows(p.rows, dropRectified(pd.rows || [], p.rows, function (r) { return r.view(); },
+				function (s) { return ("attachment::" + (pd.item || "").trim() + "::" + (pd.unit_no || 0) + "::" + String(s.view || "").trim()).toLowerCase(); }),
 				function (r) { return r.view(); },
 				function (r) { return !r.name; },
 				function (s) {
